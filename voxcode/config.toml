@@ -1,0 +1,30 @@
+[general]
+mode = "vad"              # "vad" (continuous listening) | "ptt" (push-to-talk)
+language = "auto"         # "auto" | "it" | "en"
+auto_send = true         # true = send immediately after transcription, false = wait for confirm
+
+[whisper]
+model = "large-v3"        # "tiny" | "base" | "small" | "medium" | "large-v3"
+device = "cuda"           # "cuda" | "cpu"
+compute_type = "float16"  # "float16" | "int8" | "float32"
+
+[vad]
+threshold = 0.015         # energy threshold for speech detection (0.0-1.0)
+silence_duration = 1.5    # seconds of silence before ending speech segment
+pre_roll = 0.3            # seconds of audio to keep before speech onset
+
+[ptt]
+key = "space"             # key for push-to-talk toggle
+
+[commands]
+enabled = true            # enable voice commands
+prefix = "comando"        # prefix for voice commands (e.g. "comando: invia")
+
+[audio]
+# device = 13             # audio input device index (run --list-devices to find yours)
+                          # leave commented to use system default
+
+[tmux]
+auto_detect = true        # auto-detect tmux pane running claude
+target_pane = ""          # manual override: "session:window.pane"
+launch_command = "claude" # command to run in the first pane with --launch

@@ -1,0 +1,922 @@
+#!/usr/bin/env python3
+"""claude-sandbox - Secure bubblewrap sandbox for running Claude Code.
+
+Isolates Claude Code so it can only write to the current project directory
+and its own sandboxed config. Protects the host from filesystem damage,
+credential theft, and process interference.
+"""
+
+import argparse
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+from difflib import unified_diff
+from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:
+    print("Error: Python 3.11+ required (for tomllib).", file=sys.stderr)
+    sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+SANDBOX_DIR = Path.home() / ".claude-sandbox"
+
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+
+def find_config() -> Path:
+    """Find config.toml: current directory first, then home.
+
+    Search order:
+      1. ./.claude-sandbox/config.toml  (project-local)
+      2. ~/.claude-sandbox/config.toml  (global)
+
+    Returns the first existing path, or exits with a clear error.
+    """
+    candidates = [
+        Path.cwd() / ".claude-sandbox" / "config.toml",
+        SANDBOX_DIR / "config.toml",
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+
+    print("Error: no config.toml found.", file=sys.stderr)
+    print("Searched in:", file=sys.stderr)
+    for p in candidates:
+        print(f"  {p}", file=sys.stderr)
+    print(f"\nCreate a config.toml in one of these locations:", file=sys.stderr)
+    print(f"  .claude-sandbox/config.toml   (project-local, this directory)",
+          file=sys.stderr)
+    print(f"  ~/.claude-sandbox/config.toml (global, shared across projects)",
+          file=sys.stderr)
+    print(f"\nOr run 'claude-sandbox init' to set up ~/.claude-sandbox/.",
+          file=sys.stderr)
+    sys.exit(1)
+
+
+def load_config() -> tuple[dict, Path]:
+    """Load and return the sandbox configuration and its path."""
+    config_path = find_config()
+    with open(config_path, "rb") as fh:
+        return tomllib.load(fh), config_path
+
+
+def expand(p: str) -> Path:
+    """Expand ~ and env vars."""
+    return Path(os.path.expandvars(os.path.expanduser(p)))
+
+
+def check_bwrap() -> None:
+    """Verify bubblewrap is installed."""
+    if shutil.which("bwrap") is None:
+        print("Error: bubblewrap (bwrap) not found.", file=sys.stderr)
+        print("Install with:  sudo dnf install bubblewrap", file=sys.stderr)
+        sys.exit(1)
+
+
+def human_size(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
+def detect_home_path_dirs() -> list[Path]:
+    """Return top-level $HOME sub-directories found in $PATH."""
+    home = Path.home()
+    seen: set[Path] = set()
+    result: list[Path] = []
+    for entry in os.environ.get("PATH", "").split(":"):
+        p = Path(entry).resolve()
+        try:
+            rel = p.relative_to(home)
+        except ValueError:
+            continue
+        top = home / rel.parts[0]
+        if top not in seen and top.exists():
+            seen.add(top)
+            result.append(top)
+    return sorted(result)
+
+
+# ---------------------------------------------------------------------------
+# Gitconfig sanitiser
+# ---------------------------------------------------------------------------
+
+def sanitize_gitconfig(source: Path, dest: Path,
+                       strip_patterns: list[str],
+                       overrides: dict[str, str]) -> None:
+    """Write a sanitised copy of *source* to *dest*."""
+    if not source.exists():
+        dest.write_text("# Auto-generated sanitized gitconfig\n")
+        return
+
+    compiled = [re.compile(pat, re.IGNORECASE) for pat in strip_patterns]
+    lines = source.read_text().splitlines()
+    out: list[str] = []
+    skip = False
+
+    for line in lines:
+        m = re.match(r"\s*\[(.+)\]\s*$", line)
+        if m:
+            skip = any(rx.search(m.group(1)) for rx in compiled)
+        if not skip:
+            out.append(line)
+
+    if overrides:
+        out.append("")
+        out.append("# claude-sandbox overrides")
+        for key, val in overrides.items():
+            section, _, name = key.rpartition(".")
+            if section and name:
+                out.append(f"[{section}]")
+                out.append(f"\t{name} = {val}")
+
+    dest.write_text("\n".join(out) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Git-push blocker wrapper
+# ---------------------------------------------------------------------------
+
+GIT_WRAPPER = """\
+#!/bin/bash
+# claude-sandbox: blocks git push
+case "$1" in
+    push)
+        printf '\\033[31mgit push is blocked inside the sandbox.\\033[0m\\n' >&2
+        exit 1
+        ;;
+    *)
+        exec /usr/bin/git "$@"
+        ;;
+esac
+"""
+
+
+def ensure_git_wrapper() -> Path:
+    """Create (or verify) the git-push-blocking wrapper script."""
+    bin_dir = SANDBOX_DIR / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    wrapper = bin_dir / "git"
+    wrapper.write_text(GIT_WRAPPER)
+    wrapper.chmod(0o755)
+    return bin_dir
+
+
+# ---------------------------------------------------------------------------
+# bwrap command builder
+# ---------------------------------------------------------------------------
+
+def build_bwrap_cmd(config: dict, project_dir: Path,
+                    claude_args: list[str],
+                    log_file: Path | None = None,
+                    profile: str | None = None,
+                    safe_mode: bool = False) -> list[str]:
+    home = str(Path.home())
+    home_p = Path.home()
+    sandbox = config.get("sandbox", {})
+    claude_conf = config.get("claude", {})
+    env_conf = config.get("env", {})
+    sec = config.get("security", {})
+
+    # Resolve profile
+    prof: dict = {}
+    if profile:
+        profiles = config.get("profiles", {})
+        if profile not in profiles:
+            avail = ", ".join(sorted(profiles)) if profiles else "(none defined)"
+            print(f"Error: unknown profile '{profile}'.", file=sys.stderr)
+            print(f"Available profiles: {avail}", file=sys.stderr)
+            sys.exit(1)
+        prof = profiles[profile]
+
+    cmd: list[str] = ["bwrap"]
+
+    # --- 1. Whole FS read-only -----------------------------------------------
+    cmd += ["--ro-bind", "/", "/"]
+
+    # --- 2. Fresh tmpfs for sensitive / temporary locations -------------------
+    cmd += ["--tmpfs", "/tmp"]
+    # Hide user runtime sockets (DBus, Wayland, PipeWire) but keep
+    # /run/systemd/resolve intact so DNS works (resolv.conf is a symlink
+    # to /run/systemd/resolve/stub-resolv.conf on systemd distros).
+    uid = os.getuid()
+    cmd += ["--tmpfs", f"/run/user/{uid}"]
+    cmd += ["--tmpfs", "/var/tmp"]
+    cmd += ["--dev", "/dev"]
+    cmd += ["--proc", "/proc"]
+
+    # --- 3. Hide entire $HOME ------------------------------------------------
+    cmd += ["--tmpfs", home]
+
+    # --- 4. Read-only dirs (including user projects) -------------------------
+    for d in sandbox.get("ro_dirs", []):
+        ep = str(expand(d))
+        if os.path.isdir(ep):
+            cmd += ["--ro-bind", ep, ep]
+
+    # --- 5. Auto-expose PATH dirs under $HOME (read-only) --------------------
+    if sandbox.get("auto_expose_path", True):
+        for p in detect_home_path_dirs():
+            cmd += ["--ro-bind", str(p), str(p)]
+
+    # Extra home read-only dirs from config
+    for d in sandbox.get("home_ro_dirs", []):
+        full = home_p / d
+        if full.exists():
+            cmd += ["--ro-bind", str(full), str(full)]
+
+    # --- 6. Project directory (read-write) — AFTER ro mounts so it wins ------
+    project = str(project_dir.resolve())
+    cmd += ["--bind", project, project]
+
+    # --- 7. Claude config (read-write) ----------------------------------------
+    if claude_conf.get("use_real_config", False):
+        # Mount real ~/.claude and ~/.claude.json directly (writable)
+        real_claude = str(Path.home() / ".claude")
+        if os.path.isdir(real_claude):
+            cmd += ["--bind", real_claude, f"{home}/.claude"]
+        real_json = Path.home() / ".claude.json"
+        if real_json.exists():
+            cmd += ["--bind", str(real_json), f"{home}/.claude.json"]
+    else:
+        # Mount from sandbox copy
+        cc_dir = str(expand(claude_conf.get("config_dir",
+                                            "~/.claude-sandbox/claude-config")))
+        cmd += ["--bind", cc_dir, f"{home}/.claude"]
+        # Claude runtime state file (~/.claude.json)
+        claude_json = SANDBOX_DIR / "claude.json"
+        if claude_json.exists():
+            cmd += ["--bind", str(claude_json), f"{home}/.claude.json"]
+
+    # --- 8. Sanitised gitconfig (read-only) ----------------------------------
+    gc = SANDBOX_DIR / "gitconfig"
+    if gc.exists():
+        cmd += ["--ro-bind", str(gc), f"{home}/.gitconfig"]
+
+    # --- 9. Persistent toolchain caches (read-write) -------------------------
+    # Skip toolchain mounts that would hide auto-detected PATH dirs.
+    # E.g. if ~/.cargo is in PATH and already ro-bound, don't overlay it
+    # with an empty writable dir — that would hide cargo/rustc binaries.
+    if sandbox.get("persist_toolchains", True):
+        tc = SANDBOX_DIR / "toolchains"
+        auto_exposed = {str(p) for p in detect_home_path_dirs()} \
+            if sandbox.get("auto_expose_path", True) else set()
+
+        for name, target in [("cargo", ".cargo"), ("npm-cache", ".npm"),
+                             ("go", ".go")]:
+            mount_point = f"{home}/{target}"
+            d = tc / name
+            d.mkdir(parents=True, exist_ok=True)
+
+            if mount_point in auto_exposed:
+                # Real dir is already mounted read-only (has binaries).
+                # Mount only cache subdirs writable so builds can
+                # download dependencies without hiding existing tools.
+                # Only mount if the subdir already exists on the host
+                # (bwrap cannot mkdir inside a read-only parent).
+                if target == ".cargo":
+                    for sub in ("registry", "git"):
+                        host_sub = home_p / target / sub
+                        if host_sub.is_dir():
+                            sd = d / sub
+                            sd.mkdir(parents=True, exist_ok=True)
+                            cmd += ["--bind", str(sd), f"{mount_point}/{sub}"]
+                # For other tools whose real dir is in PATH, leave the
+                # ro-bind as-is (read-only). User can add writable
+                # subdirs via extra_rw if needed.
+            else:
+                cmd += ["--bind", str(d), mount_point]
+
+    # --- 10. Extra read-write dirs -------------------------------------------
+    for d in sandbox.get("extra_rw", []):
+        ep = str(expand(d))
+        if os.path.isdir(ep):
+            cmd += ["--bind", ep, ep]
+
+    # --- 11. Security options ------------------------------------------------
+    if sec.get("unshare_pid", True):
+        cmd += ["--unshare-pid"]
+    if sec.get("new_session", False):
+        cmd += ["--new-session"]
+    cmd += ["--die-with-parent"]
+
+    # --- 12. Environment: clearenv + explicit whitelist -----------------------
+    cmd += ["--clearenv"]
+    cmd += ["--setenv", "HOME", home]
+    cmd += ["--setenv", "USER", os.environ.get("USER", "user")]
+    cmd += ["--setenv", "SHELL", "/bin/bash"]
+
+    # Build a PATH: sandbox bin (git wrapper) first, then system paths,
+    # then auto-detected home tool paths.
+    path_parts: list[str] = []
+    if sec.get("block_git_push", True):
+        path_parts.append(str(SANDBOX_DIR / "bin"))
+    path_parts += ["/usr/local/bin", "/usr/bin", "/bin"]
+    if sandbox.get("auto_expose_path", True):
+        for p in detect_home_path_dirs():
+            # Add bin-like directories from home
+            path_parts.append(str(p))
+            # Also add common bin subdirectories
+            for sub in ("bin",):
+                sp = p / sub
+                if sp.is_dir() and str(sp) not in path_parts:
+                    path_parts.append(str(sp))
+    cmd += ["--setenv", "PATH", ":".join(dict.fromkeys(path_parts))]
+
+    # Toolchain env vars
+    cmd += ["--setenv", "CARGO_HOME", f"{home}/.cargo"]
+    cmd += ["--setenv", "NPM_CONFIG_CACHE", f"{home}/.npm"]
+    cmd += ["--setenv", "GOPATH", f"{home}/.go"]
+    cmd += ["--setenv", "GOMODCACHE", f"{home}/.go/pkg/mod"]
+
+    # User-whitelisted env vars
+    for var in env_conf.get("passthrough", []):
+        val = os.environ.get(var)
+        if val is not None:
+            cmd += ["--setenv", var, val]
+
+    # Extra env vars (from base config)
+    for var, val in env_conf.get("extra", {}).items():
+        cmd += ["--setenv", var, str(val)]
+
+    # Profile env vars (override base values)
+    for var, val in prof.get("env", {}).items():
+        cmd += ["--setenv", var, str(val)]
+
+    # --- 13. Separator -------------------------------------------------------
+    cmd += ["--"]
+
+    # --- 14. Command to execute ----------------------------------------------
+    # Profile can override default_args (e.g. different model per provider)
+    args_source = list(prof.get("default_args", claude_conf.get("default_args", [])))
+    if safe_mode:
+        args_source = [a for a in args_source
+                       if a != "--dangerously-skip-permissions"]
+    claude_cmd = ["claude"] + args_source + list(claude_args)
+
+    if log_file:
+        # Use `script` to record the full terminal session.
+        # Fall back to shell redirect if script is not available.
+        script_bin = shutil.which("script")
+        if script_bin:
+            cmd += [script_bin, "-q", "-e", "-c",
+                    " ".join(shlex.quote(c) for c in claude_cmd),
+                    str(log_file)]
+        else:
+            # Fallback: wrap with bash and tee
+            cmd += ["bash", "-c",
+                    " ".join(shlex.quote(c) for c in claude_cmd)
+                    + " 2>&1 | tee " + shlex.quote(str(log_file))]
+    else:
+        cmd += claude_cmd
+
+    return cmd
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+def cmd_init(args) -> None:
+    print("Initializing claude-sandbox...\n")
+
+    # Determine use_real_config: --real-config flag or existing config setting
+    use_real_config = getattr(args, "real_config", False)
+    if not use_real_config:
+        try:
+            config_path = find_config()
+            with open(config_path, "rb") as fh:
+                existing_config = tomllib.load(fh)
+            use_real_config = existing_config.get("claude", {}).get(
+                "use_real_config", False
+            )
+        except SystemExit:
+            pass
+
+    # Directory structure
+    dirs = [
+        SANDBOX_DIR,
+        SANDBOX_DIR / "toolchains" / "cargo",
+        SANDBOX_DIR / "toolchains" / "npm-cache",
+        SANDBOX_DIR / "toolchains" / "go",
+        SANDBOX_DIR / "bin",
+        SANDBOX_DIR / "logs",
+    ]
+    if not use_real_config:
+        dirs.append(SANDBOX_DIR / "claude-config")
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+
+    if use_real_config:
+        # Skip copy — will mount real ~/.claude directly
+        print(f"  claude-config using real ~/.claude (use_real_config = true)")
+        print(f"  claude.json   using real ~/.claude.json (use_real_config = true)")
+    else:
+        # Copy Claude config
+        src = Path.home() / ".claude"
+        dst = SANDBOX_DIR / "claude-config"
+        if src.exists():
+            if args.force or not any(dst.iterdir()):
+                for item in list(dst.iterdir()):
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+                print(f"  claude-config {src} -> {dst}")
+                # Check for secrets in settings.json
+                settings = dst / "settings.json"
+                if settings.exists() and "SECRET" in settings.read_text().upper():
+                    print("\n  WARNING: settings.json may contain secrets "
+                          "(MCP server env vars).")
+                    print("  Review: " + str(settings))
+            else:
+                print(f"  claude-config (exists, use --force)")
+        else:
+            print(f"  claude-config ~/.claude not found, starting empty")
+
+        # Copy Claude runtime state file (~/.claude.json)
+        claude_json_src = Path.home() / ".claude.json"
+        claude_json_dst = SANDBOX_DIR / "claude.json"
+        if claude_json_src.exists():
+            if args.force or not claude_json_dst.exists():
+                shutil.copy2(claude_json_src, claude_json_dst)
+                print(f"  claude.json   {claude_json_src} -> {claude_json_dst}")
+            else:
+                print(f"  claude.json   (exists, use --force)")
+        else:
+            print(f"  claude.json   ~/.claude.json not found, skipping")
+
+    # Sanitise gitconfig — use config from file if available, else defaults
+    git_src = Path.home() / ".gitconfig"
+    if not git_src.exists():
+        git_src = Path.home() / ".config" / "git" / "config"
+    try:
+        config_path = find_config()
+        with open(config_path, "rb") as fh:
+            config = tomllib.load(fh)
+    except SystemExit:
+        config = {}
+    git_conf = config.get("git", {})
+    sanitize_gitconfig(
+        git_src,
+        SANDBOX_DIR / "gitconfig",
+        git_conf.get("strip_sections", ["credential", 'url ".*"']),
+        git_conf.get("overrides", {"push.default": "nothing"}),
+    )
+    print(f"  gitconfig     {SANDBOX_DIR / 'gitconfig'}")
+
+    # Git-push wrapper
+    ensure_git_wrapper()
+    print(f"  git wrapper   {SANDBOX_DIR / 'bin' / 'git'}")
+
+    # Auto-detected PATH dirs
+    home_dirs = detect_home_path_dirs()
+    if home_dirs:
+        print(f"\n  Auto-detected PATH dirs under $HOME ({len(home_dirs)}):")
+        for d in home_dirs:
+            print(f"    ro  {d}")
+
+    # Point user to config
+    try:
+        cp = find_config()
+        print(f"\nUsing config:\n  {cp}\n")
+    except SystemExit:
+        print(f"\nNo config.toml found. Create one at:")
+        print(f"  {SANDBOX_DIR / 'config.toml'}  (global)")
+        print(f"  .claude-sandbox/config.toml     (project-local)\n")
+
+    print("Run Claude in sandbox:\n  claude-sandbox run\n")
+
+
+def cmd_run(args, claude_extra: list[str]) -> None:
+    check_bwrap()
+    config, config_path = load_config()
+
+    project_dir = Path(args.project).resolve()
+    if not project_dir.is_dir():
+        print(f"Error: not a directory: {project_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    # Ensure git wrapper exists
+    if config.get("security", {}).get("block_git_push", True):
+        ensure_git_wrapper()
+
+    # Logging
+    log_conf = config.get("logging", {})
+    do_log = args.log if args.log is not None else log_conf.get("enabled", False)
+    log_file = None
+    if do_log:
+        log_dir = expand(log_conf.get("dir", "~/.claude-sandbox/logs"))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        log_file = log_dir / f"{ts}_{project_dir.name}.log"
+
+    # Resolve profile: explicit -P flag > default_profile from config
+    profile = args.profile
+    if profile is None:
+        profile = config.get("sandbox", {}).get("default_profile", "") or None
+    prof_desc = None
+    if profile:
+        profiles = config.get("profiles", {})
+        if profile not in profiles:
+            avail = ", ".join(sorted(profiles)) if profiles else "(none defined)"
+            print(f"Error: unknown profile '{profile}'.", file=sys.stderr)
+            print(f"Available profiles: {avail}", file=sys.stderr)
+            sys.exit(1)
+        prof_desc = profiles[profile].get("description", "")
+
+    # Build command
+    cmd = build_bwrap_cmd(config, project_dir, claude_extra, log_file,
+                          profile=profile, safe_mode=args.safe)
+
+    if args.dry_run:
+        print("# bwrap command that would be executed:\n")
+        print(f"# config: {config_path}")
+        if profile:
+            print(f"# profile: {profile}")
+        _pretty_print_cmd(cmd)
+        return
+
+    # Print banner
+    sec = config.get("security", {})
+    use_real = config.get("claude", {}).get("use_real_config", False)
+    print("claude-sandbox")
+    print(f"  config      {config_path}")
+    if profile:
+        desc = f" ({prof_desc})" if prof_desc else ""
+        print(f"  profile     {profile}{desc}")
+    if use_real:
+        print(f"  claude-cfg  real ~/.claude (use_real_config)")
+    else:
+        cc_dir = expand(config.get("claude", {}).get("config_dir",
+                        "~/.claude-sandbox/claude-config"))
+        print(f"  claude-cfg  {cc_dir} (isolated copy)")
+    print(f"  project     {project_dir}")
+    print(f"  filesystem  read-only root, writable project dir")
+    print(f"  network     enabled")
+    print(f"  pid isolat. {'on' if sec.get('unshare_pid', True) else 'off'}")
+    print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+    print(f"  env vars    clearenv + whitelist")
+    print(f"  permissions {'ask (safe mode)' if args.safe else 'skip (--dangerously-skip-permissions)'}")
+    if log_file:
+        print(f"  logging     {log_file}")
+    print()
+
+    try:
+        result = subprocess.run(cmd, cwd=str(project_dir))
+        sys.exit(result.returncode)
+    except KeyboardInterrupt:
+        print("\nSandbox terminated.")
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_diff(args) -> None:
+    try:
+        config, _ = load_config()
+    except SystemExit:
+        config = {}
+    if config.get("claude", {}).get("use_real_config", False):
+        print("diff disabled: using real ~/.claude (use_real_config = true)")
+        return
+
+    real = Path.home() / ".claude"
+    sand = SANDBOX_DIR / "claude-config"
+    if not real.exists():
+        print("No ~/.claude found."); return
+    if not sand.exists():
+        print("No sandbox config. Run 'claude-sandbox init'."); return
+
+    has_diff = _show_diff(real, sand, "real", "sandbox")
+    if not has_diff:
+        print("No differences.")
+
+
+def cmd_merge(args) -> None:
+    try:
+        config, _ = load_config()
+    except SystemExit:
+        config = {}
+    if config.get("claude", {}).get("use_real_config", False):
+        print("merge disabled: using real ~/.claude (use_real_config = true)")
+        return
+
+    real = Path.home() / ".claude"
+    sand = SANDBOX_DIR / "claude-config"
+    if not sand.exists():
+        print("No sandbox config. Run 'claude-sandbox init'."); return
+
+    # Collect changes
+    changes = _collect_changes(real, sand)
+    if not changes:
+        print("No changes to merge."); return
+
+    print(f"Found {len(changes)} changed file(s):\n")
+    merged = 0
+    for kind, rel in changes:
+        label = "NEW" if kind == "new" else "MOD"
+        print(f"  [{label}] {rel}")
+        while True:
+            try:
+                ch = input("    apply? (y)es / (n)o / (d)iff / (q)uit: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print(f"\nAborted. Applied {merged} file(s)."); return
+            if ch == "d":
+                _print_file_diff(real / rel, sand / rel, f"real/{rel}", f"sandbox/{rel}")
+            elif ch == "y":
+                dest = real / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(sand / rel, dest)
+                print("    applied.")
+                merged += 1
+                break
+            elif ch == "n":
+                break
+            elif ch == "q":
+                print(f"\nAborted. Applied {merged} file(s)."); return
+    print(f"\nMerge complete: {merged}/{len(changes)} file(s) applied.")
+
+
+def cmd_status(args) -> None:
+    print("claude-sandbox status\n")
+
+    config_path = None
+    try:
+        config_path = find_config()
+    except SystemExit:
+        pass
+
+    if config_path is None:
+        print("  config          NOT FOUND")
+        if not SANDBOX_DIR.exists():
+            print("\n  NOT INITIALIZED  —  run 'claude-sandbox init'")
+        return
+
+    print(f"  config          {config_path}")
+
+    # Load config to check use_real_config
+    try:
+        config_data, _ = load_config()
+    except SystemExit:
+        config_data = {}
+    use_real = config_data.get("claude", {}).get("use_real_config", False)
+
+    # Claude config
+    if use_real:
+        real_claude = Path.home() / ".claude"
+        if real_claude.exists():
+            n = sum(1 for _ in real_claude.rglob("*") if _.is_file())
+            print(f"  claude-config   real ~/.claude (use_real_config, {n} files)")
+        else:
+            print(f"  claude-config   real ~/.claude (use_real_config, not found)")
+    else:
+        cc = SANDBOX_DIR / "claude-config"
+        if cc.exists():
+            n = sum(1 for _ in cc.rglob("*") if _.is_file())
+            print(f"  claude-config   {cc}  (isolated copy, {n} files)")
+
+    # Gitconfig
+    gc = SANDBOX_DIR / "gitconfig"
+    print(f"  gitconfig       {'ok' if gc.exists() else 'MISSING'}")
+
+    # Git wrapper
+    gw = SANDBOX_DIR / "bin" / "git"
+    print(f"  git wrapper     {'ok' if gw.exists() else 'MISSING'}")
+
+    # Toolchains
+    tc = SANDBOX_DIR / "toolchains"
+    if tc.exists():
+        parts = []
+        for d in sorted(tc.iterdir()):
+            if d.is_dir():
+                sz = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+                parts.append(f"{d.name}: {human_size(sz)}")
+        print(f"  toolchains      {', '.join(parts) if parts else 'empty'}")
+
+    # Logs
+    ld = SANDBOX_DIR / "logs"
+    if ld.exists():
+        logs = sorted(ld.glob("*.log"), reverse=True)
+        print(f"  logs            {len(logs)} session(s)")
+        if logs:
+            print(f"  latest log      {logs[0].name}")
+
+    # bwrap
+    bp = shutil.which("bwrap")
+    if bp:
+        r = subprocess.run(["bwrap", "--version"], capture_output=True, text=True)
+        v = r.stdout.strip() if r.returncode == 0 else "?"
+        print(f"  bubblewrap      {bp}  ({v})")
+    else:
+        print(f"  bubblewrap      NOT INSTALLED")
+
+    # Auto-detected PATH dirs
+    home_dirs = detect_home_path_dirs()
+    print(f"  home PATH dirs  {len(home_dirs)} detected")
+
+    # Profiles
+    profiles = config_data.get("profiles", {})
+    default_prof = config_data.get("sandbox", {}).get("default_profile", "") or None
+    if profiles:
+        parts = []
+        for name, pconf in sorted(profiles.items()):
+            desc = pconf.get("description", "")
+            marker = " *" if name == default_prof else ""
+            label = f"{name}{marker} ({desc})" if desc else f"{name}{marker}"
+            parts.append(label)
+        print(f"  profiles        {', '.join(parts)}")
+        if default_prof:
+            print(f"  default profile {default_prof}")
+
+    # Config diff summary (only meaningful in isolated-copy mode)
+    if not use_real:
+        real = Path.home() / ".claude"
+        sand = SANDBOX_DIR / "claude-config"
+        if real.exists() and sand.exists():
+            changes = _collect_changes(real, sand)
+            if changes:
+                print(f"\n  config changes  {len(changes)} file(s) differ")
+                print("  run 'claude-sandbox diff' or 'claude-sandbox merge'")
+            else:
+                print(f"\n  config changes  in sync")
+
+
+# ---------------------------------------------------------------------------
+# Diff / merge helpers
+# ---------------------------------------------------------------------------
+
+def _collect_changes(real: Path, sand: Path) -> list[tuple[str, Path]]:
+    changes = []
+    sand_files = {f.relative_to(sand) for f in sand.rglob("*") if f.is_file()}
+    real_files = {f.relative_to(real) for f in real.rglob("*") if f.is_file()} \
+                 if real.exists() else set()
+    for rel in sorted(sand_files):
+        sf = sand / rel
+        rf = real / rel
+        if rel not in real_files:
+            changes.append(("new", rel))
+        else:
+            try:
+                if sf.read_bytes() != rf.read_bytes():
+                    changes.append(("modified", rel))
+            except (PermissionError, OSError):
+                pass
+    return changes
+
+
+def _show_diff(dir_a: Path, dir_b: Path, label_a: str, label_b: str) -> bool:
+    files_a = {f.relative_to(dir_a) for f in dir_a.rglob("*") if f.is_file()}
+    files_b = {f.relative_to(dir_b) for f in dir_b.rglob("*") if f.is_file()}
+    has = False
+    for rel in sorted(files_a | files_b):
+        fa, fb = dir_a / rel, dir_b / rel
+        if rel in files_a and rel not in files_b:
+            print(f"--- only in {label_a}: {rel}")
+            has = True
+        elif rel not in files_a and rel in files_b:
+            print(f"+++ only in {label_b}: {rel}")
+            has = True
+        else:
+            if _print_file_diff(fa, fb, f"{label_a}/{rel}", f"{label_b}/{rel}"):
+                has = True
+    return has
+
+
+def _print_file_diff(fa: Path, fb: Path, la: str, lb: str) -> bool:
+    try:
+        a = fa.read_text().splitlines(keepends=True) if fa.exists() else []
+        b = fb.read_text().splitlines(keepends=True) if fb.exists() else []
+        diff = list(unified_diff(a, b, fromfile=la, tofile=lb))
+        if diff:
+            for line in diff:
+                print(line, end="")
+            print()
+            return True
+    except (UnicodeDecodeError, PermissionError):
+        try:
+            if fa.stat().st_size != fb.stat().st_size:
+                print(f"  binary differ: {la} vs {lb}")
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _pretty_print_cmd(cmd: list[str]) -> None:
+    """Print a bwrap command in readable multi-line form."""
+    i = 0
+    while i < len(cmd):
+        if cmd[i] == "--":
+            print("  --")
+            i += 1
+            if i < len(cmd):
+                print(f"  {' '.join(shlex.quote(c) for c in cmd[i:])}")
+            break
+        tok = cmd[i]
+        if tok.startswith("--"):
+            parts = [tok]
+            i += 1
+            while i < len(cmd) and not cmd[i].startswith("--"):
+                parts.append(shlex.quote(cmd[i]))
+                i += 1
+            print(f"  {' '.join(parts)} \\")
+        else:
+            print(f"  {shlex.quote(tok)} \\")
+            i += 1
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="claude-sandbox",
+        description="Secure bubblewrap sandbox for Claude Code.",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # init
+    p_init = sub.add_parser("init", help="Initialise sandbox environment")
+    p_init.add_argument("-f", "--force", action="store_true",
+                        help="Overwrite existing config and files")
+    p_init.add_argument("--real-config", action="store_true",
+                        help="Use real ~/.claude directly (set use_real_config=true)")
+
+    # run
+    p_run = sub.add_parser("run", help="Run Claude inside the sandbox")
+    p_run.add_argument("-p", "--project", default=".",
+                       help="Project directory (default: cwd)")
+    p_run.add_argument("-P", "--profile", default=None,
+                       help="Provider profile name (defined in config.toml)")
+    p_run.add_argument("--log", action="store_true", default=None,
+                       help="Enable session transcript logging")
+    p_run.add_argument("--no-log", action="store_false", dest="log",
+                       help="Disable session transcript logging")
+    p_run.add_argument("--safe", action="store_true",
+                       help="Disable --dangerously-skip-permissions for this run")
+    p_run.add_argument("--dry-run", action="store_true",
+                       help="Print bwrap command without executing")
+
+    # diff
+    sub.add_parser("diff",
+                   help="Show differences between sandbox and real config")
+
+    # merge
+    sub.add_parser("merge",
+                   help="Interactive merge: sandbox config -> real ~/.claude")
+
+    # status
+    sub.add_parser("status", help="Show sandbox status")
+
+    # ---- Split argv on '--' so extra args go to Claude ----------------------
+    argv = sys.argv[1:]
+    if "--" in argv:
+        sep = argv.index("--")
+        our_argv = argv[:sep]
+        claude_extra = argv[sep + 1:]
+    else:
+        our_argv = argv
+        claude_extra = []
+
+    args, unknown = parser.parse_known_args(our_argv)
+
+    if args.command is None:
+        parser.print_help()
+        sys.exit(0)
+
+    if args.command == "run":
+        # Unknown options pass through to Claude CLI
+        claude_extra = unknown + claude_extra
+    elif unknown:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+
+    dispatch = {
+        "init": lambda: cmd_init(args),
+        "run": lambda: cmd_run(args, claude_extra),
+        "diff": lambda: cmd_diff(args),
+        "merge": lambda: cmd_merge(args),
+        "status": lambda: cmd_status(args),
+    }
+    dispatch[args.command]()
+
+
+if __name__ == "__main__":
+    main()

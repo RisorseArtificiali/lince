@@ -1,0 +1,119 @@
+# claude-sandbox configuration
+# Docs: claude-sandbox --help
+
+[sandbox]
+# Extra directories with read-write access (besides the current project)
+extra_rw = []
+
+# Directories with read-only access
+ro_dirs = ["~/project"]
+
+# Persist build tool caches between sessions
+persist_toolchains = true
+
+# Auto-detect PATH entries under $HOME and expose read-only
+auto_expose_path = true
+
+# Extra home subdirectories to expose read-only (relative to $HOME)
+# .config/gcloud is needed for Vertex AI / Google Cloud authentication
+home_ro_dirs = [".config/gcloud"]
+
+# Default provider profile (used when -P is not specified).
+# Set to a profile name defined in [profiles.*] below.
+# Leave empty to run without a profile.
+default_profile = ""
+
+[claude]
+# Arguments always passed to Claude
+default_args = ["--dangerously-skip-permissions"]
+
+# Sandbox's Claude config directory
+config_dir = "~/.claude-sandbox/claude-config"
+
+# Use the real ~/.claude and ~/.claude.json directly (no isolated copy).
+# Skips the copy during init and mounts the real dirs in the sandbox.
+# Disables diff/merge commands (no separate copy to compare against).
+use_real_config = false
+
+[git]
+# Section name patterns to strip from .gitconfig (regex on section header)
+strip_sections = ['credential', 'url ".*"']
+
+# Values to force in the sanitized gitconfig (dot-notation keys)
+[git.overrides]
+"push.default" = "nothing"
+
+[env]
+# Environment variables passed through FROM THE HOST SHELL.
+# API keys and provider settings go in [profiles.*] sections below.
+passthrough = [
+    "TERM",
+    "COLORTERM",
+    "TERM_PROGRAM",
+    "LANG",
+    "LC_ALL",
+    "EDITOR",
+    "VISUAL",
+]
+
+# Additional environment variables to set inside the sandbox
+[env.extra]
+# CUSTOM_VAR = "value"
+
+[logging]
+# Enable transcript logging by default (toggle with --log / --no-log)
+enabled = false
+dir = "~/.claude-sandbox/logs"
+
+[security]
+# PID namespace: hide host processes from the sandbox
+unshare_pid = true
+
+# New terminal session: prevents terminal escape attacks.
+# May interfere with Ctrl+C propagation. Disable if you have issues.
+new_session = false
+
+# Block git push via a wrapper script
+block_git_push = true
+
+# --- Provider profiles ---
+# Uncomment and configure the profiles you need.
+# API keys live here, NOT in your shell environment.
+
+# [profiles.vertex]
+# description = "Vertex AI"
+# [profiles.vertex.env]
+# CLAUDE_CODE_USE_VERTEX = "1"
+# CLOUD_ML_REGION = "us-east5"
+# ANTHROPIC_VERTEX_PROJECT_ID = "my-gcp-project"
+
+# [profiles.anthropic]
+# description = "Direct Anthropic API"
+# [profiles.anthropic.env]
+# ANTHROPIC_API_KEY = "sk-ant-..."
+#[profiles.vertx]
+#description = "Vertex AI via rh project"
+#[profiles.vertex.env]
+#CLAUDE_CODE_USE_VERTEX = "1"
+#CLOUD_ML_REGION= "us-east5"
+#ANTHROPIC_VERTEX_PROJECT_ID = "XXXX"
+
+#[profiles.zai]
+#description = "Zai GLM"
+#[profiles.zai.env]
+#ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+#ANTHROPIC_AUTH_TOKEN="XXXX"  # Replace with your actual Z.ai API key
+
+#ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7-FlashX"
+#ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4-7"
+#ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5"
+
+#[profiles.mm]
+#description = "Minimax Anthropic API"
+#[profiles.mm.env]
+#ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
+#ANTHROPIC_AUTH_TOKEN="XXXX"  # Replace with yours
+
+#ANTHROPIC_DEFAULT_HAIKU_MODEL="MiniMax-M2.5"
+#ANTHROPIC_DEFAULT_SONNET_MODEL="MiniMax-M2.5"
+#ANTHROPIC_DEFAULT_OPUS_MODEL="MiniMax-M2.5"
