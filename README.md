@@ -6,7 +6,7 @@ A toolkit that turns your Linux terminal into a complete agentic engineering wor
 
 ## Demo
 
-<video src="demo.webm" controls width="100%"></video>
+![LINCE demo](demo.gif)
 
 > The full workflow: voice command → Whisper transcription → Claude Code executes in sandbox → backlog updates — all from one terminal.
 
