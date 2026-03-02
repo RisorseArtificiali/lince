@@ -4,6 +4,12 @@
 
 A toolkit that turns your Linux terminal into a complete agentic engineering workstation — sandboxed AI agent, task board, and voice control, all wired together in a single multiplexer session.
 
+## Demo
+
+<video src="demo.webm" controls width="100%"></video>
+
+> The full workflow: voice command → Whisper transcription → Claude Code executes in sandbox → backlog updates — all from one terminal.
+
 ## The Setup
 
 No Electron wrappers, no IDE overhead — just a terminal multiplexer, a sandboxed AI agent, a task board, and your voice. Three panes, three tools, one workflow.
