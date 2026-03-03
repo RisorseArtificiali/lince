@@ -54,6 +54,10 @@ Custom [Zellij](https://zellij.dev) configuration with predefined three-pane lay
 
 Voice-controlled coding assistant that bridges local speech recognition (Whisper, runs on your GPU) with Claude Code via terminal multiplexer panes. All audio processing happens locally — nothing leaves your machine.
 
+### [agent-ready-skill/](agent-ready-skill/)
+
+[Agent Skills](https://agentskills.io) that assess a project's readiness for agentic coding. Scans 8 dimensions (instructions, navigability, testing, CI/CD, specs, skills, docs, Claude-specific tooling), produces a 0-100 score, and can auto-generate missing files to improve readiness. Works with Claude Code via symlinks into `.claude/skills/`.
+
 ## Putting It All Together
 
 ### Prerequisites
