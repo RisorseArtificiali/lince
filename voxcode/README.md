@@ -54,7 +54,7 @@ npm install -g @anthropic-ai/claude-code
 **Fedora / RHEL / Rocky:**
 
 ```bash
-sudo dnf install tmux pipewire pipewire-pulseaudio    # or: zellij instead of tmux
+sudo dnf install tmux pipewire pipewire-pulseaudio portaudio-devel   # or: zellij instead of tmux
 ```
 
 **Ubuntu / Debian:**
