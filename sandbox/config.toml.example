@@ -104,8 +104,9 @@ block_git_push = true
 #ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
 #ANTHROPIC_AUTH_TOKEN="XXXX"  # Replace with your actual Z.ai API key
 
-#ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7-FlashX"
-#ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4-7"
+# Check the current model names (and corresponding rate limits) at https://z.ai/manage-apikey/rate-limits
+#ANTHROPIC_DEFAULT_HAIKU_MODEL="GLM-4.7-FlashX"
+#ANTHROPIC_DEFAULT_SONNET_MODEL="GLM-4.7"
 #ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5"
 
 #[profiles.mm]

@@ -278,7 +278,8 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
             if sandbox.get("auto_expose_path", True) else set()
 
         for name, target in [("cargo", ".cargo"), ("npm-cache", ".npm"),
-                             ("go", ".go")]:
+                             ("go", ".go"), ("uv-cache", ".uv-cache"),
+                             ("uv-tools", ".uv-tools")]:
             mount_point = f"{home}/{target}"
             d = tc / name
             d.mkdir(parents=True, exist_ok=True)
@@ -343,6 +344,8 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     cmd += ["--setenv", "NPM_CONFIG_CACHE", f"{home}/.npm"]
     cmd += ["--setenv", "GOPATH", f"{home}/.go"]
     cmd += ["--setenv", "GOMODCACHE", f"{home}/.go/pkg/mod"]
+    cmd += ["--setenv", "UV_CACHE_DIR", f"{home}/.uv-cache"]
+    cmd += ["--setenv", "UV_TOOL_DIR", f"{home}/.uv-tools"]
 
     # User-whitelisted env vars
     for var in env_conf.get("passthrough", []):
@@ -414,6 +417,8 @@ def cmd_init(args) -> None:
         SANDBOX_DIR / "toolchains" / "cargo",
         SANDBOX_DIR / "toolchains" / "npm-cache",
         SANDBOX_DIR / "toolchains" / "go",
+        SANDBOX_DIR / "toolchains" / "uv-cache",
+        SANDBOX_DIR / "toolchains" / "uv-tools",
         SANDBOX_DIR / "bin",
         SANDBOX_DIR / "logs",
     ]
