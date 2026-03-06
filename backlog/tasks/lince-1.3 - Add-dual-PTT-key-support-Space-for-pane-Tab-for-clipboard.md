@@ -1,10 +1,10 @@
 ---
 id: LINCE-1.3
 title: 'Add dual PTT key support: Space for pane, Tab for clipboard'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 10:35'
-updated_date: '2026-03-03 10:36'
+updated_date: '2026-03-05 17:52'
 labels:
   - voxcode
   - feature
@@ -73,15 +73,15 @@ Tab toggle   → ptt_active + target=clipboard → accumulate → transcribe →
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Space toggles PTT recording and routes transcription to multiplexer pane (existing behavior preserved)
-- [ ] #2 Tab toggles PTT recording and routes transcription to system clipboard
-- [ ] #3 Only one PTT session can be active at a time (pressing Tab while Space-PTT is active is ignored, and vice versa)
-- [ ] #4 UI shows recording target during PTT: "recording → pane" or "recording → clipboard"
-- [ ] #5 config.ptt.key is actually read from config and used (fixing current bug where Space is hardcoded)
-- [ ] #6 config.ptt.clipboard_key is configurable with default "tab"
-- [ ] #7 Both keys work as toggles: first press starts recording, second press stops and routes
-- [ ] #8 When clipboard PTT completes, a brief UI confirmation shows the text was copied
-- [ ] #9 VAD mode is unaffected by these changes (dual-key only applies in PTT mode)
+- [x] #1 Space toggles PTT recording and routes transcription to multiplexer pane (existing behavior preserved)
+- [x] #2 Tab toggles PTT recording and routes transcription to system clipboard
+- [x] #3 Only one PTT session can be active at a time (pressing Tab while Space-PTT is active is ignored, and vice versa)
+- [x] #4 UI shows recording target during PTT: "recording → pane" or "recording → clipboard"
+- [x] #5 config.ptt.key is actually read from config and used (fixing current bug where Space is hardcoded)
+- [x] #6 config.ptt.clipboard_key is configurable with default "tab"
+- [x] #7 Both keys work as toggles: first press starts recording, second press stops and routes
+- [x] #8 When clipboard PTT completes, a brief UI confirmation shows the text was copied
+- [x] #9 VAD mode is unaffected by these changes (dual-key only applies in PTT mode)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -156,3 +156,9 @@ clipboard_key = "tab"   # PTT key for copying to clipboard
 
 ### Estimated effort: Medium-Large (2-4 hours)
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented dual PTT key support: Space→pane, Tab→clipboard. Added `clipboard_key: str = "tab"` to PTTConfig. Added `_KEY_MAP` for symbolic→char resolution (fixing the config.ptt.key bug). Added `ptt_target` field to VoxCode and VoxCodeUI. ClipboardBridge initialized at startup with graceful fallback if unavailable. `_handle_key` uses config-driven key chars with mutual-exclusion guard. Transcription routed in `_check_results` based on `ptt_target`. Added `_send_to_clipboard` method. UI shows "recording → pane" / "recording → clipboard" and updated keybindings hint. VAD mode unaffected.
+<!-- SECTION:FINAL_SUMMARY:END -->

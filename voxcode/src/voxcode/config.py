@@ -7,7 +7,7 @@ from pathlib import Path
 
 @dataclass
 class GeneralConfig:
-    mode: str = "vad"
+    mode: str = "ptt"
     language: str = "auto"
     auto_send: bool = False
 
@@ -29,6 +29,7 @@ class VADConfig:
 @dataclass
 class PTTConfig:
     key: str = "space"
+    clipboard_key: str = "tab"
 
 
 @dataclass

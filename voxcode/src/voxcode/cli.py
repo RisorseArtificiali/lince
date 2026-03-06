@@ -11,12 +11,19 @@ import tty
 import numpy as np
 
 from voxcode.audio import AudioCapture
+from voxcode.clipboard_bridge import ClipboardBridge
 from voxcode.commands import CommandType, parse_transcription
 from voxcode.config import VoxCodeConfig, load_config
 from voxcode.multiplexer import create_bridge
 from voxcode.transcriber import TranscriptionResult, Transcriber
 from voxcode.ui import VoxCodeUI
 from voxcode.vad import EnergyVAD, VADState
+
+_KEY_MAP: dict[str, str] = {
+    "space": " ",
+    "tab": "\t",
+    "enter": "\n",
+}
 
 
 class VoxCode:
@@ -28,6 +35,10 @@ class VoxCode:
         self.paused = False
         self.buffer = ""
         self.ptt_active = False
+        self.ptt_target: str | None = None  # "pane" or "clipboard"
+
+        self._ptt_key_char = _KEY_MAP.get(config.ptt.key, config.ptt.key)
+        self._ptt_clipboard_key_char = _KEY_MAP.get(config.ptt.clipboard_key, config.ptt.clipboard_key)
 
         self._result_queue: queue.Queue[TranscriptionResult] = queue.Queue()
         self._transcription_queue: queue.Queue[np.ndarray] = queue.Queue()
@@ -46,6 +57,12 @@ class VoxCode:
         )
         self.bridge = create_bridge(config)
         self.ui = VoxCodeUI()
+
+        try:
+            self.clipboard_bridge: ClipboardBridge | None = ClipboardBridge()
+        except RuntimeError as e:
+            self.clipboard_bridge = None
+            # Warning shown after UI starts via print_message
 
     def run(self):
         if not self._validate_environment():
@@ -188,13 +205,29 @@ class VoxCode:
         elif key == "c":
             self.buffer = ""
             self.ui.update(buffer="")
-        elif key == " " and self.config.general.mode == "ptt":
+        elif key == self._ptt_key_char and self.config.general.mode == "ptt":
+            if self.ptt_active and self.ptt_target != "pane":
+                return  # different PTT key is active, ignore
             self.ptt_active = not self.ptt_active
             if self.ptt_active:
+                self.ptt_target = "pane"
                 ptt_frames.clear()
-                self.ui.update(status="recording", ptt_active=True)
+                self.ui.update(status="recording", ptt_active=True, ptt_target="pane")
             else:
-                self.ui.update(ptt_active=False)
+                self.ui.update(ptt_active=False, ptt_target=None)
+        elif key == self._ptt_clipboard_key_char and self.config.general.mode == "ptt":
+            if self.clipboard_bridge is None:
+                self.ui.print_message("[yellow]Clipboard unavailable — no wl-copy or xclip found.[/]")
+                return
+            if self.ptt_active and self.ptt_target != "clipboard":
+                return  # different PTT key is active, ignore
+            self.ptt_active = not self.ptt_active
+            if self.ptt_active:
+                self.ptt_target = "clipboard"
+                ptt_frames.clear()
+                self.ui.update(status="recording", ptt_active=True, ptt_target="clipboard")
+            else:
+                self.ui.update(ptt_active=False, ptt_target=None)
 
     def _transcription_worker(self):
         while self.running:
@@ -228,6 +261,8 @@ class VoxCode:
 
         if parsed.is_command:
             self._handle_command(parsed.command)
+        elif self.ptt_target == "clipboard":
+            self._send_to_clipboard(parsed.text)
         else:
             self.buffer += (" " if self.buffer else "") + parsed.text
             self.ui.update(buffer=self.buffer, status="listening")
@@ -261,6 +296,18 @@ class VoxCode:
             self.ui.print_message(f"[red]Send failed: {e}[/]")
 
         self.buffer = ""
+
+    def _send_to_clipboard(self, text: str):
+        self.ptt_target = None
+        text = text.strip()
+        if not text or self.clipboard_bridge is None:
+            return
+
+        try:
+            self.clipboard_bridge.send_text(text)
+            self.ui.update(last_sent=f"[clipboard] {text}", status="listening")
+        except Exception as e:
+            self.ui.print_message(f"[red]Clipboard send failed: {e}[/]")
 
 
 

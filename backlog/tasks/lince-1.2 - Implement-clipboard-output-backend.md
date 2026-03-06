@@ -1,10 +1,10 @@
 ---
 id: LINCE-1.2
 title: Implement clipboard output backend
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 10:35'
-updated_date: '2026-03-03 10:35'
+updated_date: '2026-03-05 17:52'
 labels:
   - voxcode
   - feature
@@ -42,13 +42,13 @@ This backend is NOT a replacement for the multiplexer bridge — it will be used
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 ClipboardBridge class exists in clipboard_bridge.py with a send_text(text: str) method
-- [ ] #2 Auto-detects Wayland vs X11 from WAYLAND_DISPLAY / DISPLAY env vars
-- [ ] #3 Uses wl-copy on Wayland and xclip -selection clipboard on X11
-- [ ] #4 Raises a descriptive error at init if neither wl-copy nor xclip is available on the system
-- [ ] #5 send_text() pipes the text to the clipboard tool via subprocess (not writing to temp files)
-- [ ] #6 Text copied to clipboard does NOT include trailing newline unless the transcription itself has one
-- [ ] #7 Unit tests verify Wayland detection logic and command construction (mocking subprocess)
+- [x] #1 ClipboardBridge class exists in clipboard_bridge.py with a send_text(text: str) method
+- [x] #2 Auto-detects Wayland vs X11 from WAYLAND_DISPLAY / DISPLAY env vars
+- [x] #3 Uses wl-copy on Wayland and xclip -selection clipboard on X11
+- [x] #4 Raises a descriptive error at init if neither wl-copy nor xclip is available on the system
+- [x] #5 send_text() pipes the text to the clipboard tool via subprocess (not writing to temp files)
+- [x] #6 Text copied to clipboard does NOT include trailing newline unless the transcription itself has one
+- [x] #7 Unit tests verify Wayland detection logic and command construction (mocking subprocess)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -98,3 +98,9 @@ Key details:
 
 ### Estimated effort: Medium (1-2 hours)
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Created `voxcode/src/voxcode/clipboard_bridge.py` with `ClipboardBridge` class. Detects Wayland (WAYLAND_DISPLAY → wl-copy) vs X11 (DISPLAY → xclip), verifies tool availability at init, and pipes text via subprocess without adding trailing newlines. Created `voxcode/tests/test_clipboard_bridge.py` with 12 passing tests covering detection logic, error cases, and command construction.
+<!-- SECTION:FINAL_SUMMARY:END -->

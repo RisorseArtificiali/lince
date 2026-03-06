@@ -1,9 +1,10 @@
 ---
 id: LINCE-1
 title: 'Enhance PTT mode: default behavior, dual-key support, clipboard output'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 10:34'
+updated_date: '2026-03-05 18:10'
 labels:
   - voxcode
   - feature
@@ -40,3 +41,9 @@ This is a parent task grouping three sequential subtasks. The clipboard backend 
 - Transcription results go through `_check_results` → `buffer` → `_send_buffer` → `bridge.send_text()`
 - No clipboard integration exists; ROADMAP.md mentions it as planned
 <!-- SECTION:DESCRIPTION:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Tutti e tre i subtask completati: PTT come default, clipboard backend con wl-copy/xclip, dual PTT key (Space→pane, Tab→clipboard).
+<!-- SECTION:FINAL_SUMMARY:END -->

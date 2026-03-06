@@ -29,6 +29,7 @@ class VoxCodeUI:
         self.last_sent: str = ""
         self.detected_language: str = ""
         self.ptt_active: bool = False
+        self.ptt_target: str | None = None  # "pane" or "clipboard"
         self.target_pane: str = ""
         self._live: Live | None = None
 
@@ -40,7 +41,11 @@ class VoxCodeUI:
         # Mode
         mode_icon = "VAD" if self.mode == "vad" else "PTT"
         style, label = STATUS_STYLES.get(self.status, ("white", self.status.upper()))
-        table.add_row(f"Mode:", f"{mode_icon}  [{style}]{label}[/]")
+        if self.ptt_active and self.ptt_target:
+            target_label = "→ pane" if self.ptt_target == "pane" else "→ clipboard"
+            table.add_row("Mode:", f"{mode_icon}  [{style}]{label} {target_label}[/]")
+        else:
+            table.add_row("Mode:", f"{mode_icon}  [{style}]{label}[/]")
 
         # Audio level bar
         bar_len = 35
@@ -69,7 +74,7 @@ class VoxCodeUI:
 
         # Keybindings help
         if self.mode == "ptt":
-            keys = "[dim][Space] record  [Enter] send  [c] clear  [q] quit[/]"
+            keys = "[dim][Space] record→pane  [Tab] record→clipboard  [Enter] send  [c] clear  [q] quit[/]"
         else:
             keys = "[dim][Enter] send  [c] clear  [q] quit  | voice: comando:invia/cancella/pausa[/]"
         table.add_row("Keys:", keys)

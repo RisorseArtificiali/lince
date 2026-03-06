@@ -1,5 +1,5 @@
 [general]
-mode = "vad"              # "vad" (continuous listening) | "ptt" (push-to-talk)
+# mode = "ptt"            # "ptt" (default, push-to-talk) | "vad" (continuous listening)
 language = "auto"         # "auto" | "it" | "en"
 auto_send = true         # true = send immediately after transcription, false = wait for confirm
 
@@ -14,7 +14,8 @@ silence_duration = 1.5    # seconds of silence before ending speech segment
 pre_roll = 0.3            # seconds of audio to keep before speech onset
 
 [ptt]
-key = "space"             # key for push-to-talk toggle
+key = "space"             # PTT key for sending to multiplexer pane
+clipboard_key = "tab"     # PTT key for copying to clipboard
 
 [commands]
 enabled = true            # enable voice commands
