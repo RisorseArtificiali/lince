@@ -54,7 +54,7 @@ npm install -g @anthropic-ai/claude-code
 **Fedora / RHEL / Rocky:**
 
 ```bash
-sudo dnf install tmux pipewire pipewire-pulseaudio    # or: zellij instead of tmux
+sudo dnf install tmux pipewire pipewire-pulseaudio portaudio-devel   # or: zellij instead of tmux
 ```
 
 **Ubuntu / Debian:**
@@ -134,7 +134,7 @@ If this works, your audio pipeline is ready. Press `Ctrl+C` to stop.
 
 **Troubleshooting the test:**
 - If audio level stays near 0.0000 even when speaking: you're using the wrong audio device. Run `--devices` and try a different device number with `--audio-device N`
-- If the model is too slow or you don't have a GPU: `uv run python test_interactive.py --model small --device cpu`
+- If the model is too slow or you don't have a GPU: `uv run python test_interactive.py --model small --device cpu --compute-type int8`
 - If you prefer press-to-talk instead of continuous listening: `uv run python test_interactive.py --ptt`
 
 ## Using VoxCode with Claude Code
@@ -361,7 +361,7 @@ model = "small"     # much faster, less accurate
 ```toml
 [whisper]
 device = "cpu"
-compute_type = "float32"
+compute_type = "int8" # consider using "float32" for higher precision (slower)
 model = "small"     # large models are too slow on CPU
 ```
 
