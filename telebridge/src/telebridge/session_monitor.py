@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import tempfile
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Awaitable
@@ -32,6 +33,11 @@ from typing import Any, Callable, Awaitable
 import aiofiles
 
 from telebridge.config import TelebridgeConfig, get_claude_projects_path, get_state_dir
+from telebridge.transcript_parser import (
+    ParsedEntry,
+    PendingToolInfo,
+    TranscriptParser,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -155,14 +161,6 @@ class SessionInfo:
     cwd: str
 
 
-@dataclass
-class ParsedEntry:
-    """A parsed JSONL entry (minimal parsing, full parsing in LINCE-8)."""
-
-    data: dict[str, Any]  # Raw parsed JSON data
-    session_id: str
-
-
 class SessionMonitor:
     """Monitors Claude Code sessions for new assistant messages.
 
@@ -186,9 +184,12 @@ class SessionMonitor:
 
         self._running = False
         self._task: asyncio.Task | None = None
-        self._message_callback: Callable[[list[ParsedEntry]], Awaitable[None]] | None = None
+        self._message_callback: Callable[[list["ParsedEntry"]], Awaitable[None]] | None = None
         # Per-session pending tool_use state carried across poll cycles
-        self._pending_tools: dict[str, dict[str, Any]] = {}  # session_id -> pending
+        # session_id -> tool_use_id -> PendingToolInfo
+        # NOTE: If a tool_use never receives a tool_result (e.g., session crash),
+        # these entries accumulate. Consider adding TTL or session-end cleanup.
+        self._pending_tools: dict[str, dict[str, PendingToolInfo]] = {}
         # Track last known session_map for detecting changes
         self._last_session_map: dict[str, str] = {}  # pane_key -> session_id
         # In-memory mtime cache for quick file change detection (not persisted)
@@ -440,7 +441,7 @@ class SessionMonitor:
         session_map = await self._load_session_map()
         current_session_ids: set[str] = set()
 
-        for pane_key, info in session_map.items():
+        for info in session_map.values():
             session_id = info.get("session_id", "")
             if session_id:
                 current_session_ids.add(session_id)
@@ -485,15 +486,27 @@ class SessionMonitor:
 
                 if new_entries and self._message_callback:
                     try:
-                        # Create ParsedEntry for each entry with valid session_id
-                        parsed_entries = [
-                            ParsedEntry(data=entry, session_id=entry.get("sessionId", ""))
-                            for entry in new_entries
-                            if entry.get("sessionId")
-                        ]
+                        # Group entries by session_id for parsing with session-specific pending_tools
+                        entries_by_session: defaultdict[str, list[dict]] = defaultdict(list)
+                        for entry in new_entries:
+                            session_id = entry.get("sessionId", "")
+                            if session_id:
+                                entries_by_session[session_id].append(entry)
 
-                        if parsed_entries:
-                            await self._message_callback(parsed_entries)
+                        # Parse each session's entries with its pending_tools state
+                        all_parsed: list[ParsedEntry] = []
+                        for session_id, session_entries in entries_by_session.items():
+                            session_pending = self._pending_tools.get(session_id, {})
+                            parsed, remaining_pending = TranscriptParser.parse_entries(
+                                session_entries,
+                                pending_tools=session_pending,
+                                thinking_max_length=self.config.session.thinking_max_length,
+                            )
+                            self._pending_tools[session_id] = remaining_pending
+                            all_parsed.extend(parsed)
+
+                        if all_parsed:
+                            await self._message_callback(all_parsed)
 
                     except Exception as e:
                         logger.error(f"Message callback error: {e}")
@@ -523,6 +536,6 @@ class SessionMonitor:
         logger.info("Session monitor stopped and state saved")
 
     @property
-    def pending_tools(self) -> dict[str, dict[str, Any]]:
+    def pending_tools(self) -> dict[str, dict[str, PendingToolInfo]]:
         """Get pending tools state (for tool pairing across poll cycles)."""
         return self._pending_tools

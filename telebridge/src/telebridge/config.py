@@ -19,6 +19,7 @@ class SessionConfig:
     poll_interval: float = 2.0
     auto_bind: bool = True
     state_dir: str = ""
+    thinking_max_length: int = 500  # Maximum length for thinking content
 
 
 @dataclass
