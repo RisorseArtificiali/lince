@@ -1,9 +1,10 @@
 ---
 id: LINCE-7
 title: Implement JSONL session monitor with offset tracking
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:32'
+updated_date: '2026-03-14 10:52'
 labels:
   - telebridge
   - core
@@ -64,14 +65,47 @@ class MonitorState:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Polls JSONL files at configurable interval
-- [ ] #2 Byte-offset tracking reads only new content
-- [ ] #3 Truncation detection resets offset on /clear
-- [ ] #4 Corruption recovery skips to next valid JSON line
-- [ ] #5 Discovers sessions from session_map.json and sessions-index.json
-- [ ] #6 New sessions start monitoring from EOF (no history replay)
-- [ ] #7 State persisted to monitor_state.json and restored on restart
-- [ ] #8 Async callback invoked for each batch of new entries
-- [ ] #9 pending_tools carried across poll cycles for tool pairing
-- [ ] #10 start()/stop() lifecycle works correctly
+- [x] #1 Polls JSONL files at configurable interval
+- [x] #2 Byte-offset tracking reads only new content
+- [x] #3 Truncation detection resets offset on /clear
+- [x] #4 Corruption recovery skips to next valid JSON line
+- [x] #5 Discovers sessions from session_map.json and sessions-index.json
+- [x] #6 New sessions start monitoring from EOF (no history replay)
+- [x] #7 State persisted to monitor_state.json and restored on restart
+- [x] #8 Async callback invoked for each batch of new entries
+- [x] #9 pending_tools carried across poll cycles for tool pairing
+- [x] #10 start()/stop() lifecycle works correctly
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented JSONL session monitor with full offset tracking and async polling:
+
+**Core features implemented:**
+- Byte-offset tracking for incremental reading (no re-processing old content)
+- Dual change detection (mtime + file size) for efficiency
+- Truncation detection handles /clear command (resets offset)
+- Corruption recovery skips to next valid JSON line
+- Session discovery from session_map.json and sessions-index.json
+- New sessions start at EOF (no history replay)
+- Atomic state persistence to monitor_state.json
+- Async callback system with error isolation
+- Pending tools tracking across poll cycles
+- Clean start()/stop() lifecycle
+
+**Key classes:**
+- `TrackedSession`: Per-session tracking (session_id, file_path, last_byte_offset)
+- `MonitorState`: Persistent state with atomic save/load
+- `SessionMonitor`: Main async polling service
+- `ParsedEntry`: Minimal entry structure (full parsing in LINCE-8)
+
+**Note:** The monitor emits raw JSONL data via callback. LINCE-8 will implement the full TranscriptParser that extracts text, tool_use, and thinking content.
+<!-- SECTION:FINAL_SUMMARY:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 Implementation complete with all acceptance criteria verified
+- [ ] #2 Code follows ruff linting standards
+- [ ] #3 Module imports successfully
+<!-- DOD:END -->
