@@ -1,9 +1,10 @@
 ---
 id: LINCE-6
 title: Implement Claude Code SessionStart hook installer
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:31'
+updated_date: '2026-03-14 08:05'
 labels:
   - telebridge
   - hook

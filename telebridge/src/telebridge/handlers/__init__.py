@@ -1,0 +1,3 @@
+"""Telegram bot handlers."""
+
+# Placeholder

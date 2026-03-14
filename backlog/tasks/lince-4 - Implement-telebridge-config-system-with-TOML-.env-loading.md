@@ -1,9 +1,10 @@
 ---
 id: LINCE-4
 title: Implement telebridge config system with TOML + .env loading
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:31'
+updated_date: '2026-03-13 20:26'
 labels:
   - telebridge
   - config

@@ -1,9 +1,10 @@
 ---
 id: LINCE-3
 title: Scaffold telebridge module structure
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:30'
+updated_date: '2026-03-13 18:12'
 labels:
   - telebridge
   - scaffolding
@@ -66,9 +67,9 @@ telebridge/
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Directory structure matches the spec above
-- [ ] #2 pyproject.toml valid and installable with `uv pip install -e .`
-- [ ] #3 config.example.toml documents all config sections
-- [ ] #4 `python -m telebridge --help` runs without error
-- [ ] #5 ruff check passes on all files
+- [x] #1 Directory structure matches the spec above
+- [x] #2 pyproject.toml valid and installable with `uv pip install -e .`
+- [x] #3 config.example.toml documents all config sections
+- [x] #4 `python -m telebridge --help` runs without error
+- [x] #5 ruff check passes on all files
 <!-- AC:END -->

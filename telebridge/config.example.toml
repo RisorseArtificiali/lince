@@ -1,0 +1,60 @@
+# Telebridge Configuration
+# Copy to config.toml and customize
+
+[telegram]
+# Bot token from @BotFather - store in .env, not here!
+# bot_token = ""  # Use TELEGRAM_BOT_TOKEN in .env
+
+# Allowed Telegram user IDs (integers)
+# Find your ID by messaging @userinfobot
+# allowed_users = [123456789]  # Use ALLOWED_USERS in .env
+
+[session]
+# Seconds between JSONL poll cycles
+poll_interval = 2.0
+
+# Automatically bind Telegram topics to Claude sessions
+auto_bind = true
+
+# State directory for session mappings and offsets
+# state_dir = ""  # Default: ~/.telebridge/
+
+[voice]
+# Voice message transcription
+enabled = true
+
+# Language: "auto" for detection, or "en", "it", etc.
+language = "auto"
+
+# Whisper model: tiny, base, small, medium, large-v3
+whisper_model = "large-v3"
+
+# Device: "cuda" or "cpu"
+whisper_device = "cuda"
+
+# Compute type: "float16", "float32", "int8"
+whisper_compute = "float16"
+
+[multiplexer]
+# Backend: "auto", "tmux", "zellij"
+backend = "auto"
+
+# Send Enter key after text input
+send_enter = true
+
+# Command to launch in multiplexer (used by --launch)
+launch_command = "claude"
+
+[zellij]
+# Target pane direction: "left", "right", "up", "down", "next", "previous"
+target_pane = "up"
+
+# Auto-detect Zellij session
+auto_detect = true
+
+[tmux]
+# Target pane (e.g., "session:window.pane" or empty for auto)
+target_pane = ""
+
+# Auto-detect tmux session
+auto_detect = true
