@@ -1,9 +1,10 @@
 ---
 id: LINCE-5
 title: Extend MultiplexerBridge protocol with capture_pane and send_keys
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:31'
+updated_date: '2026-03-13 20:29'
 labels:
   - telebridge
   - voxcode

@@ -68,3 +68,31 @@ class TmuxBridge:
                 ["tmux", "send-keys", "-t", pane, "Enter"],
                 check=True,
             )
+
+    def capture_pane(self) -> str:
+        """Capture text content from the target pane.
+
+        Uses tmux capture-pane -p to print pane content to stdout.
+        Returns plain text without ANSI codes.
+        """
+        pane = self.get_target_pane()
+        result = subprocess.run(
+            ["tmux", "capture-pane", "-t", pane, "-p"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout
+
+    def send_keys(self, keys: list[str]) -> None:
+        """Send special key sequences to the target pane.
+
+        Uses tmux send-keys which understands key names directly.
+        Supports: Enter, Escape, Up, Down, Left, Right, Space, Tab
+        """
+        pane = self.get_target_pane()
+        # Batch all keys in a single call for efficiency
+        subprocess.run(
+            ["tmux", "send-keys", "-t", pane] + keys,
+            check=True,
+        )

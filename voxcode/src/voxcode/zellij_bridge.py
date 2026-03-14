@@ -17,6 +17,18 @@ OPPOSITE_DIRECTION = {
     "previous": "next",
 }
 
+# Key name to Zellij write byte codes mapping
+ZELLIJ_KEY_CODES: dict[str, list[str]] = {
+    "Enter": ["13"],
+    "Escape": ["27"],
+    "Up": ["27", "91", "65"],
+    "Down": ["27", "91", "66"],
+    "Left": ["27", "91", "68"],
+    "Right": ["27", "91", "67"],
+    "Space": ["32"],
+    "Tab": ["9"],
+}
+
 
 class ZellijBridge:
     """Sends text to a Zellij pane running Claude Code.
@@ -97,3 +109,50 @@ class ZellijBridge:
                 check=True,
             )
             self._focus_pane(opposite)
+
+    def capture_pane(self) -> str:
+        """Capture text content from the target pane.
+
+        Focuses target pane, runs dump-screen, captures stdout, focuses back.
+        Returns plain text without ANSI codes.
+        """
+        direction = self.get_target_pane()
+        opposite = OPPOSITE_DIRECTION[direction]
+
+        self._focus_pane(direction)
+
+        result = subprocess.run(
+            ["zellij", "action", "dump-screen"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        self._focus_pane(opposite)
+        return result.stdout
+
+    def send_keys(self, keys: list[str]) -> None:
+        """Send special key sequences to the target pane.
+
+        Maps key names to Zellij write byte codes. Supports:
+        Enter, Escape, Up, Down, Left, Right, Space, Tab
+
+        Focuses target pane before sending, focuses back after.
+        Raises ValueError if an unsupported key is provided.
+        """
+        direction = self.get_target_pane()
+        opposite = OPPOSITE_DIRECTION[direction]
+
+        self._focus_pane(direction)
+
+        for key in keys:
+            if byte_codes := ZELLIJ_KEY_CODES.get(key):
+                for code in byte_codes:
+                    subprocess.run(
+                        ["zellij", "action", "write", code],
+                        check=True,
+                    )
+            else:
+                raise ValueError(f"Unsupported Zellij key: {key}")
+
+        self._focus_pane(opposite)
