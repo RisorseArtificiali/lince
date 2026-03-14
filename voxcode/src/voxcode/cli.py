@@ -60,7 +60,7 @@ class VoxCode:
 
         try:
             self.clipboard_bridge: ClipboardBridge | None = ClipboardBridge()
-        except RuntimeError as e:
+        except RuntimeError:
             self.clipboard_bridge = None
             # Warning shown after UI starts via print_message
 

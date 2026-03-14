@@ -33,7 +33,6 @@ class AudioCapture:
         return np.interp(indices, np.arange(len(audio)), audio).astype(np.float32)
 
     def start(self):
-        import ctypes
         import os
 
         # Determine native sample rate of the device
