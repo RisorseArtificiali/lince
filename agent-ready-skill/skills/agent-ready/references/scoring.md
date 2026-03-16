@@ -5,12 +5,12 @@
 | # | Dimension | Weight | What it evaluates |
 |---|-----------|--------|-------------------|
 | 1 | Agent Instructions | 20 | CLAUDE.md, agent.md, hierarchical rules, contextual instructions |
-| 2 | Project Navigability | 18 | Structure clarity, index files, README hierarchy, naming consistency, tree depth |
-| 3 | Testing & Validation | 16 | Test suite, coverage, documented test commands, fast feedback loop |
-| 4 | CI/CD & Automation | 10 | CI pipeline, linting/formatting, pre-commit hooks |
-| 5 | Spec-Driven Workflow | 12 | Task specs, PRD, acceptance criteria, issue templates, ADR |
+| 2 | Project Navigability | 18 | Structure clarity, index files, README hierarchy, naming consistency, environment reproducibility |
+| 3 | Testing & Validation | 16 | Test suite, coverage, documented test commands, error feedback quality |
+| 4 | CI/CD & Automation | 12 | CI pipeline, linting/formatting, pre-commit hooks, governance guardrails |
+| 5 | Spec-Driven Workflow | 10 | Task specs, PRD, acceptance criteria, issue templates, ADR |
 | 6 | Skills & Tooling | 8 | Skills (.claude/skills/), Makefile/taskfile, support scripts, MCP config |
-| 7 | Documentation (Machine-Readable) | 8 | Linked docs, API docs, architecture docs, inline comments |
+| 7 | Documentation & Comprehension | 8 | Linked docs, API docs, architecture docs, code comprehension signals |
 | 8 | Claude-Specific | 8 | .claude/ directory, hooks, permissions, MCP server config, .serena/ |
 
 ## Layers
@@ -48,27 +48,30 @@
 ### 2. Project Navigability (weight 18)
 | Sub-criterion | Internal Weight | What to check |
 |--------------|----------------|---------------|
-| Logical directory structure | 25 | Max depth ≤ 4 good, ≤ 6 acceptable, > 6 penalize. Clear naming |
-| Index/map file | 25 | PROJECT_INDEX.md, ARCHITECTURE.md, or equivalent |
-| README in root | 25 | Overview of project, installation, usage |
-| Naming consistency | 25 | Consistent case style (snake_case/camelCase), no mixed conventions |
+| Logical directory structure | 20 | Max depth ≤ 4 good, ≤ 6 acceptable, > 6 penalize. Clear naming |
+| Index/map file | 20 | PROJECT_INDEX.md, ARCHITECTURE.md, or equivalent |
+| README in root | 20 | Overview of project, installation, usage |
+| Naming consistency | 15 | Consistent case style (snake_case/camelCase), no mixed conventions |
+| Environment Reproducibility | 25 | Lock files (package-lock.json, uv.lock, Cargo.lock, etc.), .env.example, devcontainer, docker-compose |
 
 ### 3. Testing & Validation (weight 16)
 | Sub-criterion | Internal Weight | What to check |
 |--------------|----------------|---------------|
-| Test suite present | 25 | Test files exist in tests/, __tests__/, or similar |
-| Test commands documented | 25 | In CLAUDE.md, Makefile, package.json scripts, or README |
-| Coverage reasonable | 25 | Coverage config present, > 60% target, or meaningful test files |
-| Fast test feedback | 25 | Quick tests available (< 30s), documented how to run subset |
+| Test suite present | 20 | Test files exist in tests/, __tests__/, or similar |
+| Test commands documented | 20 | In CLAUDE.md, Makefile, package.json scripts, or README |
+| Coverage reasonable | 20 | Coverage config present, > 60% target, or meaningful test files |
+| Fast test feedback | 15 | Quick tests available (< 30s), documented how to run subset |
+| Error Feedback Quality | 25 | Assertion messages present, type checking configured (mypy, pyright, tsconfig strict), helpful test failures |
 
-### 4. CI/CD & Automation (weight 10)
+### 4. CI/CD & Automation (weight 12)
 | Sub-criterion | Internal Weight | What to check |
 |--------------|----------------|---------------|
-| CI pipeline configured | 30 | .github/workflows/, .gitlab-ci.yml, Jenkinsfile, etc. |
-| Linting/formatting automated | 35 | Ruff, eslint, prettier, rustfmt, etc. configured and runnable |
-| Pre-commit hooks | 35 | .pre-commit-config.yaml, .husky/, .lefthook.yml |
+| CI pipeline configured | 25 | .github/workflows/, .gitlab-ci.yml, Jenkinsfile, etc. |
+| Linting/formatting automated | 25 | Ruff, eslint, prettier, rustfmt, etc. configured and runnable |
+| Pre-commit hooks | 20 | .pre-commit-config.yaml, .husky/, .lefthook.yml |
+| Governance Guardrails | 30 | CODEOWNERS, dependabot.yml, renovate.json, security scanning in CI |
 
-### 5. Spec-Driven Workflow (weight 12)
+### 5. Spec-Driven Workflow (weight 10)
 | Sub-criterion | Internal Weight | What to check |
 |--------------|----------------|---------------|
 | Spec/tasks directory | 30 | specs/, tasks/, prd/ directory with content |
@@ -84,13 +87,14 @@
 | Support scripts | 20 | scripts/, tools/, bin/ with helpers |
 | MCP config | 20 | MCP servers configured in .claude/settings* |
 
-### 7. Documentation Machine-Readable (weight 8)
+### 7. Documentation & Comprehension (weight 8)
 | Sub-criterion | Internal Weight | What to check |
 |--------------|----------------|---------------|
-| Docs linked from CLAUDE.md | 30 | CLAUDE.md references other doc files |
-| API documentation | 25 | Docstrings, OpenAPI/Swagger, type annotations |
-| Architecture documented | 25 | ARCHITECTURE.md, diagrams, system overview |
-| Changelog/release notes | 20 | CHANGELOG.md, HISTORY.md, structured releases |
+| Docs linked from CLAUDE.md | 25 | CLAUDE.md references other doc files |
+| API documentation | 20 | Docstrings, OpenAPI/Swagger, type annotations |
+| Architecture documented | 20 | ARCHITECTURE.md, diagrams, system overview |
+| Changelog/release notes | 10 | CHANGELOG.md, HISTORY.md, structured releases |
+| Code Comprehension Signals | 25 | Type annotations present, file sizes reasonable (<500 lines), docstrings on key functions |
 
 ### 8. Claude-Specific (weight 8)
 | Sub-criterion | Internal Weight | What to check |
@@ -138,6 +142,86 @@ Higher impact = more potential points gained from fixing that dimension.
         "instructions_quality": { "score": 0-100, "weight": 25, "evidence": "string" },
         "hierarchical_instructions": { "score": 0-100, "weight": 25, "evidence": "string" },
         "build_test_lint_refs": { "score": 0-100, "weight": 25, "evidence": "string" }
+      }
+    },
+    "project_navigability": {
+      "weight": 18,
+      "raw_score": 0-100,
+      "weighted_score": 0-18,
+      "subcriteria": {
+        "logical_structure": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "index_file": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "readme_root": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "naming_consistency": { "score": 0-100, "weight": 15, "evidence": "string" },
+        "env_reproducibility": { "score": 0-100, "weight": 25, "evidence": "string" }
+      }
+    },
+    "testing_validation": {
+      "weight": 16,
+      "raw_score": 0-100,
+      "weighted_score": 0-16,
+      "subcriteria": {
+        "test_suite": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "test_commands": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "coverage": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "fast_feedback": { "score": 0-100, "weight": 15, "evidence": "string" },
+        "error_feedback_quality": { "score": 0-100, "weight": 25, "evidence": "string" }
+      }
+    },
+    "cicd_automation": {
+      "weight": 12,
+      "raw_score": 0-100,
+      "weighted_score": 0-12,
+      "subcriteria": {
+        "ci_pipeline": { "score": 0-100, "weight": 25, "evidence": "string" },
+        "linting_formatting": { "score": 0-100, "weight": 25, "evidence": "string" },
+        "pre_commit_hooks": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "governance_guardrails": { "score": 0-100, "weight": 30, "evidence": "string" }
+      }
+    },
+    "spec_driven_workflow": {
+      "weight": 10,
+      "raw_score": 0-100,
+      "weighted_score": 0-10,
+      "subcriteria": {
+        "spec_directory": { "score": 0-100, "weight": 30, "evidence": "string" },
+        "issue_templates": { "score": 0-100, "weight": 30, "evidence": "string" },
+        "adr_docs": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "acceptance_criteria": { "score": 0-100, "weight": 20, "evidence": "string" }
+      }
+    },
+    "skills_tooling": {
+      "weight": 8,
+      "raw_score": 0-100,
+      "weighted_score": 0-8,
+      "subcriteria": {
+        "local_skills": { "score": 0-100, "weight": 30, "evidence": "string" },
+        "makefile": { "score": 0-100, "weight": 30, "evidence": "string" },
+        "support_scripts": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "mcp_config": { "score": 0-100, "weight": 20, "evidence": "string" }
+      }
+    },
+    "documentation_comprehension": {
+      "weight": 8,
+      "raw_score": 0-100,
+      "weighted_score": 0-8,
+      "subcriteria": {
+        "docs_linked": { "score": 0-100, "weight": 25, "evidence": "string" },
+        "api_docs": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "architecture_docs": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "changelog": { "score": 0-100, "weight": 10, "evidence": "string" },
+        "code_comprehension_signals": { "score": 0-100, "weight": 25, "evidence": "string" }
+      }
+    },
+    "claude_specific": {
+      "weight": 8,
+      "raw_score": 0-100,
+      "weighted_score": 0-8,
+      "subcriteria": {
+        "claude_directory": { "score": 0-100, "weight": 30, "evidence": "string" },
+        "settings_config": { "score": 0-100, "weight": 25, "evidence": "string" },
+        "hooks_config": { "score": 0-100, "weight": 20, "evidence": "string" },
+        "mcp_integration": { "score": 0-100, "weight": 25, "evidence": "string" }
       }
     }
   },
