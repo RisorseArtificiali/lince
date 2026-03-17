@@ -1,9 +1,10 @@
 ---
 id: LINCE-18
 title: Implement Telegram photo forwarding to Claude Code
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-03-03 14:35'
+updated_date: '2026-03-16 11:00'
 labels:
   - telebridge
   - media

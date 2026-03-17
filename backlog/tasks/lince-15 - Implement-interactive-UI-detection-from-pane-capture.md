@@ -1,9 +1,10 @@
 ---
 id: LINCE-15
 title: Implement interactive UI detection from pane capture
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:34'
+updated_date: '2026-03-16 08:23'
 labels:
   - telebridge
   - interactive-ui
@@ -65,10 +66,54 @@ class InteractiveUIState:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Captures pane content via MultiplexerBridge.capture_pane()
-- [ ] #2 Detects permission prompts, multi-choice, plan exit, checkpoint, model selection
-- [ ] #3 Extracts options and current selection from UI text
-- [ ] #4 Change detection avoids duplicate UI sends
-- [ ] #5 Works with both Zellij and tmux capture output
-- [ ] #6 Polling interval configurable
+- [x] #1 Captures pane content via MultiplexerBridge.capture_pane()
+- [x] #2 Detects permission prompts, multi-choice, plan exit, checkpoint, model selection
+- [x] #3 Extracts options and current selection from UI text
+- [x] #4 Change detection avoids duplicate UI sends
+- [x] #5 Works with both Zellij and tmux capture output
+- [x] #6 Polling interval configurable
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+## Implementation Summary
+
+### Core Components Implemented
+
+1. **`interactive_ui.py`** - Complete detection system
+   - `UIType` enum: PERMISSION, MULTI_CHOICE, PLAN_EXIT, CHECKPOINT, MODEL_SELECT, TOOL_PERMISSION
+   - `InteractiveUIState` dataclass with prompt_id generation and ANSI cleaning
+   - `InteractiveUIDetector` with pre-compiled regex patterns for each UI type
+   - `InteractiveUIManager` with change detection via prompt_id hashing
+
+2. **`config.py`** - Configuration support
+   - `InteractiveUIConfig` dataclass with enabled, poll_interval, max_options fields
+   - TOML section support for `[interactive_ui]`
+
+3. **`session_monitor.py`** - Integration hook
+   - `set_ui_callback()` method to register UI detection callback
+   - `_ui_detector` and `_ui_callback` attributes for future pane capture integration
+
+### Pattern Detection
+
+Permission patterns match:
+- "Allow X to Y?" with Yes/No/Approve/Deny options
+- Tool permission prompts with Approve/Deny
+- Multi-choice numbered lists (1. Option, 2) Option)
+- Model selection UIs
+- Plan exit confirmations
+- Checkpoint restoration lists
+
+### Test Coverage
+
+28 new tests in `test_interactive_ui.py` covering:
+- Pattern detection for all UI types
+- Option extraction
+- Change detection (same UI not reported twice)
+- State caching and retrieval
+- ANSI code cleaning
+- Content truncation
+
+All 121 tests pass including the new interactive UI tests.
+<!-- SECTION:FINAL_SUMMARY:END -->

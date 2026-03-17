@@ -60,6 +60,7 @@ class ParsedEntry:
         timestamp: ISO timestamp from JSONL entry
         tool_name: Tool name for tool_use entries
         image_data: List of (media_type, raw_bytes) for tool_result images
+        session_id: Claude Code session ID this entry belongs to
     """
 
     role: str
@@ -69,6 +70,7 @@ class ParsedEntry:
     timestamp: str | None = None
     tool_name: str | None = None
     image_data: list[tuple[str, bytes]] | None = None
+    session_id: str = ""
 
 
 class TranscriptParser:
@@ -357,11 +359,18 @@ class TranscriptParser:
         entries: list[dict],
         pending_tools: dict[str, PendingToolInfo] | None = None,
         thinking_max_length: int = 500,
+        session_id: str = "",
     ) -> tuple[list[ParsedEntry], dict[str, PendingToolInfo]]:
         """Parse a list of JSONL entries into display-ready messages.
 
         This is the main entry point for parsing. Handles tool pairing
         across message boundaries and formats all content types.
+
+        Args:
+            entries: List of JSONL entry dicts
+            pending_tools: Existing pending tool_use state for pairing
+            thinking_max_length: Maximum length for thinking content
+            session_id: Claude Code session ID for routing
 
         Args:
             entries: List of parsed JSONL dicts
@@ -411,6 +420,7 @@ class TranscriptParser:
                                     text=t,
                                     content_type="text",
                                     timestamp=entry_timestamp,
+                                    session_id=session_id,
                                 )
                             )
 
@@ -430,6 +440,7 @@ class TranscriptParser:
                                         text=plan,
                                         content_type="text",
                                         timestamp=entry_timestamp,
+                                        session_id=session_id,
                                     )
                                 )
 
@@ -450,6 +461,7 @@ class TranscriptParser:
                                 tool_use_id=tool_id or None,
                                 timestamp=entry_timestamp,
                                 tool_name=name,
+                                session_id=session_id,
                             )
                         )
 
@@ -464,6 +476,7 @@ class TranscriptParser:
                                 text=formatted,
                                 content_type="thinking",
                                 timestamp=entry_timestamp,
+                                session_id=session_id,
                             )
                         )
 
@@ -513,6 +526,7 @@ class TranscriptParser:
                                     content_type="tool_result",
                                     tool_use_id=_tuid,
                                     timestamp=entry_timestamp,
+                                    session_id=session_id,
                                 )
                             )
                         elif is_error:
@@ -539,6 +553,7 @@ class TranscriptParser:
                                     tool_use_id=_tuid,
                                     timestamp=entry_timestamp,
                                     image_data=result_images,
+                                    session_id=session_id,
                                 )
                             )
                         elif tool_summary:
@@ -592,6 +607,7 @@ class TranscriptParser:
                                     tool_use_id=_tuid,
                                     timestamp=entry_timestamp,
                                     image_data=result_images,
+                                    session_id=session_id,
                                 )
                             )
                         elif result_text or result_images:

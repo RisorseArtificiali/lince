@@ -1,9 +1,10 @@
 ---
 id: LINCE-19
 title: Implement OGG/Opus to numpy audio conversion for Telegram voice
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:35'
+updated_date: '2026-03-16 14:49'
 labels:
   - telebridge
   - voice
@@ -68,10 +69,40 @@ def ogg_to_numpy_pydub(ogg_bytes: bytes, sample_rate: int = 16000) -> np.ndarray
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Converts OGG/Opus bytes to float32 numpy array
-- [ ] #2 Output is 16kHz mono
-- [ ] #3 Uses async ffmpeg subprocess (non-blocking)
-- [ ] #4 Handles empty input gracefully
-- [ ] #5 Handles corrupt OGG with clear error message
-- [ ] #6 ffmpeg documented as system requirement
+- [x] #1 Converts OGG/Opus bytes to float32 numpy array
+- [x] #2 Output is 16kHz mono
+- [x] #3 Uses async ffmpeg subprocess (non-blocking)
+- [x] #4 Handles empty input gracefully
+- [x] #5 Handles corrupt OGG with clear error message
+- [x] #6 ffmpeg documented as system requirement
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+## LINCE-19: OGG/Opus to Numpy Audio Conversion
+
+**Implementation Summary:**
+
+Created `telebridge/src/telebridge/audio_convert.py` with:
+- `ogg_to_numpy()` async function using ffmpeg subprocess
+- Comprehensive error handling for empty/corrupt input
+- `AudioConversionError` exception for clear error messages
+- `check_ffmpeg_available()` for graceful ffmpeg detection
+- `validate_audio_format()` for output validation
+- `ogg_to_numpy_sync()` for non-async contexts
+
+**Documentation Updates:**
+- README.md: Added "System Requirements" section with ffmpeg installation instructions
+- config.example.toml: Added comments about ffmpeg requirement
+
+**Acceptance Criteria Met:**
+✅ #1 Converts OGG/Opus bytes to float32 numpy array
+✅ #2 Output is 16kHz mono
+✅ #3 Uses async ffmpeg subprocess (non-blocking)
+✅ #4 Handles empty input gracefully (raises ValueError)
+✅ #5 Handles corrupt OGG with clear error message (AudioConversionError)
+✅ #6 ffmpeg documented as system requirement
+
+**Note:** Numpy was already a project dependency, no additional Python packages required.
+<!-- SECTION:FINAL_SUMMARY:END -->

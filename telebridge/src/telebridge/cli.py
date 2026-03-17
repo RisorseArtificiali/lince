@@ -36,10 +36,14 @@ def main() -> None:
 
 def cmd_run(args: argparse.Namespace) -> None:
     """Run the telebridge bot."""
-    from telebridge.bot import run_bot
+    from telebridge.app import TelebridgeApp
+    from telebridge.config import load_config
+
+    config = load_config(args.config)
+    app = TelebridgeApp(config)
 
     try:
-        asyncio.run(run_bot(args.config))
+        asyncio.run(app.run())
     except KeyboardInterrupt:
         sys.exit(0)
 

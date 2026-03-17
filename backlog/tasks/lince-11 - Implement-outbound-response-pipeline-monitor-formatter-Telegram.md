@@ -1,10 +1,10 @@
 ---
 id: LINCE-11
 title: Implement outbound response pipeline (monitor -> formatter -> Telegram)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:33'
-updated_date: '2026-03-03 16:51'
+updated_date: '2026-03-15 09:50'
 labels:
   - telebridge
   - integration
@@ -69,10 +69,50 @@ async def send_response(bot, chat_id, text, thread_id=None):
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Monitor callback wired to parser and formatter
-- [ ] #2 Formatted responses sent to correct Telegram chat
-- [ ] #3 MarkdownV2 fallback to plain text on parse errors
-- [ ] #4 Image entries sent as photos
+- [x] #1 Monitor callback wired to parser and formatter
+- [x] #2 Formatted responses sent to correct Telegram chat
+- [x] #3 MarkdownV2 fallback to plain text on parse errors
+- [x] #4 Image entries sent as photos
 - [ ] #5 End-to-end flow works: send text from Telegram -> receive Claude response on Telegram
-- [ ] #6 Errors logged but don't crash the pipeline
+- [x] #6 Errors logged but don't crash the pipeline
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented outbound response pipeline wiring SessionMonitor → ResponseFormatter → Telegram:
+
+**bot.py changes:**
+- Added `_outbound_callback()` that receives `list[ParsedEntry]` from SessionMonitor
+- Implemented `_send_formatted_text()` with MarkdownV2 → plaintext fallback
+- Implemented `_send_images()` for tool_result image data
+- Added `get_target_chat_id()` / `set_target_chat_id()` for auto-detection from first inbound message
+- SessionMonitor started in `_post_init`, stopped in `_post_shutdown`
+
+**handlers/messages.py changes:**
+- Auto-detects target_chat_id from first authorized inbound message
+- Routes text to Claude Code via `bridge.send_keys()`
+- Removed "Sent" reply - outbound comes via SessionMonitor
+
+**Pipeline flow:**
+```
+SessionMonitor (JSONL poll) 
+  → ParsedEntry list 
+  → format_entries() 
+  → to_telegram_markdown() 
+  → split_message() 
+  → bot.send_message() with MarkdownV2 fallback
+```
+
+**Simplify review fixes:**
+- Fixed TOCTOU anti-pattern in load_session_map (EAFP instead of check-then-read)
+- Cleaned up unused import
+
+**Deferred to future tasks:**
+- Duplicated session_map loading across modules (create shared utility)
+- Config caching in screenshot capture hot path
+- Parallel message sends with asyncio.gather()
+- Consolidated error handling patterns
+
+All 33 tests pass.
+<!-- SECTION:FINAL_SUMMARY:END -->

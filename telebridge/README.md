@@ -2,6 +2,14 @@
 
 Telegram bridge for Claude Code - control Claude from Telegram.
 
+## System Requirements
+
+- **ffmpeg** (required for voice message transcription)
+  - Debian/Ubuntu: `sudo apt install ffmpeg`
+  - Fedora: `sudo dnf install ffmpeg`
+  - Arch: `sudo pacman -S ffmpeg`
+  - macOS: `brew install ffmpeg`
+
 ## Installation
 
 ```bash

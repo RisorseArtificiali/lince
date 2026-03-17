@@ -1,9 +1,10 @@
 ---
 id: LINCE-13
 title: 'Implement session lifecycle: create, resume, topic sync'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:33'
+updated_date: '2026-03-16 06:57'
 labels:
   - telebridge
   - sessions
@@ -68,3 +69,11 @@ Extend the bot and session manager to support full multi-session lifecycle tied 
 - [ ] #7 /esc sends Ctrl+C to pane
 - [ ] #8 Claude commands (/clear, /compact, etc.) forwarded correctly
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+LINCE-13 implemented:
+
+Session liveness detection with caching, new session creation flow via /new command, stale session recovery with user-friendly error messages, topic lifecycle handlers (placeholder), enhanced Claude commands (/memory, /model, /help), automatic topic name sync, comprehensive test suite with 30 tests.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,9 +1,10 @@
 ---
 id: LINCE-8
 title: Implement Claude Code transcript parser
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:32'
+updated_date: '2026-03-14 20:04'
 labels:
   - telebridge
   - core

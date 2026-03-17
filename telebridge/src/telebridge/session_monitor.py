@@ -23,21 +23,25 @@ Session discovery:
 import asyncio
 import json
 import logging
-import os
-import tempfile
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Awaitable
+from typing import Any, Callable, Awaitable, TYPE_CHECKING
 
 import aiofiles
 
 from telebridge.config import TelebridgeConfig, get_claude_projects_path, get_state_dir
+from telebridge.interactive_ui import InteractiveUIManager, InteractiveUIState
 from telebridge.transcript_parser import (
     ParsedEntry,
     PendingToolInfo,
     TranscriptParser,
 )
+from telebridge.utils import atomic_write_json
+
+if TYPE_CHECKING:
+    from telebridge.media_registry import MediaRegistry
+    from telebridge.multiplexer import MultiplexerBridge
 
 logger = logging.getLogger(__name__)
 
@@ -106,26 +110,7 @@ class MonitorState:
         }
 
         try:
-            self.state_file.parent.mkdir(parents=True, exist_ok=True)
-            content = json.dumps(data, indent=2)
-
-            # Atomic write: temp file + replace
-            fd, tmp_path = tempfile.mkstemp(
-                dir=str(self.state_file.parent), suffix=".tmp", prefix=".monitor_state."
-            )
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(content)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(tmp_path, str(self.state_file))
-            except BaseException:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
-
+            atomic_write_json(self.state_file, data, prefix=".monitor_state.")
             self._dirty = False
             logger.debug(f"Saved {len(self.tracked_sessions)} tracked sessions to state")
         except OSError as e:
@@ -197,11 +182,59 @@ class SessionMonitor:
         # Projects path for session discovery
         self._projects_path = get_claude_projects_path()
 
+        # Optional interactive UI detection
+        self._ui_detector: InteractiveUIManager | None = None
+        self._ui_callback: Callable[[InteractiveUIState], Awaitable[None]] | None = None
+        self._bridge: "MultiplexerBridge | None" = None
+
+        # Optional media registry for periodic cleanup
+        self._media_registry: "MediaRegistry | None" = None
+        self._last_cleanup_time: float = 0.0  # Timestamp of last cleanup
+        self._cleanup_interval: float = 3600.0  # Run cleanup every hour
+
     def set_message_callback(
         self, callback: Callable[[list[ParsedEntry]], Awaitable[None]]
     ) -> None:
         """Set the callback function for new parsed entries."""
         self._message_callback = callback
+
+    def set_ui_callback(
+        self, callback: Callable[[InteractiveUIState], Awaitable[None]]
+    ) -> None:
+        """Set callback for interactive UI detection.
+
+        When enabled, the monitor will check captured pane content for
+        interactive UI prompts (permissions, multi-choice, model selection)
+        and emit InteractiveUIState for rendering as inline keyboards.
+
+        Args:
+            callback: Async function to call when new UI is detected
+        """
+        self._ui_callback = callback
+        if self._ui_detector is None:
+            self._ui_detector = InteractiveUIManager()
+
+    def set_bridge(self, bridge: "MultiplexerBridge") -> None:
+        """Set the multiplexer bridge for pane capture.
+
+        Required for interactive UI detection. The bridge is used to
+        capture pane content for detecting interactive prompts.
+
+        Args:
+            bridge: MultiplexerBridge instance (tmux or zellij)
+        """
+        self._bridge = bridge
+
+    def set_media_registry(self, media_registry: "MediaRegistry") -> None:
+        """Set the media registry for periodic cleanup.
+
+        When enabled, the monitor will periodically clean up expired
+        media files based on the configured TTL.
+
+        Args:
+            media_registry: MediaRegistry instance for cleanup
+        """
+        self._media_registry = media_registry
 
     def _extract_session_ids(self, session_map: dict[str, dict[str, str]]) -> dict[str, str]:
         """Extract session_id from session_map, keyed by pane_key.
@@ -501,6 +534,7 @@ class SessionMonitor:
                                 session_entries,
                                 pending_tools=session_pending,
                                 thinking_max_length=self.config.session.thinking_max_length,
+                                session_id=session_id,
                             )
                             self._pending_tools[session_id] = remaining_pending
                             all_parsed.extend(parsed)
@@ -511,12 +545,70 @@ class SessionMonitor:
                     except Exception as e:
                         logger.error(f"Message callback error: {e}")
 
+                # Interactive UI detection (if bridge and callback are set)
+                if self._bridge and self._ui_detector and self._ui_callback:
+                    try:
+                        await self._check_interactive_uis()
+                    except Exception as e:
+                        logger.error(f"UI detection error: {e}")
+
+                # Periodic media cleanup (if media_registry is set)
+                if self._media_registry:
+                    import time
+                    current_time = time.time()
+                    if current_time - self._last_cleanup_time >= self._cleanup_interval:
+                        try:
+                            deleted = self._media_registry.cleanup_expired()
+                            if deleted > 0:
+                                logger.info(f"Periodic cleanup: removed {deleted} expired media file(s)")
+                            self._last_cleanup_time = current_time
+                        except Exception as e:
+                            logger.error(f"Media cleanup error: {e}")
+
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
 
             await asyncio.sleep(self.poll_interval)
 
         logger.info("Session monitor stopped")
+
+    async def _check_interactive_uis(self) -> None:
+        """Check active panes for interactive UI prompts.
+
+        Captures pane content from the multiplexer bridge and checks for
+        interactive UI elements (permissions, multi-choice, model selection).
+        If detected and changed, invokes the UI callback.
+        """
+        if not self._bridge or not self._ui_detector or not self._ui_callback:
+            return
+
+        # Get current session map to know which panes are active
+        session_map = await self._load_session_map()
+
+        for pane_key, _ in session_map.items():
+            try:
+                # Capture pane content (synchronous bridge call in async context)
+                # Use timeout to prevent blocking the monitor loop
+                pane_content = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None, self._bridge.capture_pane_ansi
+                    ),
+                    timeout=0.5,  # 500ms timeout per pane
+                )
+
+                if not pane_content:
+                    continue
+
+                # Check for interactive UI with change detection
+                ui_state = self._ui_detector.check_for_ui(pane_key, pane_content)
+
+                if ui_state and self._ui_callback:
+                    await self._ui_callback(ui_state)
+
+            except asyncio.TimeoutError:
+                logger.debug(f"UI check timeout for pane {pane_key}")
+            except Exception as e:
+                logger.debug(f"UI check failed for pane {pane_key}: {e}")
 
     def start(self) -> None:
         """Start the session monitor background loop."""

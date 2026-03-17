@@ -1,9 +1,10 @@
 ---
 id: LINCE-17
 title: Implement terminal screenshot capture as PNG
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:34'
+updated_date: '2026-03-16 10:39'
 labels:
   - telebridge
   - media
@@ -61,11 +62,11 @@ Create `telebridge/src/telebridge/screenshot.py` — captures the Claude Code te
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Captures pane content with ANSI codes (tmux -e flag)
-- [ ] #2 Parses 16-color, 256-color, and RGB ANSI sequences
-- [ ] #3 Renders to PNG with monospace font and terminal colors
-- [ ] #4 Image generation runs in thread pool (non-blocking)
-- [ ] #5 Sent as Telegram photo via bot.send_photo()
-- [ ] #6 /screenshot command triggers capture-render-send
-- [ ] #7 Graceful fallback for Zellij plain text capture
+- [x] #1 Captures pane content with ANSI codes (tmux -e flag)
+- [x] #2 Parses 16-color, 256-color, and RGB ANSI sequences
+- [x] #3 Renders to PNG with monospace font and terminal colors
+- [x] #4 Image generation runs in thread pool (non-blocking)
+- [x] #5 Sent as Telegram photo via bot.send_photo()
+- [x] #6 /screenshot command triggers capture-render-send
+- [x] #7 Graceful fallback for Zellij plain text capture
 <!-- AC:END -->

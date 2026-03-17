@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 class TelegramConfig:
     bot_token: str = ""
     allowed_users: list[int] = field(default_factory=list)
+    target_chat_id: int = 0  # Chat ID for outbound messages (0 = auto-detect from first inbound)
 
 
 @dataclass
@@ -50,6 +51,33 @@ class TmuxConfig:
 
 
 @dataclass
+class ScreenshotConfig:
+    font_size: int = 28
+    with_ansi: bool = True
+    max_lines: int = 100
+    padding: int = 16
+    max_width: int = 1200
+
+
+@dataclass
+class InteractiveUIConfig:
+    """Configuration for interactive UI detection."""
+
+    enabled: bool = True
+    poll_interval: float = 1.5  # Seconds between UI checks
+    max_options: int = 10  # Maximum options to extract
+
+
+@dataclass
+class MediaConfig:
+    """Configuration for media file handling and cleanup."""
+
+    cleanup_enabled: bool = True  # Enable automatic file cleanup
+    file_ttl_hours: float = 24.0  # Time-to-live for downloaded files (hours)
+    cleanup_on_unbind: bool = True  # Cleanup files when session unbinds
+
+
+@dataclass
 class TelebridgeConfig:
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
@@ -57,6 +85,9 @@ class TelebridgeConfig:
     multiplexer: MultiplexerConfig = field(default_factory=MultiplexerConfig)
     zellij: ZellijConfig = field(default_factory=ZellijConfig)
     tmux: TmuxConfig = field(default_factory=TmuxConfig)
+    screenshot: ScreenshotConfig = field(default_factory=ScreenshotConfig)
+    interactive_ui: InteractiveUIConfig = field(default_factory=InteractiveUIConfig)
+    media: MediaConfig = field(default_factory=MediaConfig)
 
 
 def _apply_section(config_obj, data: dict) -> None:
@@ -81,6 +112,18 @@ def get_claude_projects_path() -> Path:
 def get_state_dir(config: TelebridgeConfig) -> Path:
     """Resolve state directory path for session persistence."""
     return Path(config.session.state_dir) if config.session.state_dir else Path.home() / ".telebridge"
+
+
+def get_session_map_path(config: TelebridgeConfig) -> Path:
+    """Get path to session_map.json file.
+
+    Args:
+        config: Telebridge configuration
+
+    Returns:
+        Path to session_map.json in state directory
+    """
+    return get_state_dir(config) / "session_map.json"
 
 
 def load_config(path: str | None = None) -> TelebridgeConfig:
@@ -120,6 +163,9 @@ def load_config(path: str | None = None) -> TelebridgeConfig:
             "multiplexer": config.multiplexer,
             "zellij": config.zellij,
             "tmux": config.tmux,
+            "screenshot": config.screenshot,
+            "interactive_ui": config.interactive_ui,
+            "media": config.media,
         }
         for section_name, config_obj in section_map.items():
             if section_name in data:
@@ -136,6 +182,34 @@ def load_config(path: str | None = None) -> TelebridgeConfig:
             ]
         except ValueError:
             pass  # Ignore malformed ALLOWED_USERS
+
+    # Apply .env overrides for ScreenshotConfig (highest priority)
+    if font_size := os.environ.get("SCREENSHOT_FONT_SIZE"):
+        try:
+            config.screenshot.font_size = int(font_size)
+        except ValueError:
+            pass  # Ignore malformed SCREENSHOT_FONT_SIZE
+
+    if with_ansi := os.environ.get("SCREENSHOT_WITH_ANSI"):
+        config.screenshot.with_ansi = with_ansi.lower() in ("true", "1", "yes")
+
+    if max_lines := os.environ.get("SCREENSHOT_MAX_LINES"):
+        try:
+            config.screenshot.max_lines = int(max_lines)
+        except ValueError:
+            pass  # Ignore malformed SCREENSHOT_MAX_LINES
+
+    if padding := os.environ.get("SCREENSHOT_PADDING"):
+        try:
+            config.screenshot.padding = int(padding)
+        except ValueError:
+            pass  # Ignore malformed SCREENSHOT_PADDING
+
+    if max_width := os.environ.get("SCREENSHOT_MAX_WIDTH"):
+        try:
+            config.screenshot.max_width = int(max_width)
+        except ValueError:
+            pass  # Ignore malformed SCREENSHOT_MAX_WIDTH
 
     # Security: scrub sensitive values from environment
     os.environ.pop("TELEGRAM_BOT_TOKEN", None)

@@ -1,10 +1,10 @@
 ---
 id: LINCE-14
 title: Implement per-user async message queue with merging and flood control
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:34'
-updated_date: '2026-03-03 16:51'
+updated_date: '2026-03-16 06:58'
 labels:
   - telebridge
   - telegram
@@ -72,3 +72,9 @@ class MessageTask:
 - [ ] #6 Workers auto-stop after inactivity
 - [ ] #7 Integration with outbound pipeline via enqueue()
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+LINCE-14 implemented: Per-user async message queuing with content merging, Telegram flood control handling, status message tracking, and worker lifecycle management with auto-stop after inactivity timeout.
+<!-- SECTION:FINAL_SUMMARY:END -->

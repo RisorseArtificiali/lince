@@ -1,10 +1,10 @@
 ---
 id: LINCE-21
 title: 'Implement bot commands: /start, /history, /usage, /help'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-03 14:35'
-updated_date: '2026-03-03 16:51'
+updated_date: '2026-03-16 10:57'
 labels:
   - telebridge
   - commands
@@ -52,11 +52,11 @@ Implement the full set of bot commands in `telebridge/src/telebridge/handlers/co
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 /start shows welcome message with capabilities
-- [ ] #2 /history displays paginated conversation with inline keyboard navigation
-- [ ] #3 /usage shows token/cost statistics from JSONL data
-- [ ] #4 /help lists all commands
-- [ ] #5 Claude commands (/clear, /compact, /cost, /memory, /model) forwarded correctly
-- [ ] #6 Command menu set in Telegram autocomplete
-- [ ] #7 All commands check auth
+- [x] #1 /start shows welcome message with capabilities
+- [x] #2 /history displays paginated conversation with inline keyboard navigation
+- [x] #3 /usage shows token/cost statistics from JSONL data
+- [x] #4 /help lists all commands
+- [x] #5 Claude commands (/clear, /compact, /cost, /memory, /model) forwarded correctly
+- [x] #6 Command menu set in Telegram autocomplete
+- [x] #7 All commands check auth
 <!-- AC:END -->

@@ -1,5 +1,11 @@
 # Telebridge Configuration
 # Copy to config.toml and customize
+#
+# System Requirements:
+# - ffmpeg: Required for voice message transcription (OGG/Opus -> numpy)
+#   Install with: sudo apt install ffmpeg  # Debian/Ubuntu
+#
+# Python dependencies: uv sync (see pyproject.toml)
 
 [telegram]
 # Bot token from @BotFather - store in .env, not here!
@@ -20,7 +26,7 @@ auto_bind = true
 # state_dir = ""  # Default: ~/.telebridge/
 
 [voice]
-# Voice message transcription
+# Voice message transcription (requires ffmpeg to be installed)
 enabled = true
 
 # Language: "auto" for detection, or "en", "it", etc.

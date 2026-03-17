@@ -1,9 +1,10 @@
 ---
 id: LINCE-20
 title: Implement Telegram voice message handler with VoxCode Transcriber
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-03-03 14:35'
+updated_date: '2026-03-16 16:34'
 labels:
   - telebridge
   - voice
