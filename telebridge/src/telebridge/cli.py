@@ -30,6 +30,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Default to 'run' if no subcommand provided
+    if not hasattr(args, 'func'):
+        args.config = None
+        cmd_run(args)
+        return
+
     # Call the appropriate function
     args.func(args)
 

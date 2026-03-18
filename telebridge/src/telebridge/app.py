@@ -205,7 +205,17 @@ class TelebridgeApp:
             logger.warning("No allowed users configured - bot will reject all messages")
 
         application = await self.create_application()
-        await application.run_polling()
+        async with application:
+            await application.start()
+            await application.updater.start_polling()
+            # Keep running until cancelled
+            try:
+                from asyncio import Event
+                stop_event = Event()
+                await stop_event.wait()
+            finally:
+                await application.updater.stop()
+                await application.stop()
 
     def _register_handlers(self, application: Application) -> None:
         """Register all handlers in priority order."""

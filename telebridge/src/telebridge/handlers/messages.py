@@ -90,8 +90,16 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not text:
         return
 
-    bridge = app.bridge
-    session_manager = app.session_manager
+    # Ensure session manager is initialized (race condition on startup)
+    session_manager = app._session_manager
+    if session_manager is None:
+        logger.warning("Session manager not initialized - skipping message")
+        return
+
+    bridge = app._bridge
+    if bridge is None:
+        logger.warning("Bridge not initialized - skipping message")
+        return
 
     thread_id = message.message_thread_id or 0
 
