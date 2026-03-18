@@ -28,19 +28,19 @@ async def bind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not update.message:
         return
 
-    session_manager = app.session_manager
-    sessions = session_manager.list_active_sessions()
-    if not sessions:
-        await update.message.reply_text("No active sessions. Use /start to create one.")
+    bridge = app.bridge
+    panes = bridge.list_panes()
+    if not panes:
+        await update.message.reply_text("No multiplexer panes found. Start tmux/zellij first.")
         return
 
-    # Build inline keyboard
+    # Build inline keyboard from available panes
     keyboard = []
-    for session in sessions:
+    for pane_key in panes:
         keyboard.append([
             InlineKeyboardButton(
-                f"📋 {session.summary[:30]} ({session.message_count} msgs)",
-                callback_data=f"{CALLBACK_PREFIX_BIND}{session.pane_key}"
+                f"📋 {pane_key}",
+                callback_data=f"{CALLBACK_PREFIX_BIND}{pane_key}"
             )
         ])
     keyboard.append([InlineKeyboardButton("➕ New Session", callback_data=f"{CALLBACK_PREFIX_BIND}{CALLBACK_ACTION_NEW}")])
