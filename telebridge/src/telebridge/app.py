@@ -24,6 +24,8 @@ from telebridge.multiplexer import MultiplexerBridge, create_bridge
 from telebridge.session_manager import SessionManager
 from telebridge.session_monitor import ParsedEntry, SessionMonitor
 
+from telebridge.interactive_ui import InteractiveUIState
+
 if TYPE_CHECKING:
     from telebridge.interactive_ui import InteractiveUIState
 
@@ -128,6 +130,47 @@ class TelebridgeApp:
 
         return application
 
+    async def _initialize_before_polling(self) -> None:
+        """Initialize components before polling starts to avoid race condition."""
+        from telebridge.config import get_state_dir
+        from telebridge.media_registry import MediaRegistry
+        from telebridge.session_manager import SessionManager
+        from telebridge.session_monitor import SessionMonitor
+
+        from telebridge.message_queue import MessageQueue
+
+        # Initialize media registry first (needed by session manager)
+        state_dir = get_state_dir(self.config)
+        self._media_registry = MediaRegistry(self.config.media, state_dir)
+        self._media_registry.load()
+        logger.info("Media registry initialized")
+
+        # Initialize session manager with media registry reference
+        self._session_manager = SessionManager(self.config, self._media_registry)
+        self._session_manager.load()
+        self._session_manager.update_from_session_map()
+
+        # Cleanup stale panes
+        if self._bridge:
+            await self._session_manager.cleanup_stale_panes(self._bridge)
+
+        logger.info("Session manager initialized")
+
+        # Initialize message queue
+        self._message_queue = MessageQueue(self.config)
+        if self._bot:
+            self._message_queue.set_bot(self._bot)
+        logger.info("Message queue initialized")
+
+        # Start session monitor for outbound messages
+        self._monitor = SessionMonitor(self.config)
+        self._monitor.set_message_callback(self._outbound_callback)
+        self._monitor.set_ui_callback(self._ui_callback)
+        if self._media_registry:
+            self._monitor.set_media_registry(self._media_registry)
+        self._monitor.start()
+        logger.info("Session monitor started")
+
     async def _post_init(self, application: Application) -> None:
         """Initialize background services after bot starts."""
         self._bot = application.bot
@@ -205,6 +248,11 @@ class TelebridgeApp:
             logger.warning("No allowed users configured - bot will reject all messages")
 
         application = await self.create_application()
+
+        # Initialize session manager BEFORE starting polling to avoid race condition
+        self._bridge = create_bridge(self.config)
+        await self._initialize_before_polling()
+
         async with application:
             await application.start()
             await application.updater.start_polling()
