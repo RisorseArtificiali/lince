@@ -120,7 +120,7 @@ def install_hook() -> bool:
     session_start_hooks = settings["hooks"]["SessionStart"]
 
     # Check if already installed (search in nested hooks arrays)
-    hook_command = "telebridge hook"
+    hook_command = "cd /home/pantinor/data/repo/personal/lince/telebridge && uv run telebridge hook"
     for hook_group in session_start_hooks:
         if isinstance(hook_group, dict) and "hooks" in hook_group:
             for hook in hook_group["hooks"]:
