@@ -35,7 +35,10 @@
 command = "claude"
 default_args = ["--dangerously-skip-permissions"]
 env = {}
-home_ro_dirs = []
+# .config/gcloud holds Google Cloud ADC credentials (application_default_credentials.json)
+# needed for Vertex AI authentication.  Users without a Vertex AI setup can override
+# this to [] in their config.toml under [agents.claude].
+home_ro_dirs = [".config/gcloud"]
 home_rw_dirs = []
 bwrap_conflict = false
 disable_inner_sandbox_args = []

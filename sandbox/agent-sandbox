@@ -71,13 +71,7 @@ persist_toolchains = true
 # Auto-detect PATH entries under $HOME and expose read-only
 auto_expose_path = true
 
-# Extra home subdirectories to expose read-only (relative to $HOME)
-# .config/gcloud is needed for Vertex AI / Google Cloud authentication
-home_ro_dirs = [".config/gcloud"]
-
 # Extra home subdirectories to expose read-write (relative to $HOME)
-# Use this if read-only access to a directory is insufficient, e.g. if
-# google-auth needs to write refreshed tokens to .config/gcloud.
 home_rw_dirs = []
 
 # Default provider profile (used when -P is not specified).
