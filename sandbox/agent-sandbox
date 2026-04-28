@@ -45,6 +45,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 SANDBOX_DIR = Path.home() / ".agent-sandbox"
+SANDBOX_HOME = SANDBOX_DIR / "home"
 SNAPSHOT_DIR = SANDBOX_DIR / "snapshots"
 _OLD_SANDBOX_DIR = Path.home() / ".claude-sandbox"
 
@@ -73,6 +74,11 @@ auto_expose_path = true
 # Extra home subdirectories to expose read-only (relative to $HOME)
 # .config/gcloud is needed for Vertex AI / Google Cloud authentication
 home_ro_dirs = [".config/gcloud"]
+
+# Extra home subdirectories to expose read-write (relative to $HOME)
+# Use this if read-only access to a directory is insufficient, e.g. if
+# google-auth needs to write refreshed tokens to .config/gcloud.
+home_rw_dirs = []
 
 # Default provider profile (used when -P is not specified).
 # Set to a profile name defined in [profiles.*] below.
@@ -955,10 +961,11 @@ def build_nono_cmd(
     agent_extra_args: list[str],
     safe_mode: bool = False,
     agent_id: str | None = None,
+    nono_path: str = "nono",
 ) -> list[str]:
     """Build nono run command for the given agent."""
     profile_name = f"lince-{agent_name}"
-    cmd = ["nono", "run", "--profile", profile_name]
+    cmd = [nono_path, "run", "--profile", profile_name]
     cmd.extend(["--workdir", str(project_dir)])
     cmd.extend(["--allow-cwd"])
 
@@ -1022,12 +1029,16 @@ def generate_nono_profile(
         if ep not in read_paths:
             read_paths.append(ep)
 
-    # home_ro_dirs from [sandbox]
+    # home_ro_dirs / home_rw_dirs from [sandbox]
     home = Path.home()
     for d in sandbox_conf.get("home_ro_dirs", []):
         full = str(home / d)
         if full not in read_paths:
             read_paths.append(full)
+    for d in sandbox_conf.get("home_rw_dirs", []):
+        full = str(home / d)
+        if full not in allow_paths:
+            allow_paths.append(full)
 
     # Agent-specific ro dirs
     for d in agent_config.get("home_ro_dirs", []):
@@ -1046,6 +1057,50 @@ def generate_nono_profile(
         ep = str(expand(d))
         if ep not in allow_paths:
             allow_paths.append(ep)
+
+    # --- Node.js (fnm): expose the active node installation read-only ----------
+    # npx-based MCP servers (e.g. context7) spawn as Claude Code children and
+    # inherit the sandbox environment.  Two paths are needed:
+    #   1. The resolved installation root (stable, version-pinned at nono-sync time)
+    #   2. ~/.local/state/fnm_multishells (session-ephemeral symlink layer that
+    #      node traverses at runtime when resolving its own PATH entry)
+    node_install = detect_node_install_dir()
+    if node_install and str(node_install) not in read_paths:
+        read_paths.append(str(node_install))
+        fnm_multishells = str(Path.home() / ".local" / "state" / "fnm_multishells")
+        if fnm_multishells not in read_paths:
+            read_paths.append(fnm_multishells)
+
+    # --- Agent binary dir: resolved at nono-sync time so nono can exec it ----
+    # nono requires the binary's directory to be readable; resolve it from PATH
+    # now rather than hardcoding, so this works regardless of install location.
+    agent_command = agent_config.get("command", agent_name)
+    agent_bin = shutil.which(agent_command)
+    if agent_bin:
+        bin_path = Path(agent_bin)
+        for p in {bin_path.parent, bin_path.resolve().parent}:
+            s = str(p)
+            if s not in read_paths:
+                read_paths.append(s)
+
+    # --- SANDBOX_HOME/.local/bin: satisfies "$HOME/.local/bin in PATH" checks --
+    # Populated by nono-sync with symlinks to agent binaries; read-only is enough.
+    sandbox_local_bin = str(SANDBOX_HOME / ".local" / "bin")
+    if sandbox_local_bin not in read_paths:
+        read_paths.append(sandbox_local_bin)
+
+    # --- npm cache: shared sandbox toolchain dir (mirrors bwrap behaviour) ----
+    npm_cache_dir = SANDBOX_DIR / "toolchains" / "npm-cache"
+    npm_cache_str = str(npm_cache_dir)
+    if npm_cache_str not in allow_paths:
+        allow_paths.append(npm_cache_str)
+
+    # --- Claude config dir: redirect Claude Code to the sandbox-isolated copy --
+    # nono cannot bind-mount (unlike bwrap), so we set CLAUDE_CONFIG_DIR instead.
+    # The dir must be in allow_paths so Claude Code can read and write its config.
+    claude_config = str(SANDBOX_DIR / "claude-config")
+    if claude_config not in allow_paths:
+        allow_paths.append(claude_config)
 
     filesystem: dict = {}
     if allow_paths:
@@ -1070,6 +1125,14 @@ def generate_nono_profile(
     security: dict = {}
     security["signal_mode"] = "allow_same_sandbox"
     profile["security"] = security
+
+    # --- Policy ---
+    # Prevent the agent from modifying its own nono sandbox profile.
+    # $XDG_CONFIG_HOME/nono/profiles is granted r+w by the claude-code base
+    # profile; we override it with an explicit deny here.
+    if agent_name == "claude":
+        policy = profile.setdefault("policy", {})
+        policy.setdefault("add_deny_access", []).append("$XDG_CONFIG_HOME/nono/profiles")
 
     # --- Network ---
     # nono allows network by default; no profile section needed.
@@ -1097,6 +1160,68 @@ def generate_nono_profile(
     return profile, warnings
 
 
+def _clean_npm_env_from_sandbox(dry_run: bool = False) -> None:
+    """Remove previously-injected npm cache env vars from sandbox config files.
+
+    Strips npm_config_cache and npm_config_tmp from every .mcp.json file and
+    from settings.json inside SANDBOX_DIR/claude-config.  Idempotent.
+    """
+    keys_to_remove = {"npm_config_cache", "npm_config_tmp"}
+    sandbox_config = SANDBOX_DIR / "claude-config"
+
+    # Clean .mcp.json files (bare format only: server dicts at top level).
+    # Wrapped format {"mcpServers": {...}} is not handled here because the old
+    # injection code also only wrote to bare-format files, so no wrapped file
+    # can contain stale npm keys.
+    mcp_files = list(sandbox_config.rglob(".mcp.json")) if sandbox_config.exists() else []
+    for mcp_path in mcp_files:
+        try:
+            data = json.loads(mcp_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        changed = any(
+            key in server.get("env", {})
+            for server in data.values()
+            if isinstance(server, dict)
+            for key in keys_to_remove
+        )
+        if not changed:
+            continue
+        if dry_run:
+            print(f"  would clean npm env from {mcp_path.relative_to(Path.home())}")
+            continue
+        for server in data.values():
+            if not isinstance(server, dict):
+                continue
+            env = server.get("env", {})
+            for key in keys_to_remove:
+                env.pop(key, None)
+            if not env and "env" in server:
+                del server["env"]
+        mcp_path.write_text(json.dumps(data, indent=2) + "\n")
+        print(f"  cleaned npm env from {mcp_path.relative_to(Path.home())}")
+
+    # Clean settings.json
+    settings_path = sandbox_config / "settings.json"
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            settings = {}
+        env = settings.get("env", {})
+        changed = any(k in env for k in keys_to_remove)
+        if changed:
+            if dry_run:
+                print(f"  would clean npm env from settings.json")
+            else:
+                for key in keys_to_remove:
+                    env.pop(key, None)
+                if not env:
+                    settings.pop("env", None)
+                settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+                print(f"  cleaned npm env from settings.json")
+
+
 def cmd_nono_sync(args) -> None:
     """Generate nono JSON profiles from lince agent configuration."""
     config, config_path = load_config()
@@ -1116,6 +1241,21 @@ def cmd_nono_sync(args) -> None:
 
     if not dry_run:
         NONO_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+        SANDBOX_HOME.mkdir(parents=True, exist_ok=True)
+        (SANDBOX_DIR / "toolchains" / "npm-cache").mkdir(parents=True, exist_ok=True)
+        # Populate SANDBOX_HOME/.local/bin/ with symlinks to each agent binary so
+        # tools that check "$HOME/.local/bin in PATH" work with the fake HOME.
+        sandbox_local_bin = SANDBOX_HOME / ".local" / "bin"
+        sandbox_local_bin.mkdir(parents=True, exist_ok=True)
+        for _name in agent_names:
+            _cmd = resolve_agent_config(config, _name).get("command", _name)
+            _real = shutil.which(_cmd)
+            if _real:
+                _link = sandbox_local_bin / Path(_real).name
+                if _link.is_symlink():
+                    _link.unlink()
+                if not _link.exists():
+                    _link.symlink_to(_real)
 
     print(f"nono-sync: generating profiles from {config_path}")
     if dry_run:
@@ -1159,8 +1299,19 @@ def cmd_nono_sync(args) -> None:
                 print(f"\033[33m\u26a0 {w}\033[0m")
 
     if not dry_run:
+        _clean_npm_env_from_sandbox(dry_run=False)
+        # Ensure files that may have been missing during init are present now.
+        claude_json_src = Path.home() / ".claude.json"
+        claude_json_dst = SANDBOX_DIR / "claude.json"
+        if claude_json_src.exists() and not claude_json_dst.exists():
+            shutil.copy2(claude_json_src, claude_json_dst)
+            print(f"  claude.json   copied from {claude_json_src} (was missing)")
         print(f"\nDone. {len(agent_names)} profile(s) written to {NONO_PROFILE_DIR}/")
         print("Run agents with nono:  nono run --profile lince-<agent> -- <command>")
+
+    if dry_run:
+        print("\nnpm env cleanup (dry-run):")
+        _clean_npm_env_from_sandbox(dry_run=True)
 
 
 def human_size(n: int) -> str:
@@ -1224,6 +1375,30 @@ def detect_home_path_entries() -> list[Path]:
             result.append(p)
     _home_path_entries_cache = result
     return _home_path_entries_cache
+
+
+def detect_node_install_dir() -> Path | None:
+    """Return the fnm node installation root for the active version, or None.
+
+    Resolves the 'node' binary through symlinks. If the real path is under
+    ~/.local/share/fnm/node-versions/<ver>/installation/bin/node, returns the
+    installation root (parent.parent of the binary, contains bin/ and lib/).
+    Returns None when node is absent, not fnm-managed, or the resolved path
+    does not exist on disk.
+    """
+    node = shutil.which("node")
+    if not node:
+        return None
+    try:
+        real = Path(node).resolve()
+        fnm_versions = Path.home() / ".local" / "share" / "fnm" / "node-versions"
+        real.relative_to(fnm_versions)  # raises ValueError if not under fnm
+        # real is e.g. .../node-versions/v20.19.6/installation/bin/node
+        # parent = bin/, parent.parent = installation/
+        install_dir = real.parent.parent
+        return install_dir if install_dir.is_dir() else None
+    except (OSError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1381,11 +1556,15 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
         for p in detect_home_path_dirs():
             cmd += ["--ro-bind", str(p), str(p)]
 
-    # Extra home read-only dirs from config
+    # Extra home read-only / read-write dirs from config
     for d in sandbox.get("home_ro_dirs", []):
         full = home_p / d
         if full.exists():
             cmd += ["--ro-bind", str(full), str(full)]
+    for d in sandbox.get("home_rw_dirs", []):
+        full = home_p / d
+        full.mkdir(parents=True, exist_ok=True)
+        cmd += ["--bind", str(full), str(full)]
 
     # --- 5b. Agent-specific home dirs ----------------------------------------
     for d in agent_cfg.get("home_ro_dirs", []):
@@ -1552,8 +1731,10 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     for var, val in env_conf.get("extra", {}).items():
         cmd += ["--setenv", var, str(val)]
 
-    # Profile env vars (override base values)
+    # Profile env vars (override base values); env_unset is a control key, not a var
     for var, val in prof.get("env", {}).items():
+        if var == "env_unset":
+            continue
         cmd += ["--setenv", var, str(val)]
 
     # Agent-specific env vars
@@ -1666,7 +1847,7 @@ def cmd_init(args) -> None:
                         shutil.rmtree(item)
                     else:
                         item.unlink()
-                shutil.copytree(src, dst, dirs_exist_ok=True)
+                shutil.copytree(src, dst, dirs_exist_ok=True, ignore_dangling_symlinks=True)
                 print(f"  claude-config {src} -> {dst}")
                 # Check for secrets in settings.json
                 settings = dst / "settings.json"
@@ -1806,7 +1987,8 @@ def cmd_run(args, agent_extra: list[str]) -> None:
                 print(f"Error: unknown profile '{profile}'.", file=sys.stderr)
                 print(f"Available profiles: {avail}", file=sys.stderr)
                 sys.exit(1)
-        prof_desc = profiles[profile].get("description", "")
+        prof_data = profiles[profile]
+        prof_desc = (prof_data.get("meta", {}).get("description", "") or prof_data.get("description", "")) if isinstance(prof_data, dict) else ""
 
     sec = config.get("security", {})
 
@@ -1828,6 +2010,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         cmd = build_nono_cmd(
             agent_name, project_dir, agent_cfg, agent_extra,
             safe_mode=args.safe, agent_id=args.id,
+            nono_path=shutil.which("nono") or "nono",
         )
 
         if args.dry_run:
@@ -1852,15 +2035,58 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         print(f"  project     {project_dir}")
         print(f"  isolation   Landlock LSM / Seatbelt")
         print(f"  network     enabled")
-        print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+        git_push_status = "soft-blocked (git config)" if sec.get("block_git_push", True) else "allowed"
+        print(f"  git push    {git_push_status}")
         print(
             f"  permissions "
             f"{'ask (safe mode)' if args.safe else 'per agent defaults'}"
         )
         print()
 
+        # Inject provider profile env vars into the subprocess environment so
+        # nono's allow_vars can pass them through into the sandbox.  Values
+        # defined in [<agent>.profiles.<name>.env] are config-time constants
+        # (not host-shell vars), so nono would drop them without this.
+        nono_env = dict(os.environ)
+        if profile:
+            all_profiles = resolve_profiles(config, agent_name)
+            prof_data = all_profiles.get(profile, {})
+            if isinstance(prof_data, dict):
+                env_unset: list[str] = []
+                for var, val in prof_data.get("env", {}).items():
+                    if var == "env_unset":
+                        env_unset = list(val) if isinstance(val, list) else []
+                    else:
+                        nono_env[var] = str(val)
+                for var in env_unset:
+                    nono_env.pop(var, None)
+        if args.id:
+            nono_env["LINCE_AGENT_ID"] = args.id
+        nono_env["HOME"] = str(SANDBOX_HOME)
+        # nono derives its profile dir from $XDG_CONFIG_HOME (falls back to $HOME/.config);
+        # pin it explicitly so nono still finds profiles after HOME is overridden.
+        nono_env.setdefault("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+        # Synthetic PATH: $HOME/.local/bin (fake home, satisfies Claude's PATH check)
+        # + real agent binary dirs + standard system dirs.  Not the host PATH.
+        agent_command = agent_cfg.get("command", agent_name)
+        agent_bin = shutil.which(agent_command)
+        bin_dirs: list[str] = [str(SANDBOX_HOME / ".local" / "bin")]
+        if agent_bin:
+            for p in {Path(agent_bin).parent, Path(agent_bin).resolve().parent}:
+                s = str(p)
+                if s not in bin_dirs:
+                    bin_dirs.append(s)
+        nono_env["PATH"] = ":".join(bin_dirs + ["/usr/local/bin", "/usr/bin", "/bin"])
+        nono_env["NPM_CONFIG_CACHE"] = str(SANDBOX_DIR / "toolchains" / "npm-cache")
+        nono_env["CLAUDE_CONFIG_DIR"] = str(SANDBOX_DIR / "claude-config")
+        if agent_name == "claude":
+            nono_env["CLOUDSDK_CONFIG"] = str(Path.home() / ".config" / "gcloud")
+            adc_file = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+            if adc_file.exists():
+                nono_env["GOOGLE_APPLICATION_CREDENTIALS"] = str(adc_file)
+
         try:
-            result = subprocess.run(cmd, cwd=str(project_dir))
+            result = subprocess.run(cmd, cwd=str(project_dir), env=nono_env)
             sys.exit(result.returncode)
         except KeyboardInterrupt:
             print("\nSandbox terminated.")
@@ -1887,7 +2113,8 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             all_profiles = resolve_profiles(config, agent_name)
             prof_data = all_profiles.get(profile, {})
             for var, val in prof_data.get("env", {}).items():
-                collected_env[var] = str(val)
+                if var != "env_unset":
+                    collected_env[var] = str(val)
         for var, val in agent_cfg.get("env", {}).items():
             collected_env[var] = str(val)
 
@@ -2173,7 +2400,7 @@ def cmd_status(args) -> None:
         if profiles:
             parts = []
             for name, pconf in sorted(profiles.items()):
-                desc = pconf.get("description", "") if isinstance(pconf, dict) else ""
+                desc = (pconf.get("meta", {}).get("description", "") or pconf.get("description", "")) if isinstance(pconf, dict) else ""
                 marker = " *" if name == default_prof else ""
                 label = f"{name}{marker} ({desc})" if desc else f"{name}{marker}"
                 parts.append(label)
@@ -3868,6 +4095,8 @@ def build_learn_bwrap_cmd(
 
     # Profile env vars
     for var, val in prof.get("env", {}).items():
+        if var == "env_unset":
+            continue
         cmd += ["--setenv", var, str(val)]
 
     # Agent-specific env vars
