@@ -1222,6 +1222,69 @@ def _clean_npm_env_from_sandbox(dry_run: bool = False) -> None:
                 print(f"  cleaned npm env from settings.json")
 
 
+_BUILTIN_MARKETPLACES: dict[str, str] = {
+    "claude-plugins-official": "https://github.com/anthropics/claude-plugins-official.git",
+}
+
+
+def _fix_sandbox_known_marketplaces() -> None:
+    """Ensure known_marketplaces.json in the sandbox has correct paths and HTTPS sources.
+
+    Claude writes installLocation using whatever path it resolved at the time the marketplace
+    was first added. If the user's main ~/.claude config was used before the sandbox was set up,
+    entries end up pointing at ~/.claude/... instead of the sandbox.  This function corrects
+    all installLocation values and converts SSH/github sources to HTTPS git sources.
+    """
+    sandbox_config = SANDBOX_DIR / "claude-config"
+    marketplace_dir = sandbox_config / "plugins" / "marketplaces"
+    known_path = sandbox_config / "plugins" / "known_marketplaces.json"
+    settings_path = sandbox_config / "settings.json"
+
+    # Collect expected marketplaces: builtins + extraKnownMarketplaces from settings.json
+    marketplaces: dict[str, str] = dict(_BUILTIN_MARKETPLACES)
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+            for name, cfg in settings.get("extraKnownMarketplaces", {}).items():
+                src = cfg.get("source", {})
+                if src.get("source") == "git" and src.get("url"):
+                    marketplaces[name] = src["url"]
+                elif src.get("source") == "github" and src.get("repo"):
+                    marketplaces[name] = f"https://github.com/{src['repo']}.git"
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    existing: dict = {}
+    if known_path.exists():
+        try:
+            existing = json.loads(known_path.read_text())
+        except json.JSONDecodeError:
+            pass
+
+    changed = False
+    for name, https_url in marketplaces.items():
+        entry = existing.get(name, {})
+        correct_location = str(marketplace_dir / name)
+
+        # Fix source to always use git+HTTPS
+        src = entry.get("source", {})
+        if src.get("source") != "git" or src.get("url") != https_url:
+            entry["source"] = {"source": "git", "url": https_url}
+            changed = True
+
+        # Fix installLocation when it points outside the sandbox
+        if entry.get("installLocation") != correct_location:
+            entry["installLocation"] = correct_location
+            changed = True
+
+        existing[name] = entry
+
+    if changed:
+        known_path.parent.mkdir(parents=True, exist_ok=True)
+        known_path.write_text(json.dumps(existing, indent=2) + "\n")
+        print(f"  known_marketplaces.json  fixed ({len(marketplaces)} entries) -> {known_path}")
+
+
 def cmd_nono_sync(args) -> None:
     """Generate nono JSON profiles from lince agent configuration."""
     config, config_path = load_config()
@@ -1300,6 +1363,7 @@ def cmd_nono_sync(args) -> None:
 
     if not dry_run:
         _clean_npm_env_from_sandbox(dry_run=False)
+        _fix_sandbox_known_marketplaces()
         # Ensure files that may have been missing during init are present now.
         claude_json_src = Path.home() / ".claude.json"
         claude_json_dst = SANDBOX_DIR / "claude.json"
