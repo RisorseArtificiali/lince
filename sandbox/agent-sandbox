@@ -1058,18 +1058,26 @@ def generate_nono_profile(
         if ep not in allow_paths:
             allow_paths.append(ep)
 
-    # --- Node.js (fnm): expose the active node installation read-only ----------
+    # --- Node.js: expose the active node installation as executable -------------
     # npx-based MCP servers (e.g. context7) spawn as Claude Code children and
-    # inherit the sandbox environment.  Two paths are needed:
-    #   1. The resolved installation root (stable, version-pinned at nono-sync time)
-    #   2. ~/.local/state/fnm_multishells (session-ephemeral symlink layer that
-    #      node traverses at runtime when resolving its own PATH entry)
-    node_install = detect_node_install_dir()
-    if node_install and str(node_install) not in read_paths:
-        read_paths.append(str(node_install))
-        fnm_multishells = str(Path.home() / ".local" / "state" / "fnm_multishells")
-        if fnm_multishells not in read_paths:
-            read_paths.append(fnm_multishells)
+    # inherit the sandbox environment.  The node allow-root must be in allow_paths
+    # (not just read_paths) so node/npx are executable inside the sandbox.
+    node_dir = detect_node_bin_dir()
+    if node_dir:
+        node_dir_s = str(node_dir)
+        if node_dir_s not in allow_paths:
+            allow_paths.append(node_dir_s)
+        if node_dir_s in read_paths:
+            read_paths.remove(node_dir_s)
+        # fnm-only: session-ephemeral symlink layer node traverses at runtime.
+        fnm_versions = Path.home() / ".local" / "share" / "fnm" / "node-versions"
+        try:
+            node_dir.relative_to(fnm_versions)
+            fnm_multishells = str(Path.home() / ".local" / "state" / "fnm_multishells")
+            if fnm_multishells not in read_paths:
+                read_paths.append(fnm_multishells)
+        except ValueError:
+            pass
 
     # --- Agent binary dir: resolved at nono-sync time so nono can exec it ----
     # nono requires the binary's directory to be readable; resolve it from PATH
@@ -1126,14 +1134,6 @@ def generate_nono_profile(
     security["signal_mode"] = "allow_same_sandbox"
     profile["security"] = security
 
-    # --- Policy ---
-    # Prevent the agent from modifying its own nono sandbox profile.
-    # $XDG_CONFIG_HOME/nono/profiles is granted r+w by the claude-code base
-    # profile; we override it with an explicit deny here.
-    if agent_name == "claude":
-        policy = profile.setdefault("policy", {})
-        policy.setdefault("add_deny_access", []).append("$XDG_CONFIG_HOME/nono/profiles")
-
     # --- Network ---
     # nono allows network by default; no profile section needed.
     # Use --block-net or network.block=true to deny it.
@@ -1160,80 +1160,23 @@ def generate_nono_profile(
     return profile, warnings
 
 
-def _clean_npm_env_from_sandbox(dry_run: bool = False) -> None:
-    """Remove previously-injected npm cache env vars from sandbox config files.
-
-    Strips npm_config_cache and npm_config_tmp from every .mcp.json file and
-    from settings.json inside SANDBOX_DIR/claude-config.  Idempotent.
-    """
-    keys_to_remove = {"npm_config_cache", "npm_config_tmp"}
-    sandbox_config = SANDBOX_DIR / "claude-config"
-
-    # Clean .mcp.json files (bare format only: server dicts at top level).
-    # Wrapped format {"mcpServers": {...}} is not handled here because the old
-    # injection code also only wrote to bare-format files, so no wrapped file
-    # can contain stale npm keys.
-    mcp_files = list(sandbox_config.rglob(".mcp.json")) if sandbox_config.exists() else []
-    for mcp_path in mcp_files:
-        try:
-            data = json.loads(mcp_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            continue
-        changed = any(
-            key in server.get("env", {})
-            for server in data.values()
-            if isinstance(server, dict)
-            for key in keys_to_remove
-        )
-        if not changed:
-            continue
-        if dry_run:
-            print(f"  would clean npm env from {mcp_path.relative_to(Path.home())}")
-            continue
-        for server in data.values():
-            if not isinstance(server, dict):
-                continue
-            env = server.get("env", {})
-            for key in keys_to_remove:
-                env.pop(key, None)
-            if not env and "env" in server:
-                del server["env"]
-        mcp_path.write_text(json.dumps(data, indent=2) + "\n")
-        print(f"  cleaned npm env from {mcp_path.relative_to(Path.home())}")
-
-    # Clean settings.json
-    settings_path = sandbox_config / "settings.json"
-    if settings_path.exists():
-        try:
-            settings = json.loads(settings_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            settings = {}
-        env = settings.get("env", {})
-        changed = any(k in env for k in keys_to_remove)
-        if changed:
-            if dry_run:
-                print(f"  would clean npm env from settings.json")
-            else:
-                for key in keys_to_remove:
-                    env.pop(key, None)
-                if not env:
-                    settings.pop("env", None)
-                settings_path.write_text(json.dumps(settings, indent=2) + "\n")
-                print(f"  cleaned npm env from settings.json")
-
 
 _BUILTIN_MARKETPLACES: dict[str, str] = {
     "claude-plugins-official": "https://github.com/anthropics/claude-plugins-official.git",
 }
 
 
-def _fix_sandbox_known_marketplaces() -> None:
+def _fix_sandbox_known_marketplaces(dry_run: bool = False) -> None:
     """Ensure known_marketplaces.json in the sandbox has correct paths and HTTPS sources.
 
     Claude writes installLocation using whatever path it resolved at the time the marketplace
     was first added. If the user's main ~/.claude config was used before the sandbox was set up,
     entries end up pointing at ~/.claude/... instead of the sandbox.  This function corrects
     all installLocation values and converts SSH/github sources to HTTPS git sources.
+
+    HTTPS is required because nono's Seatbelt policy blocks the SSH agent socket, so
+    git@github.com URLs fail with host key / permission errors when the sandbox tries
+    to clone or update a marketplace.
     """
     sandbox_config = SANDBOX_DIR / "claude-config"
     marketplace_dir = sandbox_config / "plugins" / "marketplaces"
@@ -1280,9 +1223,12 @@ def _fix_sandbox_known_marketplaces() -> None:
         existing[name] = entry
 
     if changed:
-        known_path.parent.mkdir(parents=True, exist_ok=True)
-        known_path.write_text(json.dumps(existing, indent=2) + "\n")
-        print(f"  known_marketplaces.json  fixed ({len(marketplaces)} entries) -> {known_path}")
+        if dry_run:
+            print(f"  would fix known_marketplaces.json ({len(marketplaces)} entries) -> {known_path}")
+        else:
+            known_path.parent.mkdir(parents=True, exist_ok=True)
+            known_path.write_text(json.dumps(existing, indent=2) + "\n")
+            print(f"  known_marketplaces.json  fixed ({len(marketplaces)} entries) -> {known_path}")
 
 
 def cmd_nono_sync(args) -> None:
@@ -1362,8 +1308,7 @@ def cmd_nono_sync(args) -> None:
                 print(f"\033[33m\u26a0 {w}\033[0m")
 
     if not dry_run:
-        _clean_npm_env_from_sandbox(dry_run=False)
-        _fix_sandbox_known_marketplaces()
+        _fix_sandbox_known_marketplaces(dry_run=False)
         # Ensure files that may have been missing during init are present now.
         claude_json_src = Path.home() / ".claude.json"
         claude_json_dst = SANDBOX_DIR / "claude.json"
@@ -1374,8 +1319,7 @@ def cmd_nono_sync(args) -> None:
         print("Run agents with nono:  nono run --profile lince-<agent> -- <command>")
 
     if dry_run:
-        print("\nnpm env cleanup (dry-run):")
-        _clean_npm_env_from_sandbox(dry_run=True)
+        _fix_sandbox_known_marketplaces(dry_run=True)
 
 
 def human_size(n: int) -> str:
@@ -1441,28 +1385,36 @@ def detect_home_path_entries() -> list[Path]:
     return _home_path_entries_cache
 
 
-def detect_node_install_dir() -> Path | None:
-    """Return the fnm node installation root for the active version, or None.
+def detect_node_bin_dir() -> Path | None:
+    """Return the allow-root for the active node installation, or None.
 
-    Resolves the 'node' binary through symlinks. If the real path is under
-    ~/.local/share/fnm/node-versions/<ver>/installation/bin/node, returns the
-    installation root (parent.parent of the binary, contains bin/ and lib/).
-    Returns None when node is absent, not fnm-managed, or the resolved path
-    does not exist on disk.
+    Works with fnm, nvm, Homebrew, system installs, and any other setup.
+
+    For fnm: returns the installation root (e.g. .../v20.19.6/installation/)
+    which covers both bin/ (executables) and lib/ (runtime siblings node needs).
+
+    For everything else (nvm, Homebrew, system): returns the bin/ directory
+    that directly contains node and npx (e.g. /opt/homebrew/bin or
+    ~/.nvm/versions/node/v20/bin).
+
+    Callers can derive the PATH entry with:
+        bin_path = node_dir / "bin" if (node_dir / "bin").is_dir() else node_dir
     """
     node = shutil.which("node")
     if not node:
         return None
+    real = Path(node).resolve()
+    # fnm: real is .../fnm/node-versions/<ver>/installation/bin/node
+    # Return installation/ root so lib/ siblings are also accessible.
+    fnm_versions = Path.home() / ".local" / "share" / "fnm" / "node-versions"
     try:
-        real = Path(node).resolve()
-        fnm_versions = Path.home() / ".local" / "share" / "fnm" / "node-versions"
-        real.relative_to(fnm_versions)  # raises ValueError if not under fnm
-        # real is e.g. .../node-versions/v20.19.6/installation/bin/node
-        # parent = bin/, parent.parent = installation/
-        install_dir = real.parent.parent
-        return install_dir if install_dir.is_dir() else None
-    except (OSError, ValueError):
-        return None
+        real.relative_to(fnm_versions)
+        install_root = real.parent.parent
+        return install_root if install_root.is_dir() else real.parent
+    except ValueError:
+        pass
+    # nvm, Homebrew, system: real.parent is already the bin/ directory.
+    return real.parent if real.parent.is_dir() else None
 
 
 # ---------------------------------------------------------------------------
@@ -2140,6 +2092,14 @@ def cmd_run(args, agent_extra: list[str]) -> None:
                 s = str(p)
                 if s not in bin_dirs:
                     bin_dirs.append(s)
+        # Include node bin so npx-based MCP servers (e.g. context7) can start.
+        # detect_node_bin_dir() returns the installation root for fnm (bin/ is a subdir)
+        # or the bin/ directory directly for nvm/Homebrew/system installs.
+        node_dir = detect_node_bin_dir()
+        if node_dir:
+            node_bin = str(node_dir / "bin") if (node_dir / "bin").is_dir() else str(node_dir)
+            if node_bin not in bin_dirs:
+                bin_dirs.append(node_bin)
         nono_env["PATH"] = ":".join(bin_dirs + ["/usr/local/bin", "/usr/bin", "/bin"])
         nono_env["NPM_CONFIG_CACHE"] = str(SANDBOX_DIR / "toolchains" / "npm-cache")
         nono_env["CLAUDE_CONFIG_DIR"] = str(SANDBOX_DIR / "claude-config")
