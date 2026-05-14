@@ -699,13 +699,13 @@ fn format_key_hints_short(hints: &[KeyHint]) -> String {
 /// Return the context-appropriate key hints.
 fn status_bar_hints(empty: bool, focused: bool, detail: bool) -> Vec<KeyHint> {
     if empty {
-        vec![("n", "New-defaults"), ("N", "New-wizard"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("n", "New-defaults"), ("N", "New-wizard"), ("U", "New-unsandboxed"), ("Q", "Save+Quit"), ("?", "Help")]
     } else if focused {
-        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+PgDn/Up", "Cycle"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+PgDn/Up", "Cycle"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("U", "New-unsandboxed"), ("Q", "Save+Quit"), ("?", "Help")]
     } else if detail {
-        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("x", "Kill"), ("n", "New"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("x", "Kill"), ("n", "New"), ("U", "New-unsandboxed"), ("Q", "Save+Quit"), ("?", "Help")]
     } else {
-        vec![("n", "New-defaults"), ("N", "New-wizard"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("n", "New-defaults"), ("N", "New-wizard"), ("U", "New-unsandboxed"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("Q", "Save+Quit"), ("?", "Help")]
     }
 }
 
@@ -1022,6 +1022,7 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
     push_box_line(&mut lines, &format!("  {}Create{}", BOLD, RESET), box_width);
     push_box_line(&mut lines, &format!("  {}n{}          New agent (name prompt)", KEY_COLOR, RESET), box_width);
     push_box_line(&mut lines, &format!("  {}N{}          New agent wizard", KEY_COLOR, RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}U{}          Quick unsandboxed (skip wizard)", KEY_COLOR, RESET), box_width);
     push_box_line(&mut lines, "", box_width);
 
     push_box_line(&mut lines, &format!("  {}Other{}", BOLD, RESET), box_width);

@@ -603,6 +603,36 @@ impl State {
                 });
                 true
             }
+            BareKey::Char('U') => {
+                // Quick-spawn an unsandboxed agent. Skips the wizard entirely,
+                // ignores `session_defaults` (which are tied to the sandboxed
+                // workflow), and never touches them — `n` keeps spawning what
+                // the user picked via `!` in the wizard. Useful as a one-shot
+                // escape hatch for greenfield bootstrap where the sandbox
+                // would otherwise block tool caches (~/.npm, ~/.cargo, ...).
+                let base = agent::agent_type_base_name(
+                    self.effective_default_agent_type()
+                ).to_string();
+                let unsandboxed_type = format!("{}-unsandboxed", base);
+                if !self.config.agent_types.contains_key(&unsandboxed_type) {
+                    self.status_message = Some(format!(
+                        "U: no [agents.{}] configured — add it to use this shortcut",
+                        unsandboxed_type
+                    ));
+                    return true;
+                }
+                let name = format!("{}-{}", base, self.next_agent_id + 1);
+                let project_dir = self.config.default_project_dir.clone().unwrap_or_default();
+                self.spawn_wizard_agent(
+                    name,
+                    &unsandboxed_type,
+                    self.config.default_provider.clone(),
+                    project_dir,
+                    None,
+                    Some(sandbox_backend::SandboxBackend::None),
+                );
+                true
+            }
             BareKey::Char('r') => {
                 if let Some(agent) = self.agents.get(self.selected_index) {
                     self.rename_target = Some(agent.id.clone());
