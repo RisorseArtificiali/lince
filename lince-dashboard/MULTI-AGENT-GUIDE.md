@@ -27,31 +27,48 @@ Each agent gets proper bwrap sandboxing with its own config dirs, env vars, and 
 
 ### 2. The dashboard manages mixed agent types
 
-The wizard (`Shift+N`) now has an Agent Type selection step. When multiple agent types are configured, you pick which one to spawn:
+The wizard (`Shift+N`) walks the user through two orthogonal axes — *which* agent to run and *how* to isolate it — across separate steps.
+
+**Step 1 — Agent Type.** Pick the binary. Only base agents are listed (deduplicated via `base_agents()` in `config.rs`); their `<base>-unsandboxed` companions are not shown here and are reached instead from the Sandbox Backend step below.
 
 ```
 ┌─────────── New Agent Wizard ──────────────┐
 │                                           │
-│  Step 1/5: Agent Type                     │
+│  Step 1/N: Agent Type                     │
 │                                           │
-│  > Claude Code (claude)                   │
-│    Claude Code (unsandboxed) (claude-uns… │
-│    OpenAI Codex (codex)                   │
-│    OpenAI Codex (sandboxed) (codex-bwrap) │
-│    Google Gemini CLI (gemini)             │
-│    Google Gemini CLI (sandboxed) (gemini… │
-│    OpenCode (opencode)                    │
-│    OpenCode (sandboxed) (opencode-bwrap)  │
-│    Pi (pi)                                │
-│    Pi (sandboxed) (pi-bwrap)              │
+│  > Claude Code                            │
+│    OpenAI Codex                           │
+│    Google Gemini CLI                      │
+│    OpenCode                               │
+│    Pi                                     │
+│    Bash Shell                             │
+│    Zsh Shell                              │
+│    Fish Shell                             │
 │                                           │
 │  [j/k] Select  [Enter] Next  [Esc] Cancel │
 └───────────────────────────────────────────┘
 ```
 
-Agent types now include `-bwrap` variants. Direct variants (codex, gemini, opencode) use the agent's own sandbox (if any) or no sandbox at all. The `-bwrap` variants wrap the agent in bwrap isolation provided by agent-sandbox.
+**Step 2 — Sandbox Backend.** Pick *how* to isolate the chosen agent. Options reflect what's installed on the host plus the agent's `[agents.<name>-unsandboxed]` companion when present.
 
-If you only have one agent type configured, this step is skipped automatically.
+```
+┌─────────── New Agent Wizard ──────────────┐
+│                                           │
+│  Step 2/N: Sandbox Backend                │
+│                                           │
+│  > nono                                   │
+│    none  (unsandboxed — red `!` in table) │
+│                                           │
+└───────────────────────────────────────────┘
+```
+
+Selecting `none` rewrites the effective agent type to `<base>-unsandboxed` internally (e.g. `claude` → `claude-unsandboxed`) — the table shows the short label of that companion (e.g. `CLU!`) and skips the subsequent Sandbox Level step. Selecting a sandboxed backend (`nono`, or `agent-sandbox`/bwrap on Linux) keeps the base agent type and continues to Step 3.
+
+**Step 3 — Sandbox Level.** Only shown when a sandboxed backend is selected. Standard options are `paranoid` / `normal` / `permissive`; custom levels are picked up from any `~/.config/nono/profiles/lince-<agent>-<level>.json` or `~/.agent-sandbox/profiles/<agent>-<level>.toml` files present on disk. See `docs/documentation/dashboard/sandbox-levels.md`.
+
+Subsequent steps (Provider, Name, Project dir, Confirm) follow the same skip rules — Provider appears only when the resolved agent type has providers configured, Name and Project dir are always shown, Confirm closes the wizard.
+
+If only one agent type or one sandbox backend is available, the corresponding step is skipped automatically.
 
 The agent table now always shows an **Agent column** with the 3-char type label and a per-agent color. Unsandboxed agents are flagged with a red `!` suffix:
 
