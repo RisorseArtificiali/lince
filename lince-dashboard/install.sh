@@ -451,16 +451,21 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
             echo -e "${YELLOW}  Updating LINCE aliases in $(basename $rc)${NC}"
             # Remove old LINCE alias block and re-add
             # BSD sed (macOS) requires -i '' — GNU sed uses -i alone
-            _sed_inplace=(sed -i)
             if [ "$(uname -s)" = "Darwin" ]; then
-                _sed_inplace=(sed -i "")
+                sed -i '' '/# LINCE aliases/d' "$rc"
+                sed -i '' '/alias lince=/d' "$rc"
+                sed -i '' '/alias lince-floating=/d' "$rc"
+                sed -i '' '/alias zd=/d' "$rc"
+                sed -i '' '/alias z="zellij"/d' "$rc"
+                sed -i '' '/alias zn=/d' "$rc"
+            else
+                sed -i '/# LINCE aliases/d' "$rc"
+                sed -i '/alias lince=/d' "$rc"
+                sed -i '/alias lince-floating=/d' "$rc"
+                sed -i '/alias zd=/d' "$rc"
+                sed -i '/alias z="zellij"/d' "$rc"
+                sed -i '/alias zn=/d' "$rc"
             fi
-            "${_sed_inplace[@]}" '/# LINCE aliases/d' "$rc"
-            "${_sed_inplace[@]}" '/alias lince=/d' "$rc"
-            "${_sed_inplace[@]}" '/alias lince-floating=/d' "$rc"
-            "${_sed_inplace[@]}" '/alias zd=/d' "$rc"
-            "${_sed_inplace[@]}" '/alias z="zellij"/d' "$rc"
-            "${_sed_inplace[@]}" '/alias zn=/d' "$rc"
         fi
         echo "" >> "$rc"
         echo "$ALIAS_COMMENT" >> "$rc"
