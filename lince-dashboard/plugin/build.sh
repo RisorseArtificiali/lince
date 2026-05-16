@@ -10,27 +10,24 @@ export PATH="$HOME/.cargo/bin:$PATH"
 TARGET="wasm32-wasip1"
 OUTPUT="$SCRIPT_DIR/lince-dashboard.wasm"
 
-# Resolve the actual cargo binary via rustup — on macOS, bare `cargo` may
-# resolve to Homebrew's standalone cargo which cannot see rustup-installed
-# targets.  Using the explicit path guarantees the rustup-managed toolchain.
+# Resolve the actual cargo and rustc binaries via rustup — on macOS, bare
+# `cargo`/`rustc` may resolve to Homebrew's standalone binaries which cannot
+# see rustup-installed targets.  Using explicit paths + RUSTC env var
+# guarantees the rustup-managed toolchain is used for both.
 CARGO_BIN=""
+RUSTC_BIN=""
 if command -v rustup >/dev/null 2>&1; then
     CARGO_BIN="$(rustup which cargo 2>/dev/null || true)"
-fi
-if [ -z "$CARGO_BIN" ] || [ ! -x "$CARGO_BIN" ]; then
-    # Fallback: try PATH resolution
-    CARGO_BIN="$(command -v cargo 2>/dev/null || true)"
-fi
-if [ -z "$CARGO_BIN" ]; then
-    echo "ERROR: cargo not found." >&2
-    exit 1
+    RUSTC_BIN="$(rustup which rustc 2>/dev/null || true)"
 fi
 
-# Verify the resolved cargo is rustup-managed (has the wasm32-wasip1 sysroot).
-if [ "$(uname -s)" = "Darwin" ]; then
-    SYSROOT="$("$CARGO_BIN" rustc -- --print sysroot 2>/dev/null || true)"
-    if [ -n "$SYSROOT" ] && ! echo "$SYSROOT" | grep -q "rustup"; then
-        echo "ERROR: resolved cargo ($CARGO_BIN) is not rustup-managed." >&2
+# On macOS, Homebrew provides standalone rustc/cargo that cannot see
+# rustup-installed targets.  If rustup didn't resolve cargo, refuse to
+# fall back to a potentially-Homebrew binary — fail with remediation
+# steps instead of producing a cryptic "can't find crate for `core`".
+if [ -z "$CARGO_BIN" ] || [ ! -x "$CARGO_BIN" ]; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+        echo "ERROR: could not resolve a rustup-managed cargo." >&2
         echo "  Homebrew's standalone cargo cannot build wasm32-wasip1 targets." >&2
         echo "" >&2
         echo "  Fix: ensure the rustup toolchain is active:" >&2
@@ -40,6 +37,16 @@ if [ "$(uname -s)" = "Darwin" ]; then
         echo "  Then verify: rustup which cargo" >&2
         exit 1
     fi
+    # Linux: safe to fall back to PATH resolution (no Homebrew conflict)
+    CARGO_BIN="$(command -v cargo 2>/dev/null || true)"
+fi
+if [ -z "$CARGO_BIN" ]; then
+    echo "ERROR: cargo not found." >&2
+    exit 1
+fi
+# Force cargo to use the rustup-managed rustc, not whatever is in PATH.
+if [ -n "$RUSTC_BIN" ] && [ -x "$RUSTC_BIN" ]; then
+    export RUSTC="$RUSTC_BIN"
 fi
 
 # Check target
@@ -54,6 +61,7 @@ fi
 
 echo "Building lince-dashboard plugin..."
 echo "  Using cargo: $CARGO_BIN"
+echo "  Using rustc: ${RUSTC:-$(command -v rustc)}"
 "$CARGO_BIN" build --release --target "$TARGET"
 
 # Binary target: output uses hyphens (lince-dashboard), not underscores
