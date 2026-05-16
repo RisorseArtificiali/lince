@@ -34,6 +34,15 @@ python3 -c "import tomlkit" 2>/dev/null || {
     echo -e "${YELLOW}  tomlkit not found. Installing...${NC}"
     _installed=false
     for _pip in "python3 -m pip" pip pip3; do
+        # --user installs fail inside virtualenvs, try without first
+        if $_pip install tomlkit 2>/dev/null; then
+            _installed=true
+            break
+        fi
+        if $_pip install --break-system-packages tomlkit 2>/dev/null; then
+            _installed=true
+            break
+        fi
         if $_pip install --user tomlkit 2>/dev/null; then
             _installed=true
             break
@@ -44,11 +53,8 @@ python3 -c "import tomlkit" 2>/dev/null || {
         fi
     done
     if [ "$_installed" = "false" ]; then
-        echo -e "${RED}  All pip attempts failed. Last error:${NC}"
-        python3 -m pip install --user --break-system-packages tomlkit || true
-        echo "" >&2
-        echo -e "${RED}  Install manually:${NC}" >&2
-        echo -e "${RED}    python3 -m pip install --user --break-system-packages tomlkit${NC}" >&2
+        echo -e "${RED}  Failed to install tomlkit. Install manually:${NC}"
+        echo -e "${RED}    python3 -m pip install tomlkit${NC}" >&2
         exit 1
     fi
 }
