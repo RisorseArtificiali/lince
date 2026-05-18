@@ -4,7 +4,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Ensure rustup toolchain takes precedence over system Rust
+# Ensure rustup toolchain takes precedence over system Rust (e.g. Homebrew).
+# ~/.cargo/bin holds the rustup proxy shims; if missing, rustup may not have
+# been fully initialized (the shims are needed so cargo spawns the right rustc).
 export PATH="$HOME/.cargo/bin:$PATH"
 
 TARGET="wasm32-wasip1"
@@ -26,10 +28,23 @@ if [ -z "$CARGO_BIN" ]; then
     exit 1
 fi
 
-# Verify the resolved cargo is rustup-managed (has the wasm32-wasip1 sysroot).
+# On macOS, cargo spawns rustc as a subprocess.  If the rustup proxy shims
+# are missing from ~/.cargo/bin, the child rustc resolves to Homebrew's copy
+# which lacks the wasm32-wasip1 sysroot.  Detect this and bail early with a
+# clear fix message.
+if [ "$(uname -s)" = "Darwin" ] && [ -n "$CARGO_BIN" ]; then
+    TOOLCHAIN_BIN="$(dirname "$CARGO_BIN")"
+    # Prepend the toolchain's bin dir so cargo's child rustc invocations
+    # pick up the correct (rustup-managed) rustc, even if ~/.cargo/bin
+    # proxy shims are absent.
+    export PATH="$TOOLCHAIN_BIN:$PATH"
+fi
+
+# Verify the resolved cargo is rustup-managed (Homebrew's standalone cargo
+# cannot see wasm32-wasip1 targets).  The path itself is the most reliable
+# indicator: `rustup which cargo` always resolves under ~/.rustup/toolchains/.
 if [ "$(uname -s)" = "Darwin" ]; then
-    SYSROOT="$("$CARGO_BIN" rustc -- --print sysroot 2>/dev/null || true)"
-    if [ -n "$SYSROOT" ] && ! echo "$SYSROOT" | grep -q "rustup"; then
+    if [ -n "$CARGO_BIN" ] && ! echo "$CARGO_BIN" | grep -q "rustup"; then
         echo "ERROR: resolved cargo ($CARGO_BIN) is not rustup-managed." >&2
         echo "  Homebrew's standalone cargo cannot build wasm32-wasip1 targets." >&2
         echo "" >&2
