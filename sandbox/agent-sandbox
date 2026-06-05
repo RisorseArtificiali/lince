@@ -2062,8 +2062,8 @@ def generate_seatbelt_profile(
 
     # --- Mach lookups commonly needed ---
     lines.append("; Mach lookups")
-    lines.append('(allow mach-lookup (name "com.apple.system.logger"))')
-    lines.append('(allow mach-lookup (name "com.apple.system.notification_center"))')
+    lines.append('(allow mach-lookup (global-name "com.apple.system.logger"))')
+    lines.append('(allow mach-lookup (global-name "com.apple.system.notification_center"))')
     lines.append("")
 
     # --- Signals ---
