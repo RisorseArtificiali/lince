@@ -1842,6 +1842,8 @@ def build_env_clear_command(
     provider: str | None = None,
     agent_id: str | None = None,
     proxy_env: dict[str, str] | None = None,
+    *,
+    separator: bool = True,
 ) -> list[str]:
     """Build an env -i wrapper command that clears the environment.
 
@@ -1849,7 +1851,11 @@ def build_env_clear_command(
     agent-specific env, standard vars (HOME, USER, SHELL, PATH), toolchain
     vars, and optional proxy env.
 
-    Returns ["env", "-i", "KEY1=val1", "KEY2=val2", ..., "--"].
+    Args:
+        separator: If True, append "--" before the command.  macOS env(1)
+            does not support "--", so pass False for the seatbelt backend.
+
+    Returns ["env", "-i", "KEY1=val1", "KEY2=val2", ..., ("--")].
     """
     home = str(Path.home())
     sandbox = config.get("sandbox", {})
@@ -1947,7 +1953,8 @@ def build_env_clear_command(
     cmd: list[str] = ["env", "-i"]
     for var in sorted(all_env):
         cmd.append(f"{var}={all_env[var]}")
-    cmd.append("--")
+    if separator:
+        cmd.append("--")
     return cmd
 
 
@@ -2131,12 +2138,13 @@ def build_seatbelt_cmd(
     profile_file = tmp_dir / f".run-{agent_name}-{os.getpid()}.sb"
     profile_file.write_text(runtime_profile)
 
-    # Build the env-clearing wrapper
+    # Build the env-clearing wrapper (no "--" separator: macOS env lacks it)
     env_cmd = build_env_clear_command(
         config, agent_name,
         provider=provider,
         agent_id=agent_id,
         proxy_env=proxy_env,
+        separator=False,
     )
 
     # Build the agent command
