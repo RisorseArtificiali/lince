@@ -80,8 +80,9 @@ home_ro_dirs = [".config/gcloud"]
 # Leave empty to run without a profile.
 default_profile = ""
 
-# Sandbox backend: "agent-sandbox" (bubblewrap), "nono" (Landlock/Seatbelt), or "auto"
-# auto: prefers agent-sandbox on Linux, uses nono on macOS or when bwrap is unavailable
+# Sandbox backend: "agent-sandbox" (bubblewrap), "seatbelt" (macOS sandbox-exec),
+#   "nono" (Landlock/Seatbelt, DEPRECATED), or "auto"
+# auto: prefers agent-sandbox on Linux, seatbelt on macOS, falls back to nono
 backend = "auto"
 
 [claude]
@@ -1543,6 +1544,12 @@ def resolve_backend(config: dict) -> str:
         if is_mac and "seatbelt" in backends:
             return "seatbelt"
         if "nono" in backends:
+            print(
+                "WARNING: Falling back to deprecated 'nono' backend. "
+                "Install seatbelt (sandbox-exec) or agent-sandbox (bwrap). "
+                "See: https://github.com/RisorseArtificiali/lince/issues/149",
+                file=sys.stderr,
+            )
             return "nono"
         if is_linux:
             print("Error: no sandbox backend found.", file=sys.stderr)
@@ -1575,6 +1582,13 @@ def resolve_backend(config: dict) -> str:
             print("Error: backend 'nono' selected but nono not found.", file=sys.stderr)
             print("Install from: https://github.com/always-further/nono", file=sys.stderr)
             sys.exit(1)
+        print(
+            "WARNING: The 'nono' backend is deprecated. "
+            "Use 'seatbelt' (native sandbox-exec) instead. "
+            "Run 'agent-sandbox seatbelt-sync' to generate Seatbelt profiles. "
+            "See: https://github.com/RisorseArtificiali/lince/issues/149",
+            file=sys.stderr,
+        )
         return "nono"
     elif backend_setting == "seatbelt":
         if "seatbelt" not in backends:
@@ -3275,6 +3289,9 @@ def cmd_run(args, agent_extra: list[str]) -> None:
 
         # Print banner
         print("agent-sandbox (nono backend)")
+        print("  DEPRECATED: The nono backend is deprecated in favor of native Seatbelt.")
+        print("              Migrate with: agent-sandbox seatbelt-sync")
+        print("              See: https://github.com/RisorseArtificiali/lince/issues/149")
         print(f"  config      {config_path}")
         print(f"  backend     nono ({shutil.which('nono')})")
         print(f"  agent       {agent_name} ({agent_cfg['command']})")

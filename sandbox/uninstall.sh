@@ -74,6 +74,22 @@ else
 fi
 echo ""
 
+# ── Seatbelt profiles ─────────────────────────────────────────────────
+SEATBELT_PROFILES=$(ls "$HOME/.agent-sandbox/seatbelt-profiles/lince-"*.sb 2>/dev/null || true)
+if [ -n "$SEATBELT_PROFILES" ]; then
+    echo -e "${YELLOW}Found generated Seatbelt profiles:${NC}"
+    for p in $SEATBELT_PROFILES; do
+        echo "  $p"
+    done
+    if confirm "  Remove generated lince-* Seatbelt profiles?"; then
+        rm -f "$HOME/.agent-sandbox/seatbelt-profiles/lince-"*.sb
+        echo -e "${GREEN}  ✓ Removed${NC}"
+    fi
+else
+    echo "  No generated Seatbelt profiles found — skipping"
+fi
+echo ""
+
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}   Uninstall Complete${NC}"
 echo -e "${BLUE}================================================${NC}"

@@ -373,9 +373,27 @@ if [ -n "$SELECTED_LEVELS" ] && [ -f "$AGENTS_TEMPLATE_DST" ]; then
 fi
 echo ""
 
-# ── Step 10: Install nono profiles ────────────────────────────────────
-echo -e "${GREEN}[10/14] Installing nono sandbox profiles...${NC}"
+# ── Step 10: Install nono profiles (deprecated, kept for compatibility) ────
+echo -e "${GREEN}[10/14] Installing sandbox profiles...${NC}"
 
+# Seatbelt profiles (preferred on macOS)
+SEATBELT_PROFILES_SRC="$SCRIPT_DIR/seatbelt-profiles"
+SEATBELT_PROFILES_DST="$HOME/.agent-sandbox/seatbelt-profiles"
+
+if [ -d "$SEATBELT_PROFILES_SRC" ]; then
+    mkdir -p "$SEATBELT_PROFILES_DST"
+    count=0
+    for profile in "$SEATBELT_PROFILES_SRC"/lince-*.sb; do
+        [ -f "$profile" ] || continue
+        cp "$profile" "$SEATBELT_PROFILES_DST/"
+        count=$((count + 1))
+    done
+    if [ "$count" -gt 0 ]; then
+        echo -e "${GREEN}  ✓ Installed $count Seatbelt profiles to $SEATBELT_PROFILES_DST${NC}"
+    fi
+fi
+
+# nono profiles (deprecated, installed for backward compatibility)
 NONO_PROFILES_SRC="$SCRIPT_DIR/nono-profiles"
 NONO_PROFILES_DST="$HOME/.config/nono/profiles"
 
@@ -387,7 +405,9 @@ if [ -d "$NONO_PROFILES_SRC" ]; then
         cp "$profile" "$NONO_PROFILES_DST/"
         count=$((count + 1))
     done
-    echo -e "${GREEN}  ✓ Installed $count nono profiles to $NONO_PROFILES_DST${NC}"
+    if [ "$count" -gt 0 ]; then
+        echo -e "${GREEN}  ✓ Installed $count nono profiles to $NONO_PROFILES_DST (deprecated)${NC}"
+    fi
 else
     echo -e "${YELLOW}  ⚠ nono-profiles/ not found — skipping${NC}"
 fi
@@ -487,29 +507,32 @@ echo -e "${GREEN}[post] Checking sandbox backend...${NC}"
 OS_NAME="$(uname -s)"
 HAS_SANDBOX=false
 HAS_NONO=false
+HAS_SEATBELT=false
 command -v agent-sandbox >/dev/null 2>&1 && HAS_SANDBOX=true
 command -v nono >/dev/null 2>&1 && HAS_NONO=true
+command -v sandbox-exec >/dev/null 2>&1 && HAS_SEATBELT=true
 
 if [ "$OS_NAME" = "Darwin" ]; then
-    if [ "$HAS_NONO" = true ]; then
-        echo -e "${GREEN}  ✓ macOS: nono detected as sandbox backend${NC}"
+    if [ "$HAS_SEATBELT" = true ]; then
+        echo -e "${GREEN}  ✓ macOS: Seatbelt (sandbox-exec) detected as sandbox backend${NC}"
+    elif [ "$HAS_NONO" = true ]; then
+        echo -e "${YELLOW}  ✓ macOS: nono detected (deprecated — consider using Seatbelt)${NC}"
     else
         echo -e "${YELLOW}  ⚠ macOS: no sandbox backend found.${NC}"
-        echo -e "${YELLOW}    agent-sandbox is Linux-only. Install nono:${NC}"
-        echo "    brew install nono"
-        echo "    See: https://github.com/always-further/nono"
+        echo -e "${YELLOW}    Seatbelt (sandbox-exec) is built into macOS.${NC}"
+        echo -e "${YELLOW}    Alternatively, install nono (deprecated): brew install nono${NC}"
     fi
 else
     if [ "$HAS_SANDBOX" = true ]; then
         echo -e "${GREEN}  ✓ agent-sandbox detected${NC}"
     fi
     if [ "$HAS_NONO" = true ]; then
-        echo -e "${GREEN}  ✓ nono detected (alternative backend)${NC}"
+        echo -e "${GREEN}  ✓ nono detected (deprecated alternative)${NC}"
     fi
     if [ "$HAS_SANDBOX" = false ] && [ "$HAS_NONO" = false ]; then
         echo -e "${YELLOW}  ⚠ No sandbox backend found. Install one:${NC}"
         echo "    agent-sandbox: cd ../sandbox && ./install.sh"
-        echo "    nono:          cargo install nono-cli"
+        echo "    nono:          cargo install nono-cli  (deprecated)"
     fi
 fi
 echo ""
@@ -533,23 +556,24 @@ echo "  Template: ~/.config/lince-dashboard/agents-template.toml"
 if [ -n "$SELECTED_LEVELS" ]; then
     echo "  Levels:   $SELECTED_LEVELS (added to ~/.config/lince-dashboard/config.toml)"
 fi
-echo "  Nono:     ~/.config/nono/profiles/lince-*.json"
+echo "  Nono:     ~/.config/nono/profiles/lince-*.json  (deprecated)"
 echo "  Skills:   ~/.claude/skills/lince-add-supported-agent/"
 echo "            ~/.claude/skills/lince-configure/"
 echo ""
 echo -e "${GREEN}Sandbox backend:${NC}"
 if [ "$OS_NAME" = "Darwin" ]; then
-    echo "  macOS — nono required (agent-sandbox is Linux-only)"
-    [ "$HAS_NONO" = true ] && echo "  ✓ nono installed" || echo "  ✗ Install: brew install nono"
+    echo "  macOS — Seatbelt (sandbox-exec, recommended) or nono (deprecated)"
+    [ "$HAS_SEATBELT" = true ] && echo "  ✓ Seatbelt (sandbox-exec) available"
+    [ "$HAS_NONO" = true ] && echo "  ✓ nono installed (deprecated)"
 else
-    echo "  Linux — agent-sandbox (recommended) or nono"
+    echo "  Linux — agent-sandbox (recommended) or nono (deprecated)"
     [ "$HAS_SANDBOX" = true ] && echo "  ✓ agent-sandbox installed"
-    [ "$HAS_NONO" = true ] && echo "  ✓ nono installed (alternative)"
+    [ "$HAS_NONO" = true ] && echo "  ✓ nono installed (deprecated)"
 fi
 echo ""
 if [ "$HAS_NONO" = true ]; then
     echo -e "${GREEN}Sandbox levels (paranoid/normal/permissive):${NC}"
-    echo "  Paranoid level needs the Anthropic API key in nono's keystore so"
+    echo "  Paranoid level with nono needs the Anthropic API key in nono's keystore so"
     echo "  the credential proxy can inject it at runtime. Populate it once:"
     if [ "$OS_NAME" = "Darwin" ]; then
         echo "    security add-generic-password -s nono -a anthropic_api_key -w 'sk-ant-...'"

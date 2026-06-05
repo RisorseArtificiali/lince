@@ -30,6 +30,7 @@ echo -e "${GREEN}[1/5] Checking prerequisites...${NC}"
 OS_NAME="$(uname -s)"
 HAS_BWRAP=false
 HAS_NONO=false
+HAS_SEATBELT=false
 
 command -v python3 >/dev/null 2>&1 || { echo -e "${RED}Missing: python3 (3.11+)${NC}"; exit 1; }
 
@@ -46,9 +47,13 @@ if command -v bwrap >/dev/null 2>&1; then
     HAS_BWRAP=true
     echo -e "${GREEN}  ✓ bwrap $(bwrap --version 2>/dev/null | awk '{print $2}')${NC}"
 fi
+if command -v sandbox-exec >/dev/null 2>&1; then
+    HAS_SEATBELT=true
+    echo -e "${GREEN}  ✓ sandbox-exec (Seatbelt, built-in)${NC}"
+fi
 if command -v nono >/dev/null 2>&1; then
     HAS_NONO=true
-    echo -e "${GREEN}  ✓ nono $(nono --version 2>/dev/null | head -1)${NC}"
+    echo -e "${YELLOW}  ✓ nono $(nono --version 2>/dev/null | head -1) (deprecated)${NC}"
 fi
 
 # socat is required for paranoid sandbox level on bwrap (it bridges
@@ -66,25 +71,25 @@ fi
 
 # Platform-specific checks
 if [ "$OS_NAME" = "Darwin" ]; then
-    # macOS: bwrap is not available, nono is required
-    if [ "$HAS_NONO" = false ]; then
+    # macOS: prefer seatbelt (built-in), fall back to nono (deprecated)
+    if [ "$HAS_SEATBELT" = true ]; then
+        echo -e "${GREEN}  ✓ macOS detected — using Seatbelt (sandbox-exec) as sandbox backend${NC}"
+    elif [ "$HAS_NONO" = true ]; then
+        echo -e "${YELLOW}  ⚠ macOS detected — Seatbelt (sandbox-exec) not found.${NC}"
+        echo -e "${YELLOW}    Falling back to nono (deprecated). Consider using Seatbelt.${NC}"
+    else
         echo ""
-        echo -e "${RED}macOS detected — agent-sandbox requires bubblewrap (Linux only).${NC}"
-        echo -e "${YELLOW}On macOS, install nono as your sandbox backend:${NC}"
-        echo ""
-        echo "  brew install nono"
-        echo ""
-        echo "Then re-run this installer. See docs/nono-integration.md for details."
-        echo "Project: https://github.com/always-further/nono"
+        echo -e "${RED}macOS detected — no sandbox backend found.${NC}"
+        echo -e "${YELLOW}Seatbelt (sandbox-exec) is built into macOS and should be available.${NC}"
+        echo -e "${YELLOW}Alternatively, install nono (deprecated): brew install nono${NC}"
         exit 1
     fi
-    echo -e "${GREEN}  ✓ macOS detected — using nono as sandbox backend${NC}"
 else
     # Linux: need at least one backend
     if [ "$HAS_BWRAP" = false ] && [ "$HAS_NONO" = false ]; then
         echo -e "${RED}No sandbox backend found. Install one of:${NC}"
         echo "  - bubblewrap: sudo dnf install bubblewrap  (or: sudo apt install bubblewrap)"
-        echo "  - nono:       cargo install nono-cli  (or: brew install nono)"
+        echo "  - nono:       cargo install nono-cli  (or: brew install nono)  (deprecated)"
         exit 1
     fi
 fi
@@ -165,27 +170,39 @@ else
 fi
 echo ""
 
-# ── Step 5: nono integration (if available) ──────────────────────────
-echo -e "${GREEN}[5/5] Checking nono integration...${NC}"
+# ── Step 5: Backend integration ──────────────────────────────────────
+echo -e "${GREEN}[5/5] Checking backend integration...${NC}"
 
+# Seatbelt (macOS native)
+if [ "$HAS_SEATBELT" = true ]; then
+    echo -e "${GREEN}  Seatbelt detected — generating lince profiles...${NC}"
+    if "$INSTALL_DST" seatbelt-sync 2>/dev/null; then
+        echo -e "${GREEN}  ✓ Seatbelt profiles generated at ~/.agent-sandbox/seatbelt-profiles/lince-*.sb${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ seatbelt-sync failed (config may not be initialized yet).${NC}"
+        echo -e "${YELLOW}    Run 'agent-sandbox seatbelt-sync' after 'agent-sandbox init'.${NC}"
+    fi
+fi
+
+# nono (deprecated, still supported)
 if [ "$HAS_NONO" = true ]; then
-    echo -e "${GREEN}  nono detected — generating lince profiles...${NC}"
+    echo -e "${YELLOW}  nono detected (deprecated) — generating lince profiles...${NC}"
     if "$INSTALL_DST" nono-sync 2>/dev/null; then
         echo -e "${GREEN}  ✓ nono profiles generated at ~/.config/nono/profiles/lince-*.json${NC}"
     else
         echo -e "${YELLOW}  ⚠ nono-sync failed (config may not be initialized yet).${NC}"
         echo -e "${YELLOW}    Run 'agent-sandbox nono-sync' after 'agent-sandbox init'.${NC}"
     fi
-    if [ "$OS_NAME" = "Darwin" ] || [ "$HAS_BWRAP" = false ]; then
-        echo -e "${GREEN}  Backend set to nono (bwrap not available)${NC}"
-    else
-        echo -e "${GREEN}  Backend set to auto (prefers agent-sandbox, falls back to nono)${NC}"
-    fi
+fi
+
+if [ "$HAS_SEATBELT" = true ]; then
+    echo -e "${GREEN}  Backend set to auto (prefers seatbelt on macOS)${NC}"
+elif [ "$HAS_BWRAP" = true ]; then
+    echo -e "${GREEN}  Backend set to auto (prefers agent-sandbox on Linux)${NC}"
+elif [ "$HAS_NONO" = true ]; then
+    echo -e "${GREEN}  Backend set to nono (deprecated)${NC}"
 else
-    echo -e "${YELLOW}  nono not installed — using agent-sandbox (bwrap) backend${NC}"
-    if [ "$OS_NAME" = "Darwin" ]; then
-        echo -e "${YELLOW}  Install nono for macOS support: brew install nono${NC}"
-    fi
+    echo -e "${YELLOW}  No backend detected${NC}"
 fi
 echo ""
 
@@ -195,18 +212,29 @@ echo -e "${BLUE}================================================${NC}"
 echo ""
 echo "Command:  $INSTALL_DST"
 echo "Config:   $CONFIG_DST"
-if [ "$HAS_NONO" = true ]; then
-    echo "Backend:  $([ "$OS_NAME" = "Darwin" ] || [ "$HAS_BWRAP" = false ] && echo "nono" || echo "auto (agent-sandbox + nono)")"
+if [ "$HAS_SEATBELT" = true ]; then
+    echo "Backend:  seatbelt (macOS sandbox-exec)"
+elif [ "$HAS_BWRAP" = true ]; then
+    if [ "$HAS_NONO" = true ]; then
+        echo "Backend:  auto (agent-sandbox + nono fallback)"
+    else
+        echo "Backend:  agent-sandbox (bwrap)"
+    fi
+elif [ "$HAS_NONO" = true ]; then
+    echo "Backend:  nono (deprecated)"
 else
-    echo "Backend:  agent-sandbox (bwrap)"
+    echo "Backend:  (none detected)"
 fi
 echo ""
 echo "Usage:"
 echo "  agent-sandbox run              # run with defaults"
 echo "  agent-sandbox run -P vertex    # run with a profile"
 echo "  agent-sandbox status           # show sandbox status"
+if [ "$HAS_SEATBELT" = true ]; then
+    echo "  agent-sandbox seatbelt-sync    # regenerate Seatbelt profiles"
+fi
 if [ "$HAS_NONO" = true ]; then
-    echo "  agent-sandbox nono-sync        # regenerate nono profiles"
+    echo "  agent-sandbox nono-sync        # regenerate nono profiles (deprecated)"
 fi
 echo ""
 echo "Edit $CONFIG_DST to configure profiles, API keys, and env passthrough."

@@ -6,7 +6,7 @@
 agent-sandbox <command> [options] [-- <agent-args>]
 ```
 
-`agent-sandbox` manages a bubblewrap sandbox for AI coding agents. Commands fall into four groups: setup (`init`), execution (`run`, `learn`), config management (`diff`, `merge`, `status`, `proxy-status`, `nono-sync`), and snapshots (`snapshot`, `snapshot-list`, `snapshot-diff`, `snapshot-restore`, `snapshot-prune`).
+`agent-sandbox` manages a bubblewrap sandbox for AI coding agents. Commands fall into four groups: setup (`init`), execution (`run`, `learn`), config management (`diff`, `merge`, `status`, `proxy-status`, `nono-sync`, `seatbelt-sync`), and snapshots (`snapshot`, `snapshot-list`, `snapshot-diff`, `snapshot-restore`, `snapshot-prune`).
 
 ---
 
@@ -92,7 +92,7 @@ Disabled when `use_real_config = true`.
 agent-sandbox status
 ```
 
-Display sandbox state: config location, file counts, toolchain cache sizes, log count, bwrap version, pending config changes, snapshot info, detected backends, and credential proxy status.
+Display sandbox state: config location, file counts, toolchain cache sizes, log count, bwrap version, pending config changes, detected backends (bubblewrap, nono, seatbelt), active profiles, and credential proxy status.
 
 ---
 
@@ -242,9 +242,27 @@ agent-sandbox nono-sync [--dry-run] [--agent NAME] [-P PROVIDER]
 
 Generate nono JSON profiles from lince agent configuration. Used when the `nono` backend is selected or on macOS.
 
+**DEPRECATED**: The nono backend is deprecated in favor of `seatbelt`. Use `agent-sandbox seatbelt-sync` instead. See [Migration Guide](sandbox/migration-nono-to-seatbelt.md).
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--dry-run` | off | Print generated JSON without writing files |
+| `--agent` | all agents | Sync a specific agent only |
+| `-P`, `--provider`, `--profile` | none | Provider name (env-var bundle) for env var mapping |
+
+---
+
+### seatbelt-sync
+
+```
+agent-sandbox seatbelt-sync [--dry-run] [--agent NAME] [-P PROVIDER]
+```
+
+Generate macOS Seatbelt (`.sb`) profiles from lince agent configuration. Used with the `seatbelt` backend (native `sandbox-exec`). Preferred backend for macOS.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dry-run` | off | Print generated profiles without writing files |
 | `--agent` | all agents | Sync a specific agent only |
 | `-P`, `--provider`, `--profile` | none | Provider name (env-var bundle) for env var mapping |
 

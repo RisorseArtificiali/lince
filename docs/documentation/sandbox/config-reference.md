@@ -45,7 +45,7 @@ General sandbox behavior and filesystem exposure.
 | `auto_expose_path` | bool | `true` | Auto-detect `$PATH` entries under `$HOME` and expose them read-only. Top-level dirs are mounted, and deeper subdirectories explicitly in the host PATH are also added to the sandbox PATH (e.g. `~/Applications/apache-maven-3.9.14/bin`) |
 | `home_ro_dirs` | list of strings | `[".config/gcloud"]` | Additional home subdirectories to expose read-only (relative to `$HOME`). Note: this only mounts the filesystem — it does not add entries to PATH. Add the tool's `bin` directory to your host shell PATH for automatic sandbox PATH inclusion |
 | `default_provider` | string | `""` | Default provider (env-var bundle) when `-P` / `--provider` is not specified. Set to a provider name defined in `[providers.*]` / `[<agent>.providers.*]`. Leave empty to run without a provider. The legacy spelling `default_profile` is still accepted (gh#81). |
-| `backend` | string | `"auto"` | Sandbox backend: `"agent-sandbox"` (bubblewrap), `"nono"` (Landlock/Seatbelt), or `"auto"` (prefers agent-sandbox on Linux, nono on macOS) |
+| `backend` | string | `"auto"` | Sandbox backend: `"agent-sandbox"` (bubblewrap, Linux), `"seatbelt"` (macOS sandbox-exec, recommended on macOS), `"nono"` (Landlock/Seatbelt, **deprecated**), or `"auto"` (prefers agent-sandbox on Linux, seatbelt on macOS) |
 
 ```toml
 [sandbox]
@@ -55,7 +55,7 @@ persist_toolchains = true
 auto_expose_path = true
 home_ro_dirs = [".config/gcloud"]
 default_provider = "zai"
-backend = "auto"
+backend = "auto"   # auto: Linux → agent-sandbox; macOS → seatbelt → nono (fallback)
 ```
 
 ---
