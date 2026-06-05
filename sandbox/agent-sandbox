@@ -239,6 +239,9 @@ NONO_PROFILE_PREFIX = "lince-"
 # This constant is the canonical key for the nono profile JSON schema.
 NONO_ENV_VARS_KEY = "allow_vars"
 
+SEATBELT_PROFILE_DIR = SANDBOX_DIR / "seatbelt-profiles"
+SANDBOX_EXEC_PATH = "/usr/bin/sandbox-exec"
+
 # ---------------------------------------------------------------------------
 # Credential proxy rules — maps env vars to API domain/header pairs
 # ---------------------------------------------------------------------------
@@ -1514,13 +1517,17 @@ def detect_backends() -> dict[str, str]:
     nono_path = shutil.which("nono")
     if nono_path:
         backends["nono"] = nono_path
+    seatbelt_path = shutil.which("sandbox-exec")
+    if seatbelt_path:
+        backends["seatbelt"] = seatbelt_path
     return backends
 
 
 def resolve_backend(config: dict) -> str:
     """Determine which sandbox backend to use.
 
-    Returns "agent-sandbox" or "nono".  Exits with error if neither is available.
+    Returns "agent-sandbox", "nono", or "seatbelt".
+    Exits with error if neither is available.
 
     NOTE: Keep auto-detection priority in sync with
     lince-dashboard/plugin/src/sandbox_backend.rs DetectedBackends::resolve().
@@ -1530,18 +1537,28 @@ def resolve_backend(config: dict) -> str:
 
     if backend_setting == "auto":
         is_linux = sys.platform.startswith("linux")
+        is_mac = sys.platform == "darwin"
         if is_linux and "agent-sandbox" in backends:
             return "agent-sandbox"
+        if is_mac and "seatbelt" in backends:
+            return "seatbelt"
         if "nono" in backends:
             return "nono"
         if is_linux:
             print("Error: no sandbox backend found.", file=sys.stderr)
             print("Install bubblewrap: sudo dnf install bubblewrap", file=sys.stderr)
             print("Or install nono: https://github.com/always-further/nono", file=sys.stderr)
+        elif is_mac:
+            print("Error: no sandbox backend found.", file=sys.stderr)
+            print("macOS backends:", file=sys.stderr)
+            print("  seatbelt: built-in (/usr/bin/sandbox-exec)", file=sys.stderr)
+            print("  nono: brew install nono", file=sys.stderr)
+            print("  https://github.com/always-further/nono", file=sys.stderr)
         else:
             print("Error: no sandbox backend found.", file=sys.stderr)
             print(
-                "agent-sandbox requires Linux (bubblewrap). On macOS, install nono:",
+                "agent-sandbox requires Linux (bubblewrap). On macOS, install nono "
+                "or use the built-in seatbelt backend:",
                 file=sys.stderr,
             )
             print("  brew install nono", file=sys.stderr)
@@ -1559,9 +1576,15 @@ def resolve_backend(config: dict) -> str:
             print("Install from: https://github.com/always-further/nono", file=sys.stderr)
             sys.exit(1)
         return "nono"
+    elif backend_setting == "seatbelt":
+        if "seatbelt" not in backends:
+            print("Error: backend 'seatbelt' selected but sandbox-exec not found.", file=sys.stderr)
+            print("sandbox-exec is built into macOS and should be at /usr/bin/sandbox-exec.", file=sys.stderr)
+            sys.exit(1)
+        return "seatbelt"
     else:
         print(f"Error: unknown backend '{backend_setting}'.", file=sys.stderr)
-        print("Valid options: auto, agent-sandbox, nono", file=sys.stderr)
+        print("Valid options: auto, agent-sandbox, nono, seatbelt", file=sys.stderr)
         sys.exit(1)
 
 
@@ -1811,6 +1834,394 @@ def cmd_nono_sync(args) -> None:
     if not dry_run:
         print(f"\nDone. {len(agent_names)} profile(s) written to {NONO_PROFILE_DIR}/")
         print("Run agents with nono:  nono run --profile lince-<agent> -- <command>")
+
+
+def build_env_clear_command(
+    config: dict,
+    agent_name: str,
+    provider: str | None = None,
+    agent_id: str | None = None,
+    proxy_env: dict[str, str] | None = None,
+) -> list[str]:
+    """Build an env -i wrapper command that clears the environment.
+
+    Collects env vars from: [env].passthrough, provider env, [env].extra],
+    agent-specific env, standard vars (HOME, USER, SHELL, PATH), toolchain
+    vars, and optional proxy env.
+
+    Returns ["env", "-i", "KEY1=val1", "KEY2=val2", ..., "--"].
+    """
+    home = str(Path.home())
+    sandbox = config.get("sandbox", {})
+    env_conf = config.get("env", {})
+    agent_cfg = resolve_agent_config(config, agent_name)
+
+    # Resolve provider env-var bundle
+    prof: dict = {}
+    if provider:
+        providers = resolve_providers(config, agent_name)
+        prof = providers.get(provider, {})
+
+    all_env: dict[str, str] = {}
+
+    # Standard vars
+    all_env["HOME"] = home
+    all_env["USER"] = os.environ.get("USER", "user")
+    all_env["SHELL"] = "/bin/bash"
+
+    # Build PATH: system paths, then auto-detected home tool paths
+    path_parts: list[str] = ["/usr/local/bin", "/usr/bin", "/bin"]
+    if sandbox.get("auto_expose_path", True):
+        home_top_dirs = detect_home_path_dirs()
+        mounted_tops = set(home_top_dirs)
+        for p in home_top_dirs:
+            path_parts.append(str(p))
+            for sub in ("bin",):
+                sp = p / sub
+                if sp.is_dir() and str(sp) not in path_parts:
+                    path_parts.append(str(sp))
+        home_p = Path.home()
+        for entry in detect_home_path_entries():
+            entry_str = str(entry)
+            if entry_str in path_parts:
+                continue
+            try:
+                rel = entry.relative_to(home_p)
+            except ValueError:
+                continue
+            top = home_p / rel.parts[0]
+            if top in mounted_tops:
+                path_parts.append(entry_str)
+        for bp in detect_brew_path_dirs():
+            bp_str = str(bp)
+            if bp_str not in path_parts:
+                path_parts.append(bp_str)
+    all_env["PATH"] = ":".join(dict.fromkeys(path_parts))
+
+    # Toolchain env vars
+    all_env["CARGO_HOME"] = f"{home}/.cargo"
+    all_env["NPM_CONFIG_CACHE"] = f"{home}/.npm"
+    all_env["GOPATH"] = f"{home}/.go"
+    all_env["GOMODCACHE"] = f"{home}/.go/pkg/mod"
+    all_env["UV_CACHE_DIR"] = f"{home}/.uv-cache"
+    all_env["UV_TOOL_DIR"] = f"{home}/.uv-tools"
+
+    # GIT_SSH_COMMAND
+    if "GIT_SSH_COMMAND" not in env_conf.get("extra", {}):
+        all_env["GIT_SSH_COMMAND"] = "ssh -F /dev/null"
+
+    # Wayland env vars
+    for wl_var in ("WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"):
+        val = os.environ.get(wl_var)
+        if val is not None:
+            all_env[wl_var] = val
+
+    # User-whitelisted env vars (passthrough from host env)
+    for var in env_conf.get("passthrough", []):
+        val = os.environ.get(var)
+        if val is not None:
+            all_env[var] = val
+
+    # Extra env vars (from base config)
+    for var, val in env_conf.get("extra", {}).items():
+        all_env[var] = _expand_env_value(val)
+
+    # Provider env vars
+    if isinstance(prof, dict):
+        for var, val in prof.get("env", {}).items():
+            all_env[var] = _expand_env_value(val)
+
+    # Agent-specific env vars
+    for var, val in agent_cfg.get("env", {}).items():
+        all_env[var] = _expand_env_value(val)
+
+    # Lince agent ID
+    if agent_id:
+        all_env["LINCE_AGENT_ID"] = agent_id
+
+    # Credential proxy env overrides
+    if proxy_env:
+        for var, val in proxy_env.items():
+            all_env[var] = val
+
+    cmd: list[str] = ["env", "-i"]
+    for var in sorted(all_env):
+        cmd.append(f"{var}={all_env[var]}")
+    cmd.append("--")
+    return cmd
+
+
+def generate_seatbelt_profile(
+    agent_name: str,
+    agent_config: dict,
+    config: dict,
+) -> tuple[str, list[str]]:
+    """Generate an Apple Seatbelt (sandbox-exec) profile from lince agent configuration.
+
+    Returns (profile_text, warnings_list). The profile text is a sequence
+    of S-expression rules suitable for ``sandbox-exec -f <file>``.
+    """
+    warnings: list[str] = []
+    sandbox_conf = config.get("sandbox", {})
+    home = Path.home()
+    lines: list[str] = []
+
+    lines.append("; Generated by lince agent-sandbox (seatbelt-sync)")
+    lines.append(f"; Agent: {agent_name}")
+    lines.append("")
+
+    # --- Global deny ---
+    lines.append("(version 1)")
+    lines.append("(deny default)")
+    # Explicitly deny all file writes; we will allow specific ones below.
+    lines.append("(deny file-write*)")
+    lines.append("")
+
+    # --- Global read access ---
+    # Read access to the entire filesystem is generally safe and necessary
+    # for the agent to function (system libraries, tools, etc.).
+    lines.append("; Read access to entire filesystem")
+    lines.append('(allow file-read* (subpath "/"))')
+    lines.append("")
+
+    # --- Process permissions ---
+    lines.append("; Process permissions")
+    lines.append("(allow process-fork)")
+    lines.append("(allow process-exec)")
+    lines.append("")
+
+    # --- Sysctl read ---
+    lines.append("; Sysctl read access")
+    lines.append("(allow sysctl-read)")
+    lines.append("")
+
+    # --- Project directory: read-write ---
+    # NOTE: project_dir is resolved at runtime, not during profile generation.
+    # We use a placeholder that build_seatbelt_cmd will replace, or we leave
+    # it out and let the caller add it. For simplicity, the profile includes
+    # a placeholder comment and the actual project dir is injected via a
+    # temporary profile file at runtime.
+    lines.append("; Project directory (injected at runtime by build_seatbelt_cmd)")
+    lines.append("; (allow file-write* (subpath \"<PROJECT_DIR>\"))")
+    lines.append("")
+
+    # --- ro_dirs from [sandbox] ---
+    ro_dirs = sandbox_conf.get("ro_dirs", [])
+    if ro_dirs:
+        lines.append("; Read-only directories (from [sandbox].ro_dirs)")
+        for d in ro_dirs:
+            ep = str(expand(d))
+            lines.append(f'(allow file-read* (subpath "{ep}"))')
+        lines.append("")
+
+    # --- home_ro_dirs from [sandbox] + agent config ---
+    seen_ro: set[str] = set()
+    home_ro_dirs = list(sandbox_conf.get("home_ro_dirs", []))
+    home_ro_dirs.extend(agent_config.get("home_ro_dirs", []))
+    if home_ro_dirs:
+        lines.append("; Home read-only directories")
+        for d in home_ro_dirs:
+            full = str(home / d)
+            if full not in seen_ro:
+                seen_ro.add(full)
+                lines.append(f'(allow file-read* (subpath "{full}"))')
+        lines.append("")
+
+    # --- home_rw_dirs from agent config ---
+    home_rw_dirs = agent_config.get("home_rw_dirs", [])
+    if home_rw_dirs:
+        lines.append("; Home read-write directories")
+        for d in home_rw_dirs:
+            full = str(home / d)
+            lines.append(f'(allow file-write* (subpath "{full}"))')
+        lines.append("")
+
+    # --- extra_rw from [sandbox] ---
+    extra_rw = sandbox_conf.get("extra_rw", [])
+    if extra_rw:
+        lines.append("; Extra read-write directories (from [sandbox].extra_rw)")
+        for d in extra_rw:
+            ep = str(expand(d))
+            lines.append(f'(allow file-write* (subpath "{ep}"))')
+        lines.append("")
+
+    # --- Device files ---
+    lines.append("; Device files")
+    for dev in ("/dev/null", "/dev/zero", "/dev/random", "/dev/urandom"):
+        lines.append(f'(allow file-read* (literal "{dev}"))')
+    # /dev/tty is needed for interactive terminal access
+    lines.append('(allow file-read* (literal "/dev/tty"))')
+    lines.append('(allow file-write* (literal "/dev/tty"))')
+    lines.append("")
+
+    # --- Network ---
+    # Allow network out by default (same as bwrap backend).
+    lines.append("; Network")
+    lines.append("(allow network*)")
+    lines.append("")
+
+    # --- Mach lookups commonly needed ---
+    lines.append("; Mach lookups")
+    lines.append('(allow mach-lookup (name "com.apple.system.logger"))')
+    lines.append('(allow mach-lookup (name "com.apple.system.notification_center"))')
+    lines.append("")
+
+    # --- Signals ---
+    lines.append("; Signals")
+    lines.append("(allow signal)")
+    lines.append("")
+
+    # --- Warnings for untranslatable features ---
+    if agent_config.get("bwrap_conflict"):
+        warnings.append(
+            f"[{agent_name}] bwrap_conflict=true has no seatbelt equivalent "
+            f"(seatbelt handles nested sandboxes differently)"
+        )
+
+    if agent_config.get("disable_inner_sandbox_args"):
+        warnings.append(
+            f"[{agent_name}] disable_inner_sandbox_args has no seatbelt equivalent"
+        )
+
+    snap_conf = config.get("snapshot", {})
+    if snap_conf.get("auto_project") or snap_conf.get("auto_config"):
+        warnings.append(
+            "[snapshot] settings not applicable to seatbelt backend"
+        )
+
+    profile_text = "\n".join(lines) + "\n"
+    return profile_text, warnings
+
+
+def build_seatbelt_cmd(
+    agent_name: str,
+    project_dir: Path,
+    agent_config: dict,
+    agent_extra_args: list[str],
+    config: dict,
+    safe_mode: bool = False,
+    agent_id: str | None = None,
+    provider: str | None = None,
+    proxy_env: dict[str, str] | None = None,
+) -> tuple[list[str], str]:
+    """Build a sandbox-exec command for the given agent.
+
+    Generates a temporary seatbelt profile (with the real project dir
+    injected) and returns the full command line plus the profile path.
+
+    Returns (cmd_list, profile_path).
+    """
+    # Generate the base profile
+    base_profile, _warnings = generate_seatbelt_profile(
+        agent_name, agent_config, config,
+    )
+
+    # Inject the real project directory (read-write)
+    project_str = str(project_dir)
+    project_rule = f'(allow file-write* (subpath "{project_str}"))\n'
+    # Replace the placeholder comment with the actual rule
+    runtime_profile = base_profile.replace(
+        '; (allow file-write* (subpath "<PROJECT_DIR>"))\n',
+        project_rule,
+    )
+
+    # Write the profile to a temp file
+    tmp_dir = SEATBELT_PROFILE_DIR
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    profile_file = tmp_dir / f".run-{agent_name}-{os.getpid()}.sb"
+    profile_file.write_text(runtime_profile)
+
+    # Build the env-clearing wrapper
+    env_cmd = build_env_clear_command(
+        config, agent_name,
+        provider=provider,
+        agent_id=agent_id,
+        proxy_env=proxy_env,
+    )
+
+    # Build the agent command
+    default_args = list(agent_config.get("default_args", []))
+    if safe_mode:
+        default_args = [a for a in default_args if a != "--dangerously-skip-permissions"]
+
+    # Handle bwrap_conflict: append args to disable inner sandbox
+    if agent_config.get("bwrap_conflict", False):
+        disable_args = agent_config.get("disable_inner_sandbox_args", [])
+        for da in disable_args:
+            if da not in default_args:
+                default_args.append(da)
+
+    agent_cmd = [agent_config.get("command", agent_name)]
+    agent_cmd.extend(default_args)
+    agent_cmd.extend(agent_extra_args)
+
+    # Full command: sandbox-exec -f <profile> -- env -i ... -- agent args...
+    cmd: list[str] = [
+        shutil.which("sandbox-exec") or SANDBOX_EXEC_PATH,
+        "-f", str(profile_file),
+        "--",
+    ]
+    cmd.extend(env_cmd)
+    cmd.extend(agent_cmd)
+
+    return cmd, str(profile_file)
+
+
+def cmd_seatbelt_sync(args) -> None:
+    """Generate Apple Seatbelt (.sb) profiles from lince agent configuration."""
+    config, config_path = load_config()
+    dry_run = args.dry_run
+
+    # Determine which agents to sync
+    if args.agent:
+        agent_names = [args.agent]
+    else:
+        shipped = find_agents_defaults()
+        user_agents = config.get("agents", {})
+        all_names: set[str] = set(shipped.keys()) | set(user_agents.keys())
+        if not all_names:
+            all_names = {"claude"}
+        agent_names = sorted(all_names)
+
+    if not dry_run:
+        SEATBELT_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+    print(f"seatbelt-sync: generating profiles from {config_path}")
+    if dry_run:
+        print("  (dry-run mode — no files will be written)\n")
+    else:
+        print(f"  output: {SEATBELT_PROFILE_DIR}/\n")
+
+    all_warnings: list[str] = []
+
+    for agent_name in agent_names:
+        agent_cfg = resolve_agent_config(config, agent_name)
+        profile_text, warnings = generate_seatbelt_profile(
+            agent_name, agent_cfg, config,
+        )
+        all_warnings.extend(warnings)
+
+        out_file = SEATBELT_PROFILE_DIR / f"lince-{agent_name}.sb"
+
+        print(f"  lince-{agent_name}:")
+        if dry_run:
+            print(profile_text)
+        else:
+            out_file.write_text(profile_text)
+            print(f"    -> {out_file}")
+
+    # Print warnings
+    if all_warnings:
+        seen: set[str] = set()
+        print()
+        for w in all_warnings:
+            if w not in seen:
+                seen.add(w)
+                print(f"\033[33m⚠ {w}\033[0m")
+
+    if not dry_run:
+        print(f"\nDone. {len(agent_names)} profile(s) written to {SEATBELT_PROFILE_DIR}/")
+        print("Run with:  agent-sandbox run --backend seatbelt -a <agent>")
 
 
 def _migrate_providers_text(text: str) -> tuple[str, int]:
@@ -2739,6 +3150,99 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             sys.exit(1)
         return
 
+    # --- seatbelt backend path (macOS sandbox-exec) ---------------------------
+    if backend == "seatbelt":
+        # Pre-create writable home dirs so they exist before the profile
+        # restricts access.
+        for d in agent_cfg.get("home_rw_dirs", []):
+            (Path.home() / d).mkdir(parents=True, exist_ok=True)
+
+        # Resolve seatbelt profile: level-specific if a level was requested,
+        # otherwise the base profile.
+        if sandbox_level and sandbox_level != "normal":
+            sb_profile_name = f"lince-{agent_name}-{sandbox_level}"
+        else:
+            sb_profile_name = f"lince-{agent_name}"
+
+        sb_profile_file = SEATBELT_PROFILE_DIR / f"{sb_profile_name}.sb"
+        if not sb_profile_file.exists():
+            # Fall back to base profile if level-specific one is missing
+            base_name = f"lince-{agent_name}"
+            base_profile = SEATBELT_PROFILE_DIR / f"{base_name}.sb"
+            if base_profile.exists():
+                sb_profile_name = base_name
+                sb_profile_file = base_profile
+            else:
+                print(
+                    f"Seatbelt profile not found: {sb_profile_file}",
+                    file=sys.stderr,
+                )
+                print(
+                    "Run 'agent-sandbox seatbelt-sync' to generate profiles.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+        # Build the seatbelt command (generates a runtime profile with the
+        # real project dir injected)
+        cmd, runtime_profile = build_seatbelt_cmd(
+            agent_name, project_dir, agent_cfg, agent_extra,
+            config=config,
+            safe_mode=args.safe, agent_id=args.id,
+            provider=provider,
+        )
+
+        if args.dry_run:
+            print("# seatbelt command that would be executed:\n")
+            print(f"# config: {config_path}")
+            print(f"# agent: {agent_name} ({agent_cfg['command']})")
+            print(f"# seatbelt profile: {sb_profile_name} (base)")
+            print(f"# runtime profile: {runtime_profile}")
+            if provider:
+                print(f"# provider: {provider}")
+            _pretty_print_cmd(cmd)
+            # Clean up the runtime profile in dry-run mode
+            try:
+                Path(runtime_profile).unlink()
+            except OSError:
+                pass
+            return
+
+        # Print banner
+        print("agent-sandbox (seatbelt backend)")
+        print(f"  config      {config_path}")
+        print(f"  backend     seatbelt ({shutil.which('sandbox-exec')})")
+        print(f"  agent       {agent_name} ({agent_cfg['command']})")
+        print(f"  seatbelt    {sb_profile_name}")
+        if provider:
+            desc = f" ({prof_desc})" if prof_desc else ""
+            print(f"  provider    {provider}{desc}")
+        print(f"  project     {project_dir}")
+        print(f"  isolation   Apple Seatbelt (sandbox-exec)")
+        print(f"  network     enabled")
+        print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+        print(
+            f"  permissions "
+            f"{'ask (safe mode)' if args.safe else 'per agent defaults'}"
+        )
+        print()
+
+        try:
+            result = subprocess.run(cmd, cwd=str(project_dir))
+            sys.exit(result.returncode)
+        except KeyboardInterrupt:
+            print("\nSandbox terminated.")
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            # Clean up the runtime profile
+            try:
+                Path(runtime_profile).unlink()
+            except OSError:
+                pass
+        return
+
     # --- agent-sandbox (bwrap) backend path --------------------------------
 
     # --- Ephemeral scratch home dirs/files (per-run snapshot) -------------
@@ -3295,6 +3799,22 @@ def cmd_status(args) -> None:
             print(f"  nono profiles   (none — run 'agent-sandbox nono-sync')")
     else:
         print(f"  nono            not installed")
+
+    # seatbelt
+    seatbelt_path = backends.get("seatbelt")
+    if seatbelt_path:
+        print(f"  seatbelt        {seatbelt_path}")
+        if SEATBELT_PROFILE_DIR.exists():
+            sb_profiles = sorted(SEATBELT_PROFILE_DIR.glob("lince-*.sb"))
+            if sb_profiles:
+                names = [p.stem.removeprefix("lince-") for p in sb_profiles]
+                print(f"  seatbelt prof.  {', '.join(names)}")
+            else:
+                print(f"  seatbelt prof.  (none — run 'agent-sandbox seatbelt-sync')")
+        else:
+            print(f"  seatbelt prof.  (none — run 'agent-sandbox seatbelt-sync')")
+    else:
+        print(f"  seatbelt        not available")
 
     # Auto-detected PATH dirs
     home_dirs = detect_home_path_dirs()
@@ -5632,6 +6152,20 @@ def main() -> None:
              "--profile is the legacy spelling.",
     )
 
+    # seatbelt-sync
+    p_sb = sub.add_parser(
+        "seatbelt-sync",
+        help="Generate Apple Seatbelt (.sb) profiles from lince agent configuration",
+    )
+    p_sb.add_argument(
+        "--dry-run", action="store_true",
+        help="Print generated profiles without writing files",
+    )
+    p_sb.add_argument(
+        "--agent", default=None,
+        help="Sync a specific agent only (default: all agents)",
+    )
+
     # ---- Split argv on '--' so extra args go to the agent -------------------
     argv = sys.argv[1:]
     if "--" in argv:
@@ -5668,6 +6202,7 @@ def main() -> None:
         "snapshot-prune": lambda: cmd_snapshot_prune(args),
         "learn": lambda: cmd_learn(args),
         "nono-sync": lambda: cmd_nono_sync(args),
+        "seatbelt-sync": lambda: cmd_seatbelt_sync(args),
         "migrate-providers": lambda: cmd_migrate_providers(args),
     }
     dispatch[args.command]()
