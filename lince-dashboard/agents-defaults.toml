@@ -22,7 +22,7 @@
 # These are independent — you can run e.g. `paranoid + zai`. See gh#81.
 #
 # Sandbox model (claude, codex, gemini, opencode, pi):
-#   - sandbox_backend = "bwrap" | "nono"  (default per OS)
+#   - sandbox_backend = "bwrap" | "nono" | "seatbelt"  (default per OS)
 #   - sandbox_level   = "paranoid" | "normal" | "permissive" | <custom>
 # When sandbox_level is set, the plugin synthesizes the launch command from
 # (agent_type, backend, level) — the `command` field below is then ignored
@@ -71,11 +71,9 @@ has_native_hooks = true
 home_ro_dirs = ["~/.claude/"]
 providers = ["__discover__"]
 sandbox_level = "normal"          # paranoid | normal | permissive (or custom; see docs)
-# sandbox_backend defaults to "agent-sandbox" (bwrap) on Linux, "nono" on macOS.
+# sandbox_backend defaults to "agent-sandbox" (bwrap) on Linux, "seatbelt" on macOS.
 # Uncomment to force a specific backend (overrides the OS default):
-# sandbox_backend = "nono"
-
-# Native hook events emitted by claude-status-hook.sh → canonical AgentStatus.
+# sandbox_backend = "seatbelt"
 # See LINCE-118 / LINCE-122. Canonical values: running | input | permission | stopped.
 [agents.claude.event_map]
 PreToolUse = "running"
@@ -127,8 +125,8 @@ disable_inner_sandbox_args = ["--sandbox", "danger-full-access"]
 home_ro_dirs = ["~/.codex/"]
 providers = ["__discover__"]
 sandbox_level = "normal"          # paranoid | normal | permissive (or custom; see docs)
-# sandbox_backend defaults to bwrap on Linux, nono on macOS. Uncomment to override:
-# sandbox_backend = "nono"
+# sandbox_backend defaults to bwrap on Linux, seatbelt on macOS. Uncomment to override:
+# sandbox_backend = "seatbelt"
 
 [agents.codex.env_vars]
 OPENAI_API_KEY = "$OPENAI_API_KEY"
@@ -176,8 +174,8 @@ disable_inner_sandbox_args = []
 home_ro_dirs = ["~/.gemini/"]
 providers = ["__discover__"]
 sandbox_level = "normal"          # paranoid | normal | permissive (or custom; see docs)
-# sandbox_backend defaults to bwrap on Linux, nono on macOS. Uncomment to override:
-# sandbox_backend = "nono"
+# sandbox_backend defaults to bwrap on Linux, seatbelt on macOS. Uncomment to override:
+# sandbox_backend = "seatbelt"
 
 [agents.gemini.env_vars]
 GEMINI_API_KEY = "$GEMINI_API_KEY"
@@ -212,8 +210,8 @@ disable_inner_sandbox_args = []
 home_ro_dirs = ["~/.config/opencode/"]
 providers = ["__discover__"]
 sandbox_level = "normal"          # paranoid | normal | permissive (or custom; see docs)
-# sandbox_backend defaults to bwrap on Linux, nono on macOS. Uncomment to override:
-# sandbox_backend = "nono"
+# sandbox_backend defaults to bwrap on Linux, seatbelt on macOS. Uncomment to override:
+# sandbox_backend = "seatbelt"
 
 # Native hook events emitted by opencode-status-hook.js → canonical AgentStatus.
 # The plugin reports the raw OpenCode event.type, plus a busy/idle sub-state
@@ -259,8 +257,8 @@ disable_inner_sandbox_args = []
 home_ro_dirs = ["~/.pi/"]
 providers = ["__discover__"]
 sandbox_level = "normal"          # paranoid | normal | permissive (or custom; see docs)
-# sandbox_backend defaults to bwrap on Linux, nono on macOS. Uncomment to override:
-# sandbox_backend = "nono"
+# sandbox_backend defaults to bwrap on Linux, seatbelt on macOS. Uncomment to override:
+# sandbox_backend = "seatbelt"
 
 # Pi multi-provider note: `lince-pi-paranoid.json` only allowlists the
 # providers nono knows about (anthropic, openai, gemini). For other
