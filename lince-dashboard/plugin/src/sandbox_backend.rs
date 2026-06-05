@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Each backend provides a different isolation mechanism:
 /// - `AgentSandbox` uses Bubblewrap (bwrap) on Linux
+/// - `Seatbelt` uses Apple's native sandbox-exec (macOS only)
 /// - `Nono` uses Landlock LSM on Linux and Seatbelt on macOS
 /// - `None` means the agent runs without any sandbox
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -12,6 +13,9 @@ pub enum SandboxBackend {
     /// Bubblewrap-based sandbox (Linux only). This is the original agent-sandbox.
     #[serde(alias = "agent-sandbox", alias = "bwrap")]
     AgentSandbox,
+    /// Native Apple Seatbelt sandbox-exec (macOS only).
+    #[serde(alias = "sandbox-exec")]
+    Seatbelt,
     /// Landlock/Seatbelt sandbox via nono (Linux + macOS).
     Nono,
     /// No sandbox — agent runs directly on the host.
@@ -29,6 +33,7 @@ impl SandboxBackend {
     pub fn display_name(&self) -> &str {
         match self {
             SandboxBackend::AgentSandbox => "bwrap",
+            SandboxBackend::Seatbelt => "seatbelt",
             SandboxBackend::Nono => "nono",
             SandboxBackend::None => "none",
         }
@@ -43,11 +48,14 @@ impl SandboxBackend {
 #[serde(rename_all = "lowercase")]
 pub enum BackendConfig {
     /// Auto-detect based on OS and available tools.
-    /// On macOS, prefers nono. On Linux, prefers agent-sandbox.
+    /// On macOS, prefers seatbelt, then nono. On Linux, prefers agent-sandbox.
     Auto,
     /// Use agent-sandbox (bwrap) for all sandboxed agents.
     #[serde(alias = "agent-sandbox", alias = "bwrap")]
     AgentSandbox,
+    /// Use Apple's native Seatbelt sandbox-exec for all sandboxed agents.
+    #[serde(alias = "sandbox-exec")]
+    Seatbelt,
     /// Use nono for all sandboxed agents.
     Nono,
 }
@@ -63,7 +71,7 @@ pub const CMD_DETECT_BACKEND: &str = "detect_backend";
 
 /// Kick off async detection of available sandbox backends.
 ///
-/// Checks for `agent-sandbox` and `nono` in PATH. Results arrive in
+/// Checks for `agent-sandbox`, `nono`, and `sandbox-exec` in PATH. Results arrive in
 /// `Event::RunCommandResult` with context `type=detect_backend`.
 pub fn detect_backend_async() {
     // WASI plugins inherit a sandboxed / empty PATH and `export PATH=...`
@@ -84,6 +92,11 @@ pub fn detect_backend_async() {
         "  [ -x \"$p\" ] && { nn=yes; break; }; ",
         "done; ",
         "echo \"nono:$nn\"; ",
+        "sb=no; ",
+        "for p in /usr/bin/sandbox-exec /usr/sbin/sandbox-exec; do ",
+        "  [ -x \"$p\" ] && { sb=yes; break; }; ",
+        "done; ",
+        "echo \"seatbelt:$sb\"; ",
         "os=$(/usr/bin/uname -s 2>/dev/null || /bin/uname -s 2>/dev/null); ",
         "echo \"os:${os:-unknown}\""
     );
@@ -95,6 +108,7 @@ pub fn detect_backend_async() {
 pub struct DetectedBackends {
     pub has_agent_sandbox: bool,
     pub has_nono: bool,
+    pub has_seatbelt: bool,
     pub os: String,
 }
 
@@ -108,6 +122,8 @@ impl DetectedBackends {
                 result.has_agent_sandbox = val.trim() == "yes";
             } else if let Some(val) = line.strip_prefix("nono:") {
                 result.has_nono = val.trim() == "yes";
+            } else if let Some(val) = line.strip_prefix("seatbelt:") {
+                result.has_seatbelt = val.trim() == "yes";
             } else if let Some(val) = line.strip_prefix("os:") {
                 result.os = val.trim().to_string();
             }

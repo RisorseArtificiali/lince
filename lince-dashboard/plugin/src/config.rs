@@ -1031,6 +1031,7 @@ impl DashboardConfig {
             use crate::sandbox_backend::SandboxBackend;
             let backend_key = match b {
                 SandboxBackend::AgentSandbox => "agent-sandbox",
+                SandboxBackend::Seatbelt => return levels,
                 SandboxBackend::Nono => "nono",
                 SandboxBackend::None => return levels,
             };
@@ -1106,6 +1107,9 @@ impl DashboardConfig {
                     }
                     if d.has_nono {
                         out.push(SandboxBackend::Nono);
+                    }
+                    if d.has_seatbelt {
+                        out.push(SandboxBackend::Seatbelt);
                     }
                 }
                 None => {

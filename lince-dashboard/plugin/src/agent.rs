@@ -359,6 +359,9 @@ fn synthesize_sandboxed_command(
         SandboxBackend::None => inner_command,
         // AgentSandbox handled by the early return above.
         SandboxBackend::AgentSandbox => unreachable!(),
+        // Seatbelt uses the same inner command as None — sandbox-exec
+        // profiles are applied externally via launch configuration.
+        SandboxBackend::Seatbelt => inner_command,
     })
 }
 
