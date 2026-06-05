@@ -2056,6 +2056,8 @@ def generate_seatbelt_profile(
     lines.append("; Device files")
     for dev in ("/dev/null", "/dev/zero", "/dev/random", "/dev/urandom"):
         lines.append(f'(allow file-read* (literal "{dev}"))')
+    # /dev/null needs write too: shells redirect stdout/stderr there
+    lines.append('(allow file-write* (literal "/dev/null"))')
     # /dev/tty is needed for interactive terminal access
     lines.append('(allow file-read* (literal "/dev/tty"))')
     lines.append('(allow file-write* (literal "/dev/tty"))')
