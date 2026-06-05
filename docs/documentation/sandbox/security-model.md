@@ -206,6 +206,48 @@ Build tools work with minimal friction because system directories are read-only 
 
 ---
 
+## Seatbelt Backend (macOS)
+
+On macOS the Seatbelt backend (`sandbox-exec`) replaces bubblewrap. Seatbelt is Apple's built-in mandatory access control framework; it operates at the filesystem and process level but does **not** provide kernel-level namespace isolation.
+
+### Limitation Matrix
+
+The table below compares each defense layer between bwrap (Linux) and Seatbelt (macOS):
+
+| Defense Layer | bwrap (Linux) | Seatbelt (macOS) | Notes |
+|---|---|---|---|
+| Filesystem write isolation | `--ro-bind / /` + allowlist | `(deny file-write*)` + allowlist | Equivalent enforcement |
+| PID namespace | `--unshare-pid` | **Not available** | Agent can see and signal host processes |
+| Network namespace | `--unshare-net` | **Not available** | Agent can make direct network connections; credential proxy is userland only |
+| Env var clearing | `--clearenv` + `--setenv` | `env -i` wrapper | Equivalent enforcement |
+| Credential proxy | Host-side, kernel-netns-gated | Host-side, userland | Proxy runs but cannot enforce at kernel level |
+| Git push blocking | PATH wrapper | PATH wrapper | Equivalent enforcement |
+| Config snapshots | rsync hardlinks | rsync hardlinks | Equivalent enforcement |
+| Learn mode (strace) | `strace -f -e trace=...` | **Not available** | macOS lacks strace; use DTrace or cross-platform profile porting |
+| Cloud SSRF blocking | Proxy-level block | Proxy-level block | Equivalent enforcement |
+| Process fork/exec control | bwrap defaults | `(allow process-fork)` / `(allow process-exec)` | Seatbelt allows by default; bwrap allows by default |
+
+### Paranoid on macOS vs Linux
+
+Paranoid level on the Seatbelt backend provides a **reduced but still meaningful** isolation envelope:
+
+- **What works**: filesystem write isolation, environment variable clearing, credential proxy (userland), git push blocking, config snapshots.
+- **What does not work**: kernel-level network namespace isolation (`--unshare-net`), PID namespace isolation, strace-based learn mode.
+
+When paranoid is selected with the Seatbelt backend, `agent-sandbox` prints clear warnings listing exactly which features are unavailable and then proceeds -- the user explicitly requested paranoid and the remaining defenses still provide real value.
+
+**Network hardening recommendation for macOS**: to approximate the Linux kernel network namespace on macOS, you can use `pfctl` (Packet Filter) to restrict the sandboxed process's outbound traffic. Example:
+
+```bash
+# Create an anchor that blocks all outbound except the Anthropic API
+echo 'block drop out proto tcp from any to any
+pass out proto tcp from any to api.anthropic.com' | sudo pfctl -ef - 2>/dev/null
+```
+
+Note: `pfctl` rules apply system-wide and require root. They are not scoped to a single process unless combined with `pfctl` anchors and process-level UID/GID filtering. This is a manual, external hardening step -- `agent-sandbox` does not manage `pfctl` rules automatically.
+
+---
+
 ## See Also
 
 - [CLI Reference](sandbox/cli-reference.md) -- command synopsis, flags, and usage examples

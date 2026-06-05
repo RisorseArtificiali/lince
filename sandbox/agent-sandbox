@@ -1958,15 +1958,51 @@ def build_env_clear_command(
     return cmd
 
 
+def check_seatbelt_level_warnings(
+    backend: str, sandbox_level: str | None, config: dict,
+) -> list[str]:
+    """Return warning strings when a Seatbelt backend cannot fully enforce a level.
+
+    Currently only *paranoid* produces warnings, because Seatbelt lacks the
+    kernel-level PID and network namespace isolation that bwrap provides.
+    """
+    if backend != "seatbelt" or sandbox_level != "paranoid":
+        return []
+
+    warnings: list[str] = []
+
+    warnings.append(
+        "Seatbelt cannot create a PID namespace. "
+        "The agent will be able to see and signal host processes."
+    )
+
+    warnings.append(
+        "Seatbelt has no network namespace. The credential proxy is active but "
+        "the agent CAN make direct network connections (kernel-level blocking is "
+        "unavailable). Paranoid on Seatbelt provides filesystem isolation + "
+        "credential injection only."
+    )
+
+    return warnings
+
+
 def generate_seatbelt_profile(
     agent_name: str,
     agent_config: dict,
     config: dict,
+    sandbox_level: str | None = None,
 ) -> tuple[str, list[str]]:
     """Generate an Apple Seatbelt (sandbox-exec) profile from lince agent configuration.
 
     Returns (profile_text, warnings_list). The profile text is a sequence
     of S-expression rules suitable for ``sandbox-exec -f <file>``.
+
+    *sandbox_level* adjusts the profile:
+      - ``"normal"`` / ``None``: baseline profile (default).
+      - ``"permissive"``: baseline + extra ``(allow file-read* ...)`` from the
+        permissive config fragment (e.g. ``~/.config/gh``, ``~/.cache``).
+      - ``"paranoid"``: permissive-level access plus an explanatory comment
+        block documenting Seatbelt limitations vs the bwrap backend.
     """
     warnings: list[str] = []
     sandbox_conf = config.get("sandbox", {})
@@ -2080,6 +2116,43 @@ def generate_seatbelt_profile(
     lines.append("(allow signal)")
     lines.append("")
 
+    # --- Level-specific profile sections ---
+    effective_level = sandbox_level if sandbox_level and sandbox_level != "normal" else None
+
+    if effective_level == "permissive":
+        # Permissive level: extra read-only dirs from the config fragment.
+        # The fragment's [sandbox] home_ro_dirs are already merged into
+        # sandbox_conf above by load_sandbox_level_fragment(), so they appear
+        # in the "Home read-only directories" section. This block is for any
+        # additional seatbelt-specific permissive rules that don't map to a
+        # bwrap [sandbox] key.
+        permissive_ro = sandbox_conf.get("home_ro_dirs", [])
+        if permissive_ro:
+            lines.append("; Permissive-level extra read-only directories")
+            for d in permissive_ro:
+                full = str(home / d)
+                if full not in seen_ro:
+                    seen_ro.add(full)
+                    lines.append(f'(allow file-read* (subpath "{full}"))')
+            lines.append("")
+
+    if effective_level == "paranoid":
+        # Paranoid level on Seatbelt: same filesystem access as permissive,
+        # plus a comment block documenting what Seatbelt *cannot* enforce.
+        lines.append("; === PARANOID LEVEL (Seatbelt) ===")
+        lines.append("; NOTE: The following bwrap paranoid features are NOT available:")
+        lines.append(";   - Network namespace (--unshare-net): agent can reach any host")
+        lines.append(";   - PID namespace: agent can see/kill host processes")
+        lines.append(";   - strace/learn mode: not available on macOS")
+        lines.append(";")
+        lines.append("; What IS enforced:")
+        lines.append(";   - Filesystem write isolation (deny file-write* + allowlist)")
+        lines.append(";   - Environment variable clearing (via env -i wrapper)")
+        lines.append(";   - Credential proxy (userland, best-effort)")
+        lines.append(";   - Git push blocking (PATH wrapper)")
+        lines.append(";   - Config snapshots (rsync, userland)")
+        lines.append("")
+
     # --- Warnings for untranslatable features ---
     if agent_config.get("bwrap_conflict"):
         warnings.append(
@@ -2112,6 +2185,7 @@ def build_seatbelt_cmd(
     agent_id: str | None = None,
     provider: str | None = None,
     proxy_env: dict[str, str] | None = None,
+    sandbox_level: str | None = None,
 ) -> tuple[list[str], str]:
     """Build a sandbox-exec command for the given agent.
 
@@ -2123,6 +2197,7 @@ def build_seatbelt_cmd(
     # Generate the base profile
     base_profile, _warnings = generate_seatbelt_profile(
         agent_name, agent_config, config,
+        sandbox_level=sandbox_level,
     )
 
     # Inject the real project directory (read-write)
@@ -3200,6 +3275,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             config=config,
             safe_mode=args.safe, agent_id=args.id,
             provider=provider,
+            sandbox_level=sandbox_level,
         )
 
         if args.dry_run:
@@ -3217,6 +3293,11 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             except OSError:
                 pass
             return
+
+        # Print level-specific warnings (e.g. paranoid limitations on Seatbelt)
+        level_warnings = check_seatbelt_level_warnings(backend, sandbox_level, config)
+        for w in level_warnings:
+            print(f"\033[33m⚠  {w}\033[0m", file=sys.stderr)
 
         # Print banner
         print("agent-sandbox (seatbelt backend)")
@@ -5752,6 +5833,26 @@ def cmd_learn(args) -> None:
     # 3. Load config
     config, config_path = load_config()
     project_dir = Path.cwd().resolve()
+
+    # 3a. Gate: learn mode requires strace (Linux-only). Seatbelt and nono
+    # backends cannot use strace-based learn mode.
+    _learn_backend = resolve_backend(config)
+    if _learn_backend in ("seatbelt", "nono"):
+        _alt_msg = (
+            "Alternatives:\n"
+            "  - Use DTrace (macOS): sudo dtrace -n 'syscall::open:entry { ... }'\n"
+            "  - Port profiles cross-platform: run 'agent-sandbox learn' on a Linux\n"
+            "    machine, then copy the resulting fragment to your macOS host.\n"
+            "  - Use --sandbox-level permissive for maximum access, then tighten\n"
+            "    manually based on observed failures."
+        )
+        print(
+            f"Error: learn mode requires strace (Linux-only). "
+            f"Backend '{_learn_backend}' does not support strace.",
+            file=sys.stderr,
+        )
+        print(_alt_msg, file=sys.stderr)
+        sys.exit(1)
 
     # 4. Resolve agent
     agent_name = args.agent
