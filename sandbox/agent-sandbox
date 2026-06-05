@@ -1950,6 +1950,14 @@ def build_env_clear_command(
         for var, val in proxy_env.items():
             all_env[var] = val
 
+    # Git wrapper PATH injection: if __LINCE_WRAPPER_PATH is present
+    # (set by prepare_seatbelt_git_blocking), prepend it to PATH so the
+    # git-push-blocking wrapper is found before the real git binary.
+    wrapper_path = all_env.pop("__LINCE_WRAPPER_PATH", None)
+    if wrapper_path:
+        existing_path = all_env.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+        all_env["PATH"] = f"{wrapper_path}:{existing_path}"
+
     cmd: list[str] = ["env", "-i"]
     for var in sorted(all_env):
         cmd.append(f"{var}={all_env[var]}")
@@ -2025,6 +2033,19 @@ def generate_seatbelt_profile(
     # for the agent to function (system libraries, tools, etc.).
     lines.append("; Read access to entire filesystem")
     lines.append('(allow file-read* (subpath "/"))')
+    lines.append("")
+
+    # --- Explicit deny: sensitive files ---
+    # The broad ``(allow file-read* (subpath "/"))`` above makes the entire
+    # filesystem readable.  We must explicitly deny access to sensitive files
+    # that the agent should never see.  In Seatbelt, deny rules take precedence
+    # over allow rules for matching paths.
+    lines.append("; Deny access to real gitconfig (sanitized copy via GIT_CONFIG_GLOBAL)")
+    lines.append(f'(deny file-read* (literal "{home}/.gitconfig"))')
+    # Also deny .config/git/config (alternate gitconfig location)
+    lines.append(f'(deny file-read* (literal "{home}/.config/git/config"))')
+    lines.append("; Deny SSH keys unless explicitly added to home_ro_dirs")
+    lines.append(f'(deny file-read* (subpath "{home}/.ssh"))')
     lines.append("")
 
     # --- Process permissions ---
@@ -2559,6 +2580,52 @@ def ensure_git_wrapper() -> Path:
     wrapper.write_text(GIT_WRAPPER)
     wrapper.chmod(0o755)
     return bin_dir
+
+
+def prepare_seatbelt_git_blocking(config: dict) -> dict[str, str]:
+    """Set up git push blocking for the seatbelt backend.
+
+    Seatbelt cannot bind-mount files like bwrap.  Instead we use
+    ``GIT_CONFIG_GLOBAL`` to redirect git to a sanitized gitconfig and
+    ``GIT_CONFIG_SYSTEM=/dev/null`` to ignore the system gitconfig.  The
+    git wrapper directory is prepended to PATH so ``git push`` is
+    intercepted before reaching the real git binary.
+
+    Returns extra env vars to inject into the ``env -i`` wrapper.
+    """
+    extra_env: dict[str, str] = {}
+    sec = config.get("security", {})
+
+    if not sec.get("block_git_push", True):
+        return extra_env
+
+    # 1. Ensure the git wrapper script exists
+    wrapper_dir = ensure_git_wrapper()
+
+    # 2. Generate a sanitized gitconfig if one doesn't already exist
+    #    (cmd_init creates this, but we recreate it here in case the
+    #    user hasn't run init or the file is stale).
+    gitconfig_sanitized = SANDBOX_DIR / "gitconfig-seatbelt"
+    git_src = Path.home() / ".gitconfig"
+    if not git_src.exists():
+        git_src = Path.home() / ".config" / "git" / "config"
+    git_conf = config.get("git", {})
+    sanitize_gitconfig(
+        git_src,
+        gitconfig_sanitized,
+        git_conf.get("strip_sections", ["credential", 'url ".*"']),
+        git_conf.get("overrides", {"push.default": "nothing"}),
+    )
+
+    # 3. Return env vars that redirect git to our sanitized config and
+    #    prepend the wrapper dir to PATH.
+    extra_env["GIT_CONFIG_GLOBAL"] = str(gitconfig_sanitized)
+    extra_env["GIT_CONFIG_SYSTEM"] = "/dev/null"
+    # The wrapper dir is prepended to PATH later by build_env_clear_command()
+    # via the __LINCE_WRAPPER_PATH marker.
+    extra_env["__LINCE_WRAPPER_PATH"] = str(wrapper_dir)
+
+    return extra_env
 
 
 # ---------------------------------------------------------------------------
@@ -3242,6 +3309,19 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         for d in agent_cfg.get("home_rw_dirs", []):
             (Path.home() / d).mkdir(parents=True, exist_ok=True)
 
+        # --- SSH key visibility warning ---
+        all_home_ro = list(config.get("sandbox", {}).get("home_ro_dirs", []))
+        all_home_ro.extend(agent_cfg.get("home_ro_dirs", []))
+        for d in all_home_ro:
+            d_clean = d.lstrip("/").rstrip("/")
+            if d_clean in (".ssh", ".ssh/"):
+                print(
+                    "\033[33m⚠  ~/.ssh is in home_ro_dirs — SSH keys will be "
+                    "readable by the agent.  Consider removing it unless SSH "
+                    "access is explicitly needed.\033[0m",
+                    file=sys.stderr,
+                )
+
         # Resolve seatbelt profile: level-specific if a level was requested,
         # otherwise the base profile.
         if sandbox_level and sandbox_level != "normal":
@@ -3268,6 +3348,67 @@ def cmd_run(args, agent_extra: list[str]) -> None:
                 )
                 sys.exit(1)
 
+        # --- Credential proxy setup (seatbelt path) ---
+        # Seatbelt has no network namespace — the agent can reach the proxy
+        # via TCP directly.  No unix-socket bridge is needed.
+        sb_proxy_enabled = sec.get("credential_proxy", False)
+        sb_proxy: CredentialProxy | None = None
+        sb_proxy_env: dict[str, str] = {}
+        sb_proxy_port: int = 0
+
+        if sb_proxy_enabled:
+            # Collect env vars visible inside the sandbox for API key scanning.
+            sb_collected_env: dict[str, str] = {}
+            env_conf = config.get("env", {})
+            for var, val in env_conf.get("extra", {}).items():
+                sb_collected_env[var] = _expand_env_value(val)
+            if provider:
+                all_providers = resolve_providers(config, agent_name)
+                prof_data = all_providers.get(provider, {})
+                for var, val in prof_data.get("env", {}).items():
+                    sb_collected_env[var] = _expand_env_value(val)
+            for var, val in agent_cfg.get("env", {}).items():
+                sb_collected_env[var] = _expand_env_value(val)
+
+            rules, strip_vars = _collect_proxy_rules(sb_collected_env)
+            if rules:
+                proxy_conf = config.get("credential_proxy", {})
+                blocked = set(
+                    proxy_conf.get("blocked_hosts", DEFAULT_BLOCKED_HOSTS)
+                )
+                allow_domains_cfg = list(sec.get("allow_domains", []))
+                # Seatbelt cannot enforce network-level allowlisting, but we
+                # still configure the proxy for credential injection.
+                enforce_allowlist = False
+                sb_proxy = CredentialProxy(
+                    rules,
+                    blocked_hosts=blocked,
+                    allow_domains=allow_domains_cfg,
+                    enforce_allowlist=enforce_allowlist,
+                )
+                sb_proxy_port = sb_proxy.start()
+
+                # Build env overrides: strip API keys, rewrite base URLs,
+                # set HTTP_PROXY for direct TCP access (no unix bridge).
+                proxy_base = f"http://127.0.0.1:{sb_proxy_port}"
+                for var in strip_vars:
+                    sb_proxy_env[var] = ""
+                for rule in rules:
+                    sb_proxy_env[rule["base_url_env"]] = proxy_base
+                sb_proxy_env["HTTP_PROXY"] = proxy_base
+                sb_proxy_env["http_proxy"] = proxy_base
+                sb_proxy_env["HTTPS_PROXY"] = proxy_base
+                sb_proxy_env["https_proxy"] = proxy_base
+
+        # --- Git push blocking setup (seatbelt path) ---
+        # Uses GIT_CONFIG_GLOBAL + PATH wrapper instead of bind-mounts.
+        sb_git_env = prepare_seatbelt_git_blocking(config)
+
+        # Merge proxy and git env vars
+        sb_combined_env: dict[str, str] = {}
+        sb_combined_env.update(sb_proxy_env)
+        sb_combined_env.update(sb_git_env)
+
         # Build the seatbelt command (generates a runtime profile with the
         # real project dir injected)
         cmd, runtime_profile = build_seatbelt_cmd(
@@ -3276,6 +3417,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             safe_mode=args.safe, agent_id=args.id,
             provider=provider,
             sandbox_level=sandbox_level,
+            proxy_env=sb_combined_env if sb_combined_env else None,
         )
 
         if args.dry_run:
@@ -3311,6 +3453,8 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         print(f"  project     {project_dir}")
         print(f"  isolation   Apple Seatbelt (sandbox-exec)")
         print(f"  network     enabled")
+        if sb_proxy:
+            print(f"  cred proxy  127.0.0.1:{sb_proxy_port} (direct TCP)")
         print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
         print(
             f"  permissions "
@@ -3332,6 +3476,9 @@ def cmd_run(args, agent_extra: list[str]) -> None:
                 Path(runtime_profile).unlink()
             except OSError:
                 pass
+            # Stop the credential proxy if it was started
+            if sb_proxy:
+                sb_proxy.stop()
         return
 
     # --- agent-sandbox (bwrap) backend path --------------------------------
