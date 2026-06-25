@@ -4,7 +4,8 @@ Drives ``tart`` (cirruslabs, over Virtualization.framework) for every
 :class:`~lince_lab.backend.Backend` operation, reaching the guest over SSH
 (``tart ip`` + password auth via ``SSH_ASKPASS``). It is the macOS sibling of
 :mod:`lince_lab.lima_backend`: the broker / policy / recipe / bisect / capture
-layers are unchanged; only this substrate glue differs.
+layers stay backend-neutral (they call the Backend seam, never macOS-specific
+code); only this substrate glue differs.
 
 Key differences from Lima/QEMU:
 
@@ -24,6 +25,7 @@ signal.
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import shlex
@@ -106,6 +108,36 @@ def _host_ht_path() -> str:
     return str((base / "lince" / "lince-lab" / "bin" / "ht-darwin").expanduser())
 
 
+# A single askpass helper per process (the guest password is the constant public
+# Tart default, so one file is enough). Created lazily and removed at exit, so we
+# don't leak a 0700 temp file per backend instance (or per unit test).
+_ASKPASS_PATH: str | None = None
+
+
+def _askpass_helper() -> str:
+    """Return the path to a process-wide askpass helper that echoes the guest password."""
+    global _ASKPASS_PATH
+    if _ASKPASS_PATH and os.path.isfile(_ASKPASS_PATH):
+        return _ASKPASS_PATH
+    fd, path = tempfile.mkstemp(prefix="lince-lab-askpass-")
+    with os.fdopen(fd, "w") as f:
+        f.write(f"#!/bin/sh\necho {shlex.quote(GUEST_PASSWORD)}\n")
+    os.chmod(path, 0o700)
+    _ASKPASS_PATH = path
+    atexit.register(_cleanup_askpass)
+    return path
+
+
+def _cleanup_askpass() -> None:
+    global _ASKPASS_PATH
+    if _ASKPASS_PATH and os.path.exists(_ASKPASS_PATH):
+        try:
+            os.unlink(_ASKPASS_PATH)
+        except OSError:
+            pass
+    _ASKPASS_PATH = None
+
+
 class MacosBackend(Backend):
     """Real :class:`Backend` that drives ``tart`` (macOS guests on Apple Silicon)."""
 
@@ -114,8 +146,8 @@ class MacosBackend(Backend):
         self._host_ht = _host_ht_path()
         # Tracks detached `tart run` processes by VM name so stop/delete can reap them.
         self._running: dict[str, subprocess.Popen] = {}
-        # Lazily created askpass helper (see _askpass_path).
-        self._askpass: str | None = None
+        # Per-VM `tart run` output log path, so an early-exit error is surfaced.
+        self._runlogs: dict[str, str] = {}
 
     # ── one lifecycle shell-out helper (raises on nonzero) ───────────────────
     def _run(
@@ -146,8 +178,17 @@ class MacosBackend(Backend):
         location = images[0].get("location") if images and isinstance(images[0], dict) else None
         if not location:
             raise BackendError("macOS create: template has no images[0].location (Tart OCI ref)")
+        loc = str(location)
+        # Guard the common footgun: a bare `vm up` with no --image uses default_image
+        # (a Linux qcow2 URL), which `tart clone` cannot consume. Turn that into a
+        # one-line message instead of a cryptic pull error.
+        if loc.startswith(("http://", "https://")) or loc.endswith((".qcow2", ".img")):
+            raise BackendError(
+                f"macOS backend needs a Tart OCI image, got {loc!r}; pass --image macos-sequoia "
+                "(the default_image is Linux-only)"
+            )
         # `tart clone <oci-ref> <name>` pulls the image if not already cached.
-        self._run([self._tart, "clone", str(location), name], stream=True)
+        self._run([self._tart, "clone", loc, name], stream=True)
         # Apply resource caps, floored to macOS-sane minimums (see MIN_MACOS_*).
         cpus = int(spec["cpus"]) if spec.get("cpus") is not None else MIN_MACOS_CPU
         mem_mb = _mem_to_mb(str(spec["memory"])) if spec.get("memory") is not None else MIN_MACOS_MEMORY_MB
@@ -172,13 +213,19 @@ class MacosBackend(Backend):
             file=sys.stderr,
             flush=True,
         )
-        proc = subprocess.Popen(
-            [self._tart, "run", name, "--no-graphics"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        # Capture `tart run` stdout+stderr to a log so an early exit (bad image,
+        # already running, perms) surfaces the real error instead of a silent hang.
+        fd, log_path = tempfile.mkstemp(prefix=f"lince-lab-run-{name}-", suffix=".log")
+        os.close(fd)
+        self._runlogs[name] = log_path
+        with open(log_path, "w") as logf:
+            proc = subprocess.Popen(
+                [self._tart, "run", name, "--no-graphics"],
+                stdin=subprocess.DEVNULL,
+                stdout=logf,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
         self._running[name] = proc
         # macOS first boot + sshd coming up can be slow; give it a generous window.
         deadline = time.monotonic() + 300.0
@@ -200,15 +247,21 @@ class MacosBackend(Backend):
             self._reap(name)
 
     def delete(self, name: str, force: bool = False) -> None:
-        # A running VM cannot be deleted; best-effort stop first, then delete.
+        # A running VM cannot be deleted; best-effort stop first (honoring force),
+        # then delete. stop() reaps the tracked run process + log.
         try:
-            self._run([self._tart, "stop", name])
+            self.stop(name, force=force)
         except BackendError:
             pass
-        self._reap(name)
         self._run([self._tart, "delete", name])
 
     def _reap(self, name: str) -> None:
+        log_path = self._runlogs.pop(name, None)
+        if log_path:
+            try:
+                os.unlink(log_path)
+            except OSError:
+                pass
         proc = self._running.pop(name, None)
         if proc is None:
             return
@@ -216,6 +269,25 @@ class MacosBackend(Backend):
             proc.terminate()
         except ProcessLookupError:
             pass
+
+    def _check_run_alive(self, name: str) -> None:
+        """Raise if the tracked `tart run` process has already exited (early failure)."""
+        proc = self._running.get(name)
+        if proc is not None and proc.poll() is not None:
+            raise BackendError(
+                f"tart run for {name!r} exited early (code {proc.returncode}): "
+                f"{self._run_log_tail(name) or 'no output'}"
+            )
+
+    def _run_log_tail(self, name: str, lines: int = 20) -> str:
+        path = self._runlogs.get(name)
+        if not path or not os.path.isfile(path):
+            return ""
+        try:
+            with open(path) as f:
+                return "".join(f.readlines()[-lines:]).strip()
+        except OSError:
+            return ""
 
     def status(self, name: str) -> VmState:
         for rec in self._list_records():
@@ -265,6 +337,7 @@ class MacosBackend(Backend):
         """Poll ``tart ip`` until the guest has an address or the deadline passes."""
         last = ""
         while time.monotonic() < deadline:
+            self._check_run_alive(name)  # fail fast if `tart run` died at spawn
             proc = subprocess.run([self._tart, "ip", name], capture_output=True, text=True)
             ip = (proc.stdout or "").strip()
             if proc.returncode == 0 and ip:
@@ -280,6 +353,7 @@ class MacosBackend(Backend):
         last = ""
         probe = ["ssh", *self._ssh_opts(), f"{GUEST_USER}@{ip}", "true"]
         while time.monotonic() < deadline:
+            self._check_run_alive(name)  # fail fast if `tart run` died after the lease
             proc = subprocess.run(
                 probe,
                 capture_output=True,
@@ -324,25 +398,10 @@ class MacosBackend(Backend):
             "NumberOfPasswordPrompts=1",
         ]
 
-    def _askpass_path(self) -> str:
-        """Lazily create a tiny askpass helper that echoes the guest password.
-
-        Used with ``SSH_ASKPASS`` / ``SSH_ASKPASS_REQUIRE=force`` so password auth
-        works non-interactively (the password is the public Tart default, not a
-        secret). Created 0700 under the temp dir, once per process.
-        """
-        if self._askpass and os.path.isfile(self._askpass):
-            return self._askpass
-        fd, path = tempfile.mkstemp(prefix="lince-lab-askpass-")
-        with os.fdopen(fd, "w") as f:
-            f.write(f"#!/bin/sh\necho {shlex.quote(GUEST_PASSWORD)}\n")
-        os.chmod(path, 0o700)
-        self._askpass = path
-        return path
-
     def _ssh_env(self) -> dict[str, str]:
+        # Password auth via SSH_ASKPASS (the password is the public Tart default).
         env = dict(os.environ)
-        env["SSH_ASKPASS"] = self._askpass_path()
+        env["SSH_ASKPASS"] = _askpass_helper()
         env["SSH_ASKPASS_REQUIRE"] = "force"
         # Some ssh builds gate askpass on DISPLAY; harmless to set when unset.
         env.setdefault("DISPLAY", ":0")
@@ -454,17 +513,17 @@ class MacosBackend(Backend):
 
     # ── capture (ht inside the guest, driven over SSH) ───────────────────────
     def open_capture(self, name: str, argv: list[str], cols: int, rows: int) -> CaptureChannel:
-        # Ship the macOS/arm64 ht into the guest when present, else fall back to a
-        # bare `ht` on the guest PATH. Copying our own disposable capture driver
-        # into a disposable guest does not widen host access.
+        # Resolve the guest IP once (not per sub-step). Ship the macOS/arm64 ht into
+        # the guest when present, else fall back to a bare `ht` on the guest PATH.
+        # Copying our own disposable capture driver into a disposable guest does not
+        # widen host access.
+        ip = self._ip(name)
         if os.path.isfile(self._host_ht):
-            self.copy_in(name, self._host_ht, GUEST_HT_PATH)
-            ip0 = self._ip(name)
-            self._run_ssh(["ssh", *self._ssh_opts(), f"{GUEST_USER}@{ip0}", f"chmod +x {GUEST_HT_PATH}"])
+            self._run_ssh(["scp", *self._ssh_opts(), self._host_ht, f"{GUEST_USER}@{ip}:{GUEST_HT_PATH}"])
+            self._run_ssh(["ssh", *self._ssh_opts(), f"{GUEST_USER}@{ip}", f"chmod +x {GUEST_HT_PATH}"])
             guest_ht = GUEST_HT_PATH
         else:
             guest_ht = "ht"
-        ip = self._ip(name)
         remote = f"{guest_ht} --size {cols}x{rows} --subscribe init,output,snapshot -- " + " ".join(
             shlex.quote(a) for a in argv
         )

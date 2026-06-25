@@ -80,6 +80,15 @@ class CreateArgvTestCase(unittest.TestCase):
         with self.assertRaises(BackendError):
             self.backend.create("lince-lab-x", json.dumps({"images": []}))
 
+    def test_create_rejects_non_oci_image(self) -> None:
+        # A bare `vm up` with no --image yields the Linux default_image (a qcow2 URL);
+        # tart cannot clone that, so create() must reject it with a clear message.
+        self._patch_run(_ok())
+        qcow2 = json.dumps({"images": [{"location": "https://example.com/fedora.qcow2"}]})
+        with self.assertRaises(BackendError) as ctx:
+            self.backend.create("lince-lab-x", qcow2)
+        self.assertIn("--image macos-sequoia", str(ctx.exception))
+
 
 class LifecycleTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -130,6 +139,7 @@ class LifecycleTestCase(unittest.TestCase):
 
     def test_start_spawns_detached_run_and_waits_for_ip(self) -> None:
         fake_proc = mock.MagicMock(spec=subprocess.Popen)
+        fake_proc.poll.return_value = None  # `tart run` still alive during the waits
         with (
             mock.patch("lince_lab.macos_backend.subprocess.Popen", return_value=fake_proc) as popen,
             mock.patch("lince_lab.macos_backend.subprocess.run", return_value=_ok(stdout="192.168.64.7\n")),
@@ -137,6 +147,22 @@ class LifecycleTestCase(unittest.TestCase):
             self.backend.start("lince-lab-x")
         self.assertEqual(popen.call_args.args[0], ["tart", "run", "lince-lab-x", "--no-graphics"])
         self.assertIs(self.backend._running["lince-lab-x"], fake_proc)
+        self.backend._reap("lince-lab-x")  # clean the run-log tempfile
+
+    def test_start_bails_fast_when_run_exits_early(self) -> None:
+        # If `tart run` dies at spawn, start() must fail fast with the real error,
+        # not hang for the full 300s IP/ssh window.
+        fake_proc = mock.MagicMock(spec=subprocess.Popen)
+        fake_proc.poll.return_value = 1  # exited immediately
+        fake_proc.returncode = 1
+        with (
+            mock.patch("lince_lab.macos_backend.subprocess.Popen", return_value=fake_proc),
+            mock.patch("lince_lab.macos_backend.subprocess.run", return_value=_ok(stdout="192.168.64.7\n")),
+        ):
+            with self.assertRaises(BackendError) as ctx:
+                self.backend.start("lince-lab-x")
+        self.assertIn("exited early", str(ctx.exception))
+        self.backend._reap("lince-lab-x")
 
 
 class ExecTestCase(unittest.TestCase):
@@ -278,11 +304,9 @@ class OpenCaptureTestCase(unittest.TestCase):
                 mock.patch(
                     "lince_lab.macos_backend.subprocess.run",
                     side_effect=[
-                        _ok(stdout="10.0.0.5\n"),  # _ip for copy_in
-                        _ok(),  # scp copy_in
-                        _ok(stdout="10.0.0.5\n"),  # _ip for chmod
+                        _ok(stdout="10.0.0.5\n"),  # _ip (resolved once)
+                        _ok(),  # scp the ht binary in
                         _ok(),  # ssh chmod +x
-                        _ok(stdout="10.0.0.5\n"),  # _ip for the spawn
                     ],
                 ),
                 mock.patch("lince_lab.macos_backend.subprocess.Popen", return_value=fake_proc) as popen,
