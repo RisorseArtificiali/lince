@@ -27,10 +27,12 @@ cleanup() {
     "$LINCE_LAB_BIN" --socket "$SOCK" vm rm "$VM" -f >/dev/null 2>&1 || true
     stop_broker "$SOCK"
 }
-trap cleanup EXIT
 
 # A live broker over the real MacosBackend is the seam the CLI drives.
 LINCE_LAB_MACOS=1 start_broker "$SOCK"
+# start_broker installs its own `trap stop_broker EXIT`; re-assert the full cleanup
+# AFTER it so a mid-oracle assertion failure still tears the (heavier) Tart VM down.
+trap cleanup EXIT
 
 log "create + start a disposable macOS guest from the macos-sequoia image"
 assert "$LINCE_LAB_BIN" --socket "$SOCK" vm up "$VM" --image macos-sequoia -- "vm up created and started $VM"
