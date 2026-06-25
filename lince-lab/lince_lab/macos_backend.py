@@ -180,8 +180,13 @@ class MacosBackend(Backend):
             start_new_session=True,
         )
         self._running[name] = proc
-        # Block until the guest has a DHCP lease (it has booted enough to network).
-        self._wait_for_ip(name, deadline=time.monotonic() + 180.0)
+        # macOS first boot + sshd coming up can be slow; give it a generous window.
+        deadline = time.monotonic() + 300.0
+        # First wait for a DHCP lease (the guest networked), then for sshd to answer
+        # — `tart ip` returns before sshd is ready, so an exec right after start
+        # would otherwise hit "connection refused".
+        ip = self._wait_for_ip(name, deadline)
+        self._wait_for_ssh(name, ip, deadline)
 
     def stop(self, name: str, force: bool = False) -> None:
         # `tart stop` is authoritative (it halts the VM regardless of who launched
@@ -269,6 +274,27 @@ class MacosBackend(Backend):
             # sleep of the workload — mirrors the broker-readiness poll in 00-lib.sh.
             time.sleep(1.0)
         raise BackendError(f"timed out waiting for {name!r} to get an IP: {last}")
+
+    def _wait_for_ssh(self, name: str, ip: str, deadline: float) -> None:
+        """Poll an ssh probe until the guest's sshd answers or the deadline passes."""
+        last = ""
+        probe = ["ssh", *self._ssh_opts(), f"{GUEST_USER}@{ip}", "true"]
+        while time.monotonic() < deadline:
+            proc = subprocess.run(
+                probe,
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+                env=self._ssh_env(),
+            )
+            if proc.returncode == 0:
+                return
+            last = (proc.stderr or "").strip()
+            # Short backoff on the readiness signal (sshd answering), not a fixed
+            # sleep of any workload.
+            time.sleep(2.0)
+        raise BackendError(f"timed out waiting for ssh on {name!r} ({ip}): {last}")
 
     def _ip(self, name: str) -> str:
         proc = subprocess.run([self._tart, "ip", name], capture_output=True, text=True)
