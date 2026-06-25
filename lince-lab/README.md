@@ -125,6 +125,35 @@ injection, name-prefixing) are **non-overridable policy**, never preset config.
 | **`bisect`** | The autonomous regression loop. 2 CPU / 2 GiB, base snapshot **retained** for fast per-candidate reset, network denied, longer per-step timeout. Pair with `find bisect`. |
 | **`networked`** | Recipes that legitimately must fetch (npm / pip). 2 CPU / 2 GiB, networking allowed but **only** the recipe's explicit `allow_hosts` / `allow_ports`; everything else stays denied, no host credentials. |
 
+## macOS backend (Tart) — experimental
+
+On Apple Silicon, lince-lab can boot a clean disposable **macOS** guest to
+exercise the Seatbelt sandbox path (Epic #268). It is selected with
+`LINCE_LAB_MACOS=1` when starting the broker and drives
+[Tart](https://tart.run) over Virtualization.framework.
+
+Requirements:
+
+- Apple Silicon Mac (`uname -m` = `arm64`).
+- `tart`: `brew install cirruslabs/cli/tart`.
+  - Homebrew 6+ may refuse the tap with a *tap-trust* error; run
+    `brew trust cirruslabs/cli` (or, one-shot,
+    `HOMEBREW_NO_REQUIRE_TAP_TRUST=1 brew install cirruslabs/cli/tart`).
+- A base image: `tart pull ghcr.io/cirruslabs/macos-sequoia-base:latest`.
+
+Run a guest:
+
+```bash
+LINCE_LAB_MACOS=1 lince-lab lab broker start &
+lince-lab vm up lince-lab-demo --image macos-sequoia
+lince-lab vm exec lince-lab-demo -- sw_vers
+lince-lab vm rm lince-lab-demo -f
+```
+
+Reset uses APFS copy-on-write `tart clone` of a stopped golden guest (vz has no
+snapshots). The macOS/arm64 `ht` capture binary installs to
+`~/.local/share/lince/lince-lab/bin/ht-darwin`.
+
 ## Documentation
 
 - Design & decisions: [`docs/design/lince-lab-design.md`](../docs/design/lince-lab-design.md)

@@ -97,6 +97,19 @@ if [ ! -x "$SHARE_DIR/bin/ht" ]; then
 else
     echo -e "${GREEN}  ✓ ht already present -> $SHARE_DIR/bin/ht${NC}"
 fi
+
+# macOS/arm64 ht for the Tart (macOS-guest) backend — same role as the Linux ht,
+# copied into a macOS guest on demand (Epic #268). Idempotent + non-fatal too.
+HT_DARWIN_URL="https://github.com/andyk/ht/releases/download/${HT_VER}/ht-aarch64-apple-darwin"
+if [ ! -x "$SHARE_DIR/bin/ht-darwin" ]; then
+    if curl -fsSL -o "$SHARE_DIR/bin/ht-darwin" "$HT_DARWIN_URL" && chmod +x "$SHARE_DIR/bin/ht-darwin"; then
+        echo -e "${GREEN}  ✓ ht (macOS/arm64) -> $SHARE_DIR/bin/ht-darwin${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ ht (macOS/arm64) download failed; macOS-backend capture unavailable until present${NC}"
+    fi
+else
+    echo -e "${GREEN}  ✓ ht (macOS/arm64) already present -> $SHARE_DIR/bin/ht-darwin${NC}"
+fi
 echo ""
 
 # ── Step 4: Install skill ──────────────────────────────────────────────
