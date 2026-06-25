@@ -35,7 +35,7 @@ _TEMPLATE = json.dumps(
     {
         "images": [{"location": "ghcr.io/cirruslabs/macos-sequoia-base:latest", "arch": "arm64"}],
         "cpus": 4,
-        "memory": "2GiB",
+        "memory": "8GiB",
         "disk": "40GiB",
     }
 )
@@ -64,7 +64,16 @@ class CreateArgvTestCase(unittest.TestCase):
             ["tart", "clone", "ghcr.io/cirruslabs/macos-sequoia-base:latest", "lince-lab-x"],
         )
         # resources applied via `tart set` (cpu + memory in MB); disk omitted (grow-only).
-        self.assertEqual(argvs[1], ["tart", "set", "lince-lab-x", "--cpu", "4", "--memory", "2048"])
+        self.assertEqual(argvs[1], ["tart", "set", "lince-lab-x", "--cpu", "4", "--memory", "8192"])
+
+    def test_create_floors_macos_resources(self) -> None:
+        # The Linux-tuned defaults (e.g. 1-2 GiB) would not boot macOS; create()
+        # floors cpu to >=2 and memory to >=4096 MB.
+        run = self._patch_run(_ok())
+        small = json.dumps({"images": [{"location": "ghcr.io/cirruslabs/x:latest"}], "cpus": 1, "memory": "1GiB"})
+        self.backend.create("lince-lab-x", small)
+        set_argv = [c.args[0] for c in run.call_args_list][1]
+        self.assertEqual(set_argv, ["tart", "set", "lince-lab-x", "--cpu", "2", "--memory", "4096"])
 
     def test_create_missing_image_raises(self) -> None:
         self._patch_run(_ok())

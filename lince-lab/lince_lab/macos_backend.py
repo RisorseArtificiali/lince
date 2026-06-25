@@ -64,6 +64,12 @@ GUEST_HT_PATH = "/tmp/lince-lab-ht"
 # collide with the lince-lab- VM-name prefix policy.
 SNAP_SEP = "__snap__"
 
+# macOS guests need more than the Linux-tuned config defaults (a 2 GiB guest will
+# not boot macOS reliably). `tart set --memory` is absolute, so without a floor we
+# would DOWNGRADE the base image below a bootable size — floor the caps here.
+MIN_MACOS_CPU = 2
+MIN_MACOS_MEMORY_MB = 4096
+
 
 def _mem_to_mb(spec: str) -> int:
     """Parse a memory size string (e.g. ``"2GiB"``) into whole MB for ``tart set``."""
@@ -142,14 +148,20 @@ class MacosBackend(Backend):
             raise BackendError("macOS create: template has no images[0].location (Tart OCI ref)")
         # `tart clone <oci-ref> <name>` pulls the image if not already cached.
         self._run([self._tart, "clone", str(location), name], stream=True)
-        set_argv = [self._tart, "set", name]
-        if spec.get("cpus") is not None:
-            set_argv += ["--cpu", str(int(spec["cpus"]))]
-        if spec.get("memory") is not None:
-            set_argv += ["--memory", str(_mem_to_mb(str(spec["memory"])))]
+        # Apply resource caps, floored to macOS-sane minimums (see MIN_MACOS_*).
+        cpus = int(spec["cpus"]) if spec.get("cpus") is not None else MIN_MACOS_CPU
+        mem_mb = _mem_to_mb(str(spec["memory"])) if spec.get("memory") is not None else MIN_MACOS_MEMORY_MB
+        set_argv = [
+            self._tart,
+            "set",
+            name,
+            "--cpu",
+            str(max(cpus, MIN_MACOS_CPU)),
+            "--memory",
+            str(max(mem_mb, MIN_MACOS_MEMORY_MB)),
+        ]
         # disk is grow-only in Tart; the base image's disk is sufficient — skip it.
-        if len(set_argv) > 3:
-            self._run(set_argv)
+        self._run(set_argv)
 
     def start(self, name: str) -> None:
         # `tart run` is a FOREGROUND process; spawn it detached (its own session)
