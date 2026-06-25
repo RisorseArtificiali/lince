@@ -33,13 +33,13 @@ from lince_lab import protocol
 from lince_lab.backend import Backend, ExecResult, VmState
 from lince_lab.capture import Capture
 from lince_lab.config import apply_preset
-from lince_lab.errors import BackendError, DataError, LabError
+from lince_lab.errors import DataError, LabError
 from lince_lab.paths import VM_NAME_PREFIX, parse_size
 from lince_lab.policy import artifacts_root
 from lince_lab.policy import check as policy_check
 from lince_lab.policy import check_capture as policy_check_capture
 from lince_lab.recipe import Recipe, effective_egress, load_recipe, run_recipe, validate
-from lince_lab.templates import build_template, egress_lockdown_argv
+from lince_lab.templates import build_template
 
 
 class BrokerServer:
@@ -295,13 +295,10 @@ class BrokerServer:
         # network up and they apply their own (recipe-posture) lock-down after
         # provisioning — they are unaffected by this deny default.
         self.backend.start(args["name"])
-        # Cap the lock-down exec so it errors out instead of hanging forever.
-        result = self.backend.exec(args["name"], egress_lockdown_argv([], []), timeout=180.0)
-        if result.exit_code != 0:
-            raise BackendError(
-                f"egress lock-down failed on {args['name']} (exit {result.exit_code}): "
-                f"{result.stderr.strip() or 'no detail'}"
-            )
+        # Apply the server-side deny-by-default egress posture. The backend picks
+        # the OS-appropriate mechanism (Linux nft for Lima; macOS backends override),
+        # capped so it errors out instead of hanging forever.
+        self.backend.apply_egress_lockdown(args["name"], [], [], timeout=180.0)
         return {"started": args["name"]}
 
     def _h_stop(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -318,9 +315,7 @@ class BrokerServer:
     def _h_list(self, args: dict[str, Any]) -> list[dict[str, Any]]:
         # Disclose ONLY lab-namespaced instances; a user's other VMs (which a real
         # `limactl list` would include) are never surfaced over the broker.
-        return [
-            _vmstate_to_dict(s) for s in self.backend.list() if s.name.startswith(VM_NAME_PREFIX)
-        ]
+        return [_vmstate_to_dict(s) for s in self.backend.list() if s.name.startswith(VM_NAME_PREFIX)]
 
     # ── exec / files ─────────────────────────────────────────────────────────
     def _h_exec(self, args: dict[str, Any]) -> dict[str, Any]:

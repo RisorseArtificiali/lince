@@ -298,5 +298,20 @@ class OpenCaptureTestCase(unittest.TestCase):
         self.assertIsInstance(channel, LimaCaptureChannel)
 
 
+class EgressTestCase(unittest.TestCase):
+    def test_apply_egress_lockdown_is_deferred_noop(self) -> None:
+        # macOS defers egress enforcement to #266 (pfctl): apply_egress_lockdown
+        # must NOT run the Linux nft script (no subprocess) and must NOT raise, so
+        # a deny `vm up` succeeds on a macOS guest.
+        backend = MacosBackend()
+        with (
+            mock.patch("lince_lab.macos_backend.subprocess.run") as run,
+            mock.patch("lince_lab.macos_backend.subprocess.Popen") as popen,
+        ):
+            backend.apply_egress_lockdown("lince-lab-x", [], [])
+        run.assert_not_called()
+        popen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

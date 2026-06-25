@@ -480,3 +480,19 @@ class MacosBackend(Backend):
             start_new_session=True,
         )
         return LimaCaptureChannel(proc, argv=cmd)
+
+    # ── egress policy ────────────────────────────────────────────────────────
+    def apply_egress_lockdown(
+        self, name: str, allow_ips: list[str], allow_ports: list[int], timeout: float = 180.0
+    ) -> None:
+        # Egress control for macOS guests uses pfctl, not Linux nft — that belongs
+        # to the Seatbelt-recipe work (#266). For the #263 adapter we DEFER it with
+        # a clear warning rather than run the (Linux-only) nft script, which would
+        # fail-closed on a macOS guest and abort `vm up`. The guest therefore
+        # retains network access until #266 lands pfctl enforcement.
+        print(
+            f"lince-lab: WARNING macOS egress lock-down not yet enforced for {name!r} "
+            "(deferred to #266; guest egress is NOT restricted)",
+            file=sys.stderr,
+            flush=True,
+        )
