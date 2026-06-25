@@ -54,6 +54,15 @@ DEFAULTS: dict[str, Any] = {
             "arch": "x86_64",
             "digest": "sha256:53fdde898feed8b027d94baa9cfe8229867f330a1d9c49dc7d84465ee7f229f7",
         },
+        # macOS guest for the Tart (Virtualization.framework) backend — Epic #268.
+        # NOT a qcow2: the macOS backend reads `location` as a Tart OCI image ref
+        # (`tart clone` pulls it). arch arm64 (Apple Silicon). Digest is handled by
+        # the OCI registry, so none is pinned here.
+        "macos-sequoia": {
+            "location": "ghcr.io/cirruslabs/macos-sequoia-base:latest",
+            "arch": "arm64",
+            "digest": "",
+        },
     },
 }
 
