@@ -428,6 +428,9 @@ impl ZellijPlugin for State {
                         true
                     }
                     Some(config::CMD_PATH_COMPLETE) => {
+                        // #125: capture the launch dir before borrowing the
+                        // wizard, to absolutize relative completer matches below.
+                        let launch_dir = self.launch_dir.clone();
                         if let Some(ref mut wizard) = self.wizard {
                             // Discard stale results if the input changed since the request.
                             let expected = context.get("prefix").map(|s| s.as_str());
@@ -447,6 +450,13 @@ impl ZellijPlugin for State {
                                 // different code paths end up in distinct
                                 // swimlanes — see also `sort_agents_by_dir`.
                                 .map(|l| l.trim_end_matches('/').to_string())
+                                // #125: resolve relative legacy-glob matches
+                                // against the launch dir before collapsing, so
+                                // every candidate is absolute and passes the
+                                // ProjectDir absolute-path check. Runs before
+                                // `collapse_tilde`, so a plain `/` test suffices
+                                // — the raw completer output never contains `~`.
+                                .map(|l| config::absolutize_under(launch_dir.as_deref(), &l))
                                 .map(|l| config::collapse_tilde(&l))
                                 .collect();
                             matches.sort();
