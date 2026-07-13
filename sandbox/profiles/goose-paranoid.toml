@@ -1,0 +1,29 @@
+# Sandbox-policy fragment: goose — paranoid level.
+# See docs/documentation/dashboard/sandbox-levels.md. Lists are
+# append-merged with the user's ~/.agent-sandbox/config.toml.
+#
+# Goose supports many providers (Z.ai via ZHIPU_API_KEY, Anthropic,
+# OpenAI, Google, etc.). Only the providers with built-in credential
+# proxy support (anthropic, openai) are reachable in paranoid — the
+# proxy intercepts and injects their API keys. For other providers
+# (Z.ai, Mistral, Groq, etc.) use sandbox_level = "normal" or
+# "permissive", or extend allow_domains in your own config.
+
+[env.extra]
+ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY"
+OPENAI_API_KEY = "$OPENAI_API_KEY"
+
+[agents.goose]
+# Per-run ephemeral copy of goose config/data/state (rsync-seeded,
+# bind-mounted, removed on exit). Mirrors what the nono paranoid
+# bash wrapper does.
+scratch_home_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
+
+[security]
+credential_proxy = true
+unshare_net = true
+# api.anthropic.com and api.openai.com are auto-included from the
+# credential rules. Extend by appending in your own config:
+#   [security]
+#   allow_domains = ["api.z.ai", "pypi.org"]
+allow_domains = []

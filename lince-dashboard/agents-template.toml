@@ -147,6 +147,38 @@ sandbox_level = "permissive"
 [agents.gemini-permissive.env_vars]
 GEMINI_API_KEY = "$GEMINI_API_KEY"
 
+# ── Goose ───────────────────────────────────────────────────────────
+
+[agents.goose-paranoid]
+command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "goose"]
+pane_title_pattern = "agent-sandbox"
+status_pipe_name = "lince-status"
+display_name = "Goose (paranoid)"
+short_label = "GSP"
+color = "green"
+sandboxed = true
+has_native_hooks = false
+bwrap_conflict = false
+disable_inner_sandbox_args = []
+home_ro_dirs = ["~/.config/goose/"]
+providers = ["__discover__"]
+sandbox_level = "paranoid"
+
+[agents.goose-permissive]
+command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "goose"]
+pane_title_pattern = "agent-sandbox"
+status_pipe_name = "lince-status"
+display_name = "Goose (permissive)"
+short_label = "GSM"
+color = "yellow"
+sandboxed = true
+has_native_hooks = false
+bwrap_conflict = false
+disable_inner_sandbox_args = []
+home_ro_dirs = ["~/.config/goose/"]
+providers = ["__discover__"]
+sandbox_level = "permissive"
+
 # ── OpenCode ────────────────────────────────────────────────────────
 
 [agents.opencode-paranoid]

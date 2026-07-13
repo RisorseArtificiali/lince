@@ -1,0 +1,16 @@
+{
+  "extends": "lince-goose",
+  "meta": {
+    "name": "lince-goose-paranoid",
+    "description": "Goose paranoid: only LLM providers known to nono's credential proxy (anthropic, openai) are reachable; ~/.config/goose, ~/.local/share/goose, and ~/.local/state/goose isolated to a per-agent scratch HOME. Goose supports many providers (Z.ai via ZHIPU_API_KEY, Google, etc.) but only the ones with built-in credential injection ship in paranoid — for others ship a custom level fragment that extends network.allow_domain and environment.passthrough."
+  },
+  "filesystem": {
+    "allow": ["$WORKDIR"],
+    "read": []
+  },
+  "network": {
+    "block": true,
+    "credentials": ["anthropic", "openai"],
+    "allow_domain": ["api.anthropic.com", "api.openai.com"]
+  }
+}

@@ -1,0 +1,28 @@
+# Sandbox-policy fragment: goose — permissive level.
+# See docs/documentation/dashboard/sandbox-levels.md. Lists are
+# append-merged with the user's ~/.agent-sandbox/config.toml.
+
+[sandbox]
+home_ro_dirs = [".config/gh", ".cache", ".ssh/known_hosts"]
+
+[env]
+# Keyring-auth users rely on GH_TOKEN/GITHUB_TOKEN; --clearenv would wipe them.
+passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]
+
+[security]
+# credential_proxy off in permissive: the agent reads API keys directly
+# from the env (no proxy interception, no allowlist enforcement). For a
+# proxy-on permissive variant, set `credential_proxy = true` in your own
+# config — it deep-merges over this fragment.
+credential_proxy = false
+# block_git_push stays on by design: users push via `gh` (with a
+# fine-grained token), so the bare-`git push` block is defense-in-depth
+# without blocking real workflows.
+block_git_push = true
+# Documents the hosts gh CLI typically reaches. Only enforced when the
+# user opts into credential_proxy = true on top of permissive.
+allow_domains = [
+    "api.github.com",
+    "github.com",
+    "objects.githubusercontent.com",
+]

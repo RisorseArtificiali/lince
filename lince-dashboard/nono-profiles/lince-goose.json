@@ -1,0 +1,21 @@
+{
+  "extends": "default",
+  "meta": {
+    "name": "lince-goose",
+    "description": "LINCE sandbox profile for Goose"
+  },
+  "filesystem": {
+    "allow": [
+      "$WORKDIR",
+      "$HOME/.config/goose",
+      "$HOME/.local/share/goose",
+      "$HOME/.local/state/goose"
+    ],
+    "read": [
+      "$HOME/.local/bin"
+    ]
+  },
+  "security": {
+    "signal_mode": "allow_same_sandbox"
+  }
+}
