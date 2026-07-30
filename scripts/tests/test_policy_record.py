@@ -14,6 +14,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -101,6 +102,14 @@ class TestRecordHonesty(unittest.TestCase):
     """#222 review: the record's *_enforced must reflect reality, not be
     hardcoded — otherwise the I7 gate can't catch a missing net boundary."""
 
+    # landlock_plan() short-circuits to None off Linux, so these three would
+    # fail with a TypeError on a macOS dev host (#242). The plan itself is
+    # pure dict arithmetic — no syscalls — so pinning the platform exercises
+    # the real semantics from any host. Keep the patch on these three only:
+    # probe_landlock_abi() guards a genuine ctypes syscall on the same flag,
+    # and forcing it "linux" off-Linux would dial an arbitrary syscall number.
+
+    @mock.patch("sys.platform", "linux")
     def test_landlock_plan_keeps_bind_ports_without_proxy(self):
         plan = MOD.landlock_plan(
             {"security": {"allow_bind_ports": [3000]}},
@@ -110,16 +119,26 @@ class TestRecordHonesty(unittest.TestCase):
         self.assertTrue(plan["restrict_bind"])
         self.assertFalse(plan["restrict_connect"])  # connect stays open
 
+    @mock.patch("sys.platform", "linux")
     def test_landlock_plan_normal_open_has_no_net_rules(self):
         plan = MOD.landlock_plan({"security": {}}, "normal", unshare_net=False, proxy_port=None)
         self.assertFalse(plan["restrict_connect"])
         self.assertFalse(plan["restrict_bind"])
 
+    @mock.patch("sys.platform", "linux")
     def test_landlock_plan_paranoid_denies_bind_allows_bridge(self):
         plan = MOD.landlock_plan({"security": {}}, "paranoid", unshare_net=True, proxy_port=None)
         self.assertEqual(plan["connect_ports"], [MOD.PARANOID_BRIDGE_PORT])
         self.assertTrue(plan["restrict_connect"] and plan["restrict_bind"])
         self.assertEqual(plan["bind_ports"], [])  # deny all bind
+
+    @mock.patch("sys.platform", "darwin")
+    def test_landlock_plan_is_none_off_linux(self):
+        """The guard the three tests above patch away is itself load-bearing:
+        no Landlock shim may be planned on a non-Linux host."""
+        self.assertIsNone(
+            MOD.landlock_plan({"security": {}}, "paranoid", unshare_net=True, proxy_port=None)
+        )
 
     def test_record_carries_experimental_override(self):
         rec = MOD.build_policy_record(
