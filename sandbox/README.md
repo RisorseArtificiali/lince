@@ -201,7 +201,7 @@ Lists (e.g. `extra_rw`, `allow_domains`) are **appended**, not replaced, so proj
 
 9. **Learn mode accuracy**: The `learn` command uses `strace` to trace syscalls, which captures actual I/O but may miss paths that are checked with `access()` or `stat()` without opening. It also runs in a permissive sandbox, so the agent may access paths that would be blocked in the real sandbox. Use the report as guidance, not as an exhaustive specification.
 
-10. **Snapshot disk usage**: While snapshots use hardlinks for deduplication, they still consume disk space for changed files. Monitor usage with `agent-sandbox snapshot-list` and configure `max_project_snapshots` / `max_config_snapshots` to limit growth.
+10. **Snapshot disk usage**: While snapshots use hardlinks for deduplication, they still consume disk space for changed files. Monitor usage with `agent-sandbox snapshot-list --all` (every project, not just the current directory) and configure `max_project_snapshots` / `max_config_snapshots` to limit growth. Because the per-project maximum is only applied to the project you run from, use `agent-sandbox snapshot-prune --all-projects` to reclaim space across the whole store, including projects you have moved or deleted.
 
 ## Troubleshooting
 
