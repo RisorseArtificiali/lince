@@ -50,6 +50,20 @@ home_rw_dirs = [".codex"]
 bwrap_conflict = true
 disable_inner_sandbox_args = ["--sandbox", "danger-full-access"]
 
+[agents.bob]
+command = "bob"
+# --auto-approve mirrors claude's --dangerously-skip-permissions (the sandbox
+# is the security boundary); --trust marks the project dir trusted so bob
+# skips the per-folder trust prompt (persisted in ~/.bob/trustedFolders.json).
+default_args = ["chat", "--auto-approve", "--trust"]
+env = {}
+home_ro_dirs = []
+# Bob WRITES to ~/.bob at runtime (task db, logs, IBM SSO token refresh) —
+# a read-only mount breaks it.
+home_rw_dirs = [".bob"]
+bwrap_conflict = false
+disable_inner_sandbox_args = []
+
 [agents.gemini]
 command = "gemini"
 default_args = []

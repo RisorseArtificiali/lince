@@ -399,7 +399,7 @@ DEFAULT_BLOCKED_HOSTS: set[str] = {
 # can't inject a credential the agent doesn't have on the host, so
 # OAuth users need to drop to normal/permissive (or switch to API-key
 # auth). See docs/documentation/dashboard/sandbox-levels.md.
-OAUTH_CAPABLE_AGENTS: frozenset[str] = frozenset({"gemini", "claude"})
+OAUTH_CAPABLE_AGENTS: frozenset[str] = frozenset({"gemini", "claude", "bob"})
 
 _proxy_logger = logging.getLogger("agent-sandbox.proxy")
 

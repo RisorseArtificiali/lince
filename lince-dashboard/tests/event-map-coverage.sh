@@ -64,6 +64,8 @@ def hook_for(name: str) -> str | None:
         return "claude-status-hook.sh"
     if base.startswith("codex"):
         return "codex-status-hook.sh"
+    if base.startswith("bob"):
+        return "bob-status-hook.sh"
     if base.startswith("opencode"):
         return "opencode-status-hook.js"
     if base.startswith("pi"):

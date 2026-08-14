@@ -125,7 +125,7 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 1
 fi
 
-for hook in claude-status-hook.sh codex-status-hook.sh opencode-status-hook.js lince-agent-wrapper; do
+for hook in claude-status-hook.sh codex-status-hook.sh bob-status-hook.sh opencode-status-hook.js lince-agent-wrapper; do
     if [ ! -f "${HOOKS_DIR}/${hook}" ]; then
         echo "FAIL: missing hook script ${HOOKS_DIR}/${hook}"
         FAIL=1
@@ -168,6 +168,21 @@ run_capture codex-fallback \
     bash -c 'echo "{}" | bash "$0"' \
     "${HOOKS_DIR}/codex-status-hook.sh"
 validate_payload codex-fallback "test-codex" '^turn_complete$'
+
+# --- bob-status-hook.sh: hook_event_name forwarded verbatim ----------------
+# Bob's contract is Claude-style (hook_event_name on stdin) but has no
+# Notification event; missing hook_event_name must exit 0 with no payload.
+
+export LINCE_AGENT_ID=test-bob
+run_capture bob-pretooluse \
+    bash -c 'echo "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"execute_command\"}" \
+        | bash "$0"' "${HOOKS_DIR}/bob-status-hook.sh"
+validate_payload bob-pretooluse "test-bob" '^PreToolUse$'
+
+run_capture bob-stop \
+    bash -c 'echo "{\"hook_event_name\":\"Stop\"}" | bash "$0"' \
+    "${HOOKS_DIR}/bob-status-hook.sh"
+validate_payload bob-stop "test-bob" '^Stop$'
 
 # --- lince-agent-wrapper: emits "stopped" on EXIT --------------------------
 # The wrapper runs a child command then sends "stopped" via the EXIT trap.

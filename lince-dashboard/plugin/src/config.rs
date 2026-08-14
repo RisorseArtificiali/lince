@@ -1432,12 +1432,17 @@ sandboxed = true
     #[test]
     fn embedded_event_maps_cover_builtin_agents() {
         let maps = embedded_event_maps();
-        for agent in ["claude", "codex", "pi", "opencode"] {
+        for agent in ["claude", "codex", "bob", "pi", "opencode"] {
             assert!(
                 maps.get(agent).map(|m| !m.is_empty()).unwrap_or(false),
                 "embedded event_map missing for built-in agent {agent}"
             );
         }
+        // Bob's Claude-style events must map, and Stop must be "input" (turn
+        // end, not process exit).
+        let bob = &maps["bob"];
+        assert_eq!(bob.get("PreToolUse").map(String::as_str), Some("running"));
+        assert_eq!(bob.get("Stop").map(String::as_str), Some("input"));
         // Claude's full native→canonical mapping must be present.
         let claude = &maps["claude"];
         assert_eq!(claude.get("PreToolUse").map(String::as_str), Some("running"));

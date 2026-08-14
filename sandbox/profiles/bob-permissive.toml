@@ -1,0 +1,37 @@
+# Sandbox-policy fragment: bob (IBM bobshell) — permissive level.
+# See docs/documentation/dashboard/sandbox-levels.md. Lists are
+# append-merged with the user's ~/.agent-sandbox/config.toml.
+#
+# NOTE: ~/.cache is intentionally NOT exposed read-only (same reasoning as
+# claude-permissive.toml: node CLIs write per-project state under ~/.cache
+# and an RO bind makes those writes fail silently).
+#
+# There is deliberately no bob-paranoid.toml yet: paranoid needs bob's IBM
+# endpoints (gateway api.us-east.bob.ibm.com, MCSP auth refresh) in
+# allow_domains for the credential proxy / unshare_net to work.
+
+[sandbox]
+home_ro_dirs = [".config/gh", ".ssh/known_hosts"]
+
+[env]
+# Keyring-auth users rely on GH_TOKEN/GITHUB_TOKEN; --clearenv would wipe them.
+# GH_ENTERPRISE_TOKEN for GitHub Enterprise hosts.
+passthrough = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"]
+
+[security]
+# credential_proxy off in permissive: the agent reads API keys directly
+# from the env (no proxy interception, no allowlist enforcement). Bob
+# itself authenticates via IBM SSO tokens stored in ~/.bob (mounted rw by
+# [agents.bob]), so no key injection is needed anyway.
+credential_proxy = false
+# block_git_push stays on by design: users push via `gh` (with a
+# fine-grained token), so the bare-`git push` block is defense-in-depth
+# without blocking real workflows.
+block_git_push = true
+# Documents the hosts gh CLI typically reaches. Only enforced when the
+# user opts into credential_proxy = true on top of permissive.
+allow_domains = [
+    "api.github.com",
+    "github.com",
+    "objects.githubusercontent.com",
+]

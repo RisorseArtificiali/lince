@@ -102,7 +102,7 @@ bwrap_conflict = true
 disable_inner_sandbox_args = ["--sandbox", "danger-full-access"]
 ```
 
-Shipped defaults (in `agents-defaults.toml`): `claude`, `codex`, `gemini`, `aider`, `opencode`, `amp`, `bash`.
+Shipped defaults (in `agents-defaults.toml`): `claude`, `codex`, `bob`, `gemini`, `aider`, `opencode`, `amp`, `bash`.
 
 ---
 
