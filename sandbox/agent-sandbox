@@ -3044,6 +3044,7 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
         cmd += ["--ro-bind", wayland_socket, f"/run/user/{uid}/{wayland_display}"]
     cmd += ["--tmpfs", "/var/tmp"]
     cmd += ["--dev", "/dev"]
+    cmd += gpu_dev_bind_args(sandbox)
     cmd += ["--proc", "/proc"]
 
     # --- 3. Hide entire $HOME ------------------------------------------------
@@ -5038,6 +5039,8 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             print(f"  agent-cfg   {cc_dir} (isolated copy)")
     print(f"  project     {project_dir}")
     print(f"  filesystem  read-only root, writable project dir")
+    if config.get("sandbox", {}).get("expose_gpu", False):
+        print(f"  gpu         exposed (/dev/nvidia*, /dev/dri) — #280 opt-in")
     print(f"  network     enabled")
     if landlock is None:
         print("  landlock    off")
@@ -6933,6 +6936,27 @@ def print_learn_report(
     print()
 
 
+def gpu_dev_bind_args(sandbox_conf: dict) -> list[str]:
+    """Opt-in GPU passthrough (#280): `--dev /dev` is a minimal synthetic
+    devtmpfs, so CUDA device nodes don't exist inside the sandbox and GPU
+    runtimes silently fall back to CPU (the userspace libs ARE visible via
+    the ro root — cuInit() just finds no device). With
+    ``[sandbox].expose_gpu = true``, re-expose the host nodes after the
+    ``--dev /dev`` mount. Globbed at run time (multi-GPU friendly);
+    ``--dev-bind-try`` no-ops on GPU-less machines. ``/dev/dri`` covers
+    Vulkan / ROCm / VAAPI."""
+    if not sandbox_conf.get("expose_gpu", False):
+        return []
+    args: list[str] = []
+    gpu_paths = [f"/dev/{n}" for n in sorted(os.listdir("/dev"))
+                 if n.startswith("nvidia")]
+    gpu_paths.append("/dev/dri")
+    for gp in gpu_paths:
+        if os.path.exists(gp):
+            args += ["--dev-bind-try", gp, gp]
+    return args
+
+
 def build_learn_bwrap_cmd(
     config: dict,
     project_dir: Path,
@@ -6993,6 +7017,7 @@ def build_learn_bwrap_cmd(
         ]
     cmd += ["--tmpfs", "/var/tmp"]
     cmd += ["--dev", "/dev"]
+    cmd += gpu_dev_bind_args(sandbox)
     cmd += ["--proc", "/proc"]
 
     # 3. HOME writable — key difference from normal run
