@@ -57,5 +57,26 @@ class TestGpuDevBindArgs(unittest.TestCase):
             self.assertEqual(self.sandbox.gpu_dev_bind_args({"expose_gpu": True}), [])
 
 
+class TestParanoidGpuDenied(unittest.TestCase):
+    """Paranoid never inherits the GPU silently — fragment must opt in."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sandbox = load_module("sandbox/agent-sandbox", "agent_sandbox_gpu_test2")
+
+    def test_global_flag_alone_is_denied_at_paranoid(self):
+        self.assertTrue(self.sandbox.paranoid_gpu_denied(
+            {"expose_gpu": True}, {"security": {"unshare_net": True}}))
+
+    def test_fragment_opt_in_is_honoured(self):
+        self.assertFalse(self.sandbox.paranoid_gpu_denied(
+            {"expose_gpu": True}, {"sandbox": {"expose_gpu": True}}))
+
+    def test_disabled_globally_nothing_to_deny(self):
+        self.assertFalse(self.sandbox.paranoid_gpu_denied({}, {}))
+        self.assertFalse(self.sandbox.paranoid_gpu_denied(
+            {"expose_gpu": False}, {"sandbox": {}}))
+
+
 if __name__ == "__main__":
     unittest.main()

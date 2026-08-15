@@ -21,6 +21,8 @@ auto_expose_path = true
 # a minimal synthetic devtmpfs, so CUDA/GPU runtimes silently fall back to
 # CPU. When true, /dev/nvidia* and /dev/dri are re-exposed via dev-binds.
 # Off by default: the GPU driver ioctl surface is extra kernel attack surface.
+# Ignored at the paranoid level — paranoid never inherits the GPU from this
+# global flag; opt in per-level with expose_gpu = true in the paranoid fragment.
 # expose_gpu = false
 
 # Extra home subdirectories to expose read-only (relative to $HOME).

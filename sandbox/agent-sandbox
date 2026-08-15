@@ -81,6 +81,8 @@ auto_expose_path = true
 # a minimal synthetic devtmpfs, so CUDA/GPU runtimes silently fall back to
 # CPU. When true, /dev/nvidia* and /dev/dri are re-exposed via dev-binds.
 # Off by default: the GPU driver ioctl surface is extra kernel attack surface.
+# Ignored at the paranoid level — paranoid never inherits the GPU from this
+# global flag; opt in per-level with expose_gpu = true in the paranoid fragment.
 # expose_gpu = false
 
 # Extra home subdirectories to expose read-only (relative to $HOME).
@@ -4188,6 +4190,15 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             )
             sys.exit(1)
         config = merge_sandbox_level(config, fragment)
+        if sandbox_level == "paranoid" and paranoid_gpu_denied(
+            config.get("sandbox", {}), fragment
+        ):
+            config.setdefault("sandbox", {})["expose_gpu"] = False
+            print(
+                "gpu: hidden at paranoid — set expose_gpu = true in the "
+                "paranoid fragment itself to override (#280)",
+                file=sys.stderr,
+            )
 
     # CLI --backend overrides the configured [sandbox].backend for this run.
     if getattr(args, "backend", None):
@@ -6940,6 +6951,19 @@ def print_learn_report(
         print(f"    Review and merge into your config.toml")
 
     print()
+
+
+def paranoid_gpu_denied(merged_sandbox: dict, fragment: dict) -> bool:
+    """#280: paranoid never inherits the GPU silently. The global
+    [sandbox].expose_gpu opt-in is honoured at every other level, but the
+    paranoid threat model (untrusted agent: unshare_net, credential proxy,
+    scratch home) must not gain the GPU driver ioctl surface as a side
+    effect of a host-wide flag — the paranoid fragment itself has to set
+    ``expose_gpu = true``. Returns True when the merged config asks for the
+    GPU but the fragment didn't explicitly opt in."""
+    return bool(merged_sandbox.get("expose_gpu", False)) and not bool(
+        (fragment.get("sandbox", {}) or {}).get("expose_gpu", False)
+    )
 
 
 def gpu_dev_bind_args(sandbox_conf: dict) -> list[str]:
