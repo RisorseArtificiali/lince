@@ -437,6 +437,9 @@ SANDBOX_CONFIG_SCHEMA = {
                                                 "between sessions", True),
                 "auto_expose_path": _d(_BOOL, "Auto-detect $PATH entries under $HOME "
                                               "and expose them read-only", True),
+                "expose_gpu": _d(_BOOL, "Expose host GPU device nodes "
+                                        "(/dev/nvidia*, /dev/dri) inside the "
+                                        "bwrap sandbox (#280)", False),
                 "home_ro_dirs": _d(_STR_LIST, "Extra home subdirectories to expose "
                                               "read-only (relative to $HOME)",
                                    [".config/gcloud"]),

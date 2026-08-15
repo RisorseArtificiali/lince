@@ -77,6 +77,12 @@ persist_toolchains = true
 # ~/Applications/apache-maven-3.9.14/bin).
 auto_expose_path = true
 
+# Expose the host GPU inside the bwrap sandbox (#280). The default /dev is
+# a minimal synthetic devtmpfs, so CUDA/GPU runtimes silently fall back to
+# CPU. When true, /dev/nvidia* and /dev/dri are re-exposed via dev-binds.
+# Off by default: the GPU driver ioctl surface is extra kernel attack surface.
+# expose_gpu = false
+
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
 # don't use is harmless.

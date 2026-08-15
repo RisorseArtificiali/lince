@@ -39,6 +39,11 @@
           "description": "Auto-detect $PATH entries under $HOME and expose them read-only",
           "default": true
         },
+        "expose_gpu": {
+          "type": "boolean",
+          "description": "Expose host GPU device nodes (/dev/nvidia*, /dev/dri) inside the bwrap sandbox (#280)",
+          "default": false
+        },
         "home_ro_dirs": {
           "type": "array",
           "items": {
