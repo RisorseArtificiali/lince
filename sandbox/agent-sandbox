@@ -78,12 +78,13 @@ persist_toolchains = true
 auto_expose_path = true
 
 # Expose the host GPU inside the bwrap sandbox (#280). The default /dev is
-# a minimal synthetic devtmpfs, so CUDA/GPU runtimes silently fall back to
-# CPU. When true, /dev/nvidia* and /dev/dri are re-exposed via dev-binds.
-# Off by default: the GPU driver ioctl surface is extra kernel attack surface.
-# Ignored at the paranoid level — paranoid never inherits the GPU from this
-# global flag; opt in per-level with expose_gpu = true in the paranoid fragment.
-# expose_gpu = false
+# a minimal synthetic devtmpfs, so without this the CUDA device nodes are
+# missing and GPU runtimes silently fall back to CPU. When true (the
+# default), /dev/nvidia* and /dev/dri are re-exposed via dev-binds at
+# normal/permissive/custom levels. Set false to hide the GPU everywhere.
+# The paranoid level ignores this global flag either way — paranoid only
+# exposes the GPU when its own fragment sets expose_gpu = true.
+# expose_gpu = true
 
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
@@ -4194,11 +4195,15 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             config.get("sandbox", {}), fragment
         ):
             config.setdefault("sandbox", {})["expose_gpu"] = False
-            print(
-                "gpu: hidden at paranoid — set expose_gpu = true in the "
-                "paranoid fragment itself to override (#280)",
-                file=sys.stderr,
-            )
+            # Note only where it means something: expose_gpu defaults to
+            # true, so without this guard every paranoid run on a GPU-less
+            # host would print a misleading "hidden" line.
+            if any(n.startswith("nvidia") for n in os.listdir("/dev")):
+                print(
+                    "gpu: hidden at paranoid — set expose_gpu = true in the "
+                    "paranoid fragment itself to override (#280)",
+                    file=sys.stderr,
+                )
 
     # CLI --backend overrides the configured [sandbox].backend for this run.
     if getattr(args, "backend", None):
@@ -5056,7 +5061,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             print(f"  agent-cfg   {cc_dir} (isolated copy)")
     print(f"  project     {project_dir}")
     print(f"  filesystem  read-only root, writable project dir")
-    if config.get("sandbox", {}).get("expose_gpu", False):
+    if config.get("sandbox", {}).get("expose_gpu", True):
         print(f"  gpu         exposed (/dev/nvidia*, /dev/dri) — #280 opt-in")
     print(f"  network     enabled")
     if landlock is None:
@@ -6961,7 +6966,7 @@ def paranoid_gpu_denied(merged_sandbox: dict, fragment: dict) -> bool:
     effect of a host-wide flag — the paranoid fragment itself has to set
     ``expose_gpu = true``. Returns True when the merged config asks for the
     GPU but the fragment didn't explicitly opt in."""
-    return bool(merged_sandbox.get("expose_gpu", False)) and not bool(
+    return bool(merged_sandbox.get("expose_gpu", True)) and not bool(
         (fragment.get("sandbox", {}) or {}).get("expose_gpu", False)
     )
 
@@ -6975,7 +6980,7 @@ def gpu_dev_bind_args(sandbox_conf: dict) -> list[str]:
     ``--dev /dev`` mount. Globbed at run time (multi-GPU friendly);
     ``--dev-bind-try`` no-ops on GPU-less machines. ``/dev/dri`` covers
     Vulkan / ROCm / VAAPI."""
-    if not sandbox_conf.get("expose_gpu", False):
+    if not sandbox_conf.get("expose_gpu", True):
         return []
     args: list[str] = []
     gpu_paths = [f"/dev/{n}" for n in sorted(os.listdir("/dev"))

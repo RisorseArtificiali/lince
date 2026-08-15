@@ -441,7 +441,7 @@ SANDBOX_CONFIG_SCHEMA = {
                                         "(/dev/nvidia*, /dev/dri) inside the "
                                         "bwrap sandbox (#280); ignored at "
                                         "paranoid unless the paranoid fragment "
-                                        "itself opts in", False),
+                                        "itself opts in", True),
                 "home_ro_dirs": _d(_STR_LIST, "Extra home subdirectories to expose "
                                               "read-only (relative to $HOME)",
                                    [".config/gcloud"]),

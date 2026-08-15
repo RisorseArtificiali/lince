@@ -25,7 +25,7 @@ Filesystem exposure and backend selection.
 | `ro_dirs` | list[string] | `["~/project"]` | Directories with read-only access |
 | `persist_toolchains` | bool | `true` | Persist cargo/npm/go/uv caches between sessions |
 | `auto_expose_path` | bool | `true` | Auto-detect $PATH entries under $HOME and expose them read-only |
-| `expose_gpu` | bool | `false` | Expose host GPU device nodes (/dev/nvidia*, /dev/dri) inside the bwrap sandbox (#280); ignored at paranoid unless the paranoid fragment itself opts in |
+| `expose_gpu` | bool | `true` | Expose host GPU device nodes (/dev/nvidia*, /dev/dri) inside the bwrap sandbox (#280); ignored at paranoid unless the paranoid fragment itself opts in |
 | `home_ro_dirs` | list[string] | `[".config/gcloud"]` | Extra home subdirectories to expose read-only (relative to $HOME) |
 | `default_provider` | str | `""` | Provider used when -P / --provider is not given; empty = none |
 | `default_profile` | str | — | LEGACY alias of default_provider (pre-#81); run migrate-providers |
