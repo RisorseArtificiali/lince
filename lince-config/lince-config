@@ -131,6 +131,7 @@ _LEVEL_SCHEMA = {
         "block_git_push": _BOOL,
         "allow_domains": _STR_LIST,
         "home_ro_dirs": _STR_LIST,
+        "home_rw_dirs": _STR_LIST,
         "passthrough": _STR_LIST,
         "env_extra": _STR_MAP,
     },
@@ -440,6 +441,10 @@ SANDBOX_CONFIG_SCHEMA = {
                 "home_ro_dirs": _d(_STR_LIST, "Extra home subdirectories to expose "
                                               "read-only (relative to $HOME)",
                                    [".config/gcloud"]),
+                "home_rw_dirs": _d(_STR_LIST, "Real home subdirectories to mount "
+                                              "read-write (relative to $HOME); "
+                                              "shadows any isolated toolchain cache "
+                                              "in the same subtree (#286)", []),
                 "default_provider": _d(_STR, "Provider used when -P / --provider is "
                                              "not given; empty = none", ""),
                 "default_profile": _d(_STR, "LEGACY alias of default_provider "

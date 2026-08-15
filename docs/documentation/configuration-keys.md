@@ -26,6 +26,7 @@ Filesystem exposure and backend selection.
 | `persist_toolchains` | bool | `true` | Persist cargo/npm/go/uv caches between sessions |
 | `auto_expose_path` | bool | `true` | Auto-detect $PATH entries under $HOME and expose them read-only |
 | `home_ro_dirs` | list[string] | `[".config/gcloud"]` | Extra home subdirectories to expose read-only (relative to $HOME) |
+| `home_rw_dirs` | list[string] | `[]` | Real home subdirectories to mount read-write (relative to $HOME); shadows any isolated toolchain cache in the same subtree (#286) |
 | `default_provider` | str | `""` | Provider used when -P / --provider is not given; empty = none |
 | `default_profile` | str | — | LEGACY alias of default_provider (pre-#81); run migrate-providers |
 | `backend` | str | `"auto"` | "agent-sandbox" (bwrap), "seatbelt" (macOS), "nono" (deprecated), or "auto" |

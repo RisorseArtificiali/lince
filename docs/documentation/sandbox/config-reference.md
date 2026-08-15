@@ -41,9 +41,10 @@ General sandbox behavior and filesystem exposure.
 |-----|------|---------|-------------|
 | `extra_rw` | list of strings | `[]` | Extra directories the agent can write to (besides the current project) |
 | `ro_dirs` | list of strings | `["~/project"]` | Directories the agent can read but not write |
-| `persist_toolchains` | bool | `true` | Persist build-tool caches (cargo registry, npm cache, go modules) between sessions |
+| `persist_toolchains` | bool | `true` | Persist build-tool caches (cargo registry, npm cache, go modules, uv, Maven `~/.m2/repository`) between sessions. Caches live in `~/.agent-sandbox/toolchains/` — isolated from the host's own caches |
 | `auto_expose_path` | bool | `true` | Auto-detect `$PATH` entries under `$HOME` and expose them read-only. Top-level dirs are mounted, and deeper subdirectories explicitly in the host PATH are also added to the sandbox PATH (e.g. `~/Applications/apache-maven-3.9.14/bin`) |
 | `home_ro_dirs` | list of strings | `[".config/gcloud"]` | Additional home subdirectories to expose read-only (relative to `$HOME`). Note: this only mounts the filesystem — it does not add entries to PATH. Add the tool's `bin` directory to your host shell PATH for automatic sandbox PATH inclusion |
+| `home_rw_dirs` | list of strings | `[]` | Real home subdirectories to mount **read-write** (relative to `$HOME`). Mounted after the toolchain caches, so a real dir here shadows any isolated cache in the same subtree — this is how the permissive level mounts the real `~/.m2` over the normal-level Maven cache (#286). Missing host dirs are skipped |
 | `default_provider` | string | `""` | Default provider (env-var bundle) when `-P` / `--provider` is not specified. Set to a provider name defined in `[providers.*]` / `[<agent>.providers.*]`. Leave empty to run without a provider. The legacy spelling `default_profile` is still accepted (gh#81). |
 | `backend` | string | `"auto"` | Sandbox backend: `"agent-sandbox"` (bubblewrap, Linux), `"seatbelt"` (macOS sandbox-exec, recommended on macOS), `"nono"` (Landlock/Seatbelt, **deprecated**), or `"auto"` (prefers agent-sandbox on Linux, seatbelt on macOS) |
 

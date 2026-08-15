@@ -5,6 +5,13 @@
 [sandbox]
 home_ro_dirs = [".config/gh", ".cache", ".ssh/known_hosts"]
 
+# Maven three-tier policy (#286): permissive mounts the REAL ~/.m2
+# read-write (trusted agent — same posture as .config/gh above; note the
+# agent can write the cache the HOST builds also consume). Normal uses an
+# isolated persistent cache (toolchains/m2-repository); paranoid gets
+# nothing (ephemeral tmpfs).
+home_rw_dirs = [".m2"]
+
 [env]
 # Keyring-auth users rely on GH_TOKEN/GITHUB_TOKEN; --clearenv would wipe them.
 passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]

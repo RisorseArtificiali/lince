@@ -49,6 +49,14 @@
             ".config/gcloud"
           ]
         },
+        "home_rw_dirs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Real home subdirectories to mount read-write (relative to $HOME); shadows any isolated toolchain cache in the same subtree (#286)",
+          "default": []
+        },
         "default_provider": {
           "type": "string",
           "description": "Provider used when -P / --provider is not given; empty = none",
