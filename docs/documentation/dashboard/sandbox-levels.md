@@ -56,6 +56,7 @@ The table below summarises the differences. Sections after it give the concrete 
 | `gh` CLI                                | no                            | no                     | no                    | no                 | yes                                                     |
 | `docker` / `podman`                     | no                            | no                     | no                    | no                 | **no** (out of scope)                                   |
 | direct `git push`                       | no                            | no                     | no                    | no                 | **no** (use `gh` instead)                               |
+| GPU (`[sandbox].expose_gpu`, #280)      | **hidden** — global flag ignored; fragment must opt in | host `/dev` visible (Landlock doesn't virtualize /dev) | n/a (no CUDA on macOS) | exposed by default (`expose_gpu = false` to hide) | exposed by default (`expose_gpu = false` to hide) |
 
 ### 2.1 Paranoid
 
