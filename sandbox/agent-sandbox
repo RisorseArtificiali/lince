@@ -2934,6 +2934,46 @@ def ensure_git_wrapper() -> Path:
     return bin_dir
 
 
+# ---------------------------------------------------------------------------
+# Host-open bridge: xdg-open shim (#284)
+# ---------------------------------------------------------------------------
+
+XDG_OPEN_SHIM = """\
+#!/bin/bash
+# agent-sandbox: host-open bridge for xdg-open (#284)
+#
+# Inside the bwrap sandbox the home is hidden and /tmp is private, so the
+# stock xdg-open cannot see ~/.config/mimeapps.list (wrong browser picked)
+# and X11 browsers cannot start (no /tmp/.X11-unix). Instead of launching
+# a blank-profile browser inside the sandbox, forward the open to the
+# HOST: the Zellij socket is already mounted for the status pipes, and
+# `zellij run` executes commands host-side -- the URL lands in the user's
+# real default browser with their real profile. The helper pane closes
+# itself as soon as the host xdg-open returns.
+#
+# Outside Zellij, fall back to the stock xdg-open inside the sandbox.
+if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
+    exec zellij run --name "xdg-open" --close-on-exit --floating -- xdg-open "$@"
+fi
+exec /usr/bin/xdg-open "$@"
+"""
+
+
+def ensure_xdg_open_shim() -> Path:
+    """Create (or verify) the host-open xdg-open shim (#284)."""
+    bin_dir = SANDBOX_DIR / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "xdg-open"
+    try:
+        if shim.exists() and shim.read_text() == XDG_OPEN_SHIM:
+            return bin_dir
+    except OSError:
+        pass
+    shim.write_text(XDG_OPEN_SHIM)
+    shim.chmod(0o755)
+    return bin_dir
+
+
 def prepare_seatbelt_git_blocking(config: dict) -> dict[str, str]:
     """Set up git push blocking for the seatbelt backend.
 
@@ -3058,6 +3098,14 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
 
     # --- 3. Hide entire $HOME ------------------------------------------------
     cmd += ["--tmpfs", home]
+
+    # --- 3b. Sandbox helper bin (git wrapper + xdg-open shim, #284) ----------
+    # SANDBOX_DIR/bin is first in the sandbox PATH (see PATH construction
+    # below) but was historically never mounted by the bwrap backend, so the
+    # git wrapper and the host-open xdg-open shim living there were inert.
+    sandbox_bin = SANDBOX_DIR / "bin"
+    if sandbox_bin.is_dir():
+        cmd += ["--ro-bind", str(sandbox_bin), str(sandbox_bin)]
 
     # --- 4. Read-only dirs (including user projects) -------------------------
     for d in sandbox.get("ro_dirs", []):
@@ -3525,9 +3573,11 @@ def cmd_init(args) -> None:
         shutil.copy2(agents_defaults_src, agents_defaults_dst)
         print(f"  agents-defaults {agents_defaults_dst}")
 
-    # Git-push wrapper
+    # Git-push wrapper + host-open xdg-open shim (#284)
     ensure_git_wrapper()
     print(f"  git wrapper   {SANDBOX_DIR / 'bin' / 'git'}")
+    ensure_xdg_open_shim()
+    print(f"  xdg-open shim {SANDBOX_DIR / 'bin' / 'xdg-open'}")
 
     # Auto-detected PATH dirs
     home_dirs = detect_home_path_dirs()
@@ -4220,9 +4270,11 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     agent_name = args.agent
     agent_cfg = resolve_agent_config(config, agent_name)
 
-    # Ensure git wrapper exists (only needed for bwrap backend)
-    if backend == "agent-sandbox" and config.get("security", {}).get("block_git_push", True):
-        ensure_git_wrapper()
+    # Ensure git wrapper + xdg-open shim exist (only needed for bwrap backend)
+    if backend == "agent-sandbox":
+        ensure_xdg_open_shim()
+        if config.get("security", {}).get("block_git_push", True):
+            ensure_git_wrapper()
 
     # Logging
     log_conf = config.get("logging", {})
@@ -7345,7 +7397,8 @@ def cmd_learn(args) -> None:
     agent_name = args.agent
     agent_cfg = resolve_agent_config(config, agent_name)
 
-    # Ensure git wrapper exists
+    # Ensure git wrapper + xdg-open shim exist
+    ensure_xdg_open_shim()
     if config.get("security", {}).get("block_git_push", True):
         ensure_git_wrapper()
 
