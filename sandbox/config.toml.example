@@ -17,6 +17,15 @@ persist_toolchains = true
 # ~/Applications/apache-maven-3.9.14/bin).
 auto_expose_path = true
 
+# Expose the host GPU inside the bwrap sandbox (#280). The default /dev is
+# a minimal synthetic devtmpfs, so without this the CUDA device nodes are
+# missing and GPU runtimes silently fall back to CPU. When true (the
+# default), /dev/nvidia* and /dev/dri are re-exposed via dev-binds at
+# normal/permissive/custom levels. Set false to hide the GPU everywhere.
+# The paranoid level ignores this global flag either way — paranoid only
+# exposes the GPU when its own fragment sets expose_gpu = true.
+# expose_gpu = true
+
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
 # don't use is harmless.

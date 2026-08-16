@@ -159,6 +159,61 @@ OPENAI_API_KEY = "$OPENAI_API_KEY"
 "agent-turn-complete" = "input"
 turn_complete = "input"
 
+[agents.bob]
+# Legacy fallback command — ignored when sandbox_level is set.
+command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "bob"]
+pane_title_pattern = "agent-sandbox"
+status_pipe_name = "lince-status"
+display_name = "Bob"
+short_label = "BOB"
+color = "cyan"
+sandboxed = true
+has_native_hooks = true
+home_rw_dirs = ["~/.bob/"]
+providers = ["__discover__"]
+sandbox_level = "normal"
+# Only levels with a shipped profile fragment. Paranoid is intentionally
+# absent: it would need bob's IBM endpoints (gateway, MCSP auth refresh) in
+# the credential-proxy allow_domains — add sandbox/profiles/bob-paranoid.toml
+# before widening this list.
+sandbox_levels = ["normal", "permissive"]
+
+# Bob (IBM bobshell) has Claude-Code-style hooks: same settings.json "hooks"
+# shape, same stdin JSON contract (hook_event_name). Registered globally in
+# ~/.bob/settings/settings.json by hooks/install-bob-hooks.sh. Bob has NO
+# Notification event, so the PERMISSION state is never emitted (moot with
+# --auto-approve in the sandboxed default args).
+[agents.bob.event_map]
+PreToolUse = "running"
+PostToolUse = "running"
+SessionStart = "input"
+UserPromptSubmit = "running"
+# Bob's `Stop` hook fires when the turn ends and the prompt returns to the
+# user (same semantics as Claude's) — map to `input`. Process termination is
+# detected by the dashboard's pane-exit reconciliation.
+Stop = "input"
+
+[agents.bob-unsandboxed]
+# Bare `bob` (the chat TUI): outside the sandbox we keep bob's own approval
+# prompts and folder-trust flow instead of --auto-approve/--trust.
+command = ["bob"]
+pane_title_pattern = "bob"
+status_pipe_name = "lince-status"
+display_name = "Bob (unsandboxed)"
+short_label = "BOU"
+color = "red"
+sandboxed = false
+has_native_hooks = true
+providers = ["__discover__"]
+
+[agents.bob-unsandboxed.event_map]
+PreToolUse = "running"
+PostToolUse = "running"
+SessionStart = "input"
+UserPromptSubmit = "running"
+# See [agents.bob.event_map] above for the Stop = "input" rationale.
+Stop = "input"
+
 [agents.gemini]
 # Legacy fallback command — ignored when sandbox_level is set.
 command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "gemini"]

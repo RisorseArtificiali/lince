@@ -69,6 +69,7 @@ echo ""
 HOOKS=(
     "$HOME/.local/bin/claude-status-hook.sh"
     "$HOME/.local/bin/codex-status-hook.sh"
+    "$HOME/.local/bin/bob-status-hook.sh"
 )
 FOUND_HOOKS=()
 for hook in "${HOOKS[@]}"; do
@@ -176,6 +177,30 @@ if [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
     fi
 else
     echo "  Settings.json not found or jq missing — skipping hook cleanup"
+fi
+echo ""
+
+# ── Bob hooks in settings/settings.json ────────────────────────────────
+BOB_SETTINGS="$HOME/.bob/settings/settings.json"
+if [ -f "$BOB_SETTINGS" ] && command -v jq >/dev/null 2>&1; then
+    if jq -e '[.hooks[]?[]?.hooks[]?.command] | index("bob-status-hook.sh")' "$BOB_SETTINGS" >/dev/null 2>&1; then
+        echo -e "${YELLOW}Found dashboard hooks in $BOB_SETTINGS${NC}"
+        if confirm "  Remove hook entries from Bob settings?"; then
+            UPDATED=$(jq '
+                .hooks |= with_entries(
+                    .value |= [.[] | select([.hooks[]?.command] | index("bob-status-hook.sh") | not)]
+                ) |
+                .hooks |= with_entries(select(.value != [])) |
+                if .hooks == {} then del(.hooks) else . end
+            ' "$BOB_SETTINGS")
+            echo "$UPDATED" > "$BOB_SETTINGS"
+            echo -e "${GREEN}  ✓ Removed hook entries${NC}"
+        fi
+    else
+        echo "  No dashboard hooks in Bob settings — skipping"
+    fi
+else
+    echo "  Bob settings not found or jq missing — skipping hook cleanup"
 fi
 echo ""
 

@@ -56,6 +56,7 @@ The table below summarises the differences. Sections after it give the concrete 
 | `gh` CLI                                | no                            | no                     | no                    | no                 | yes                                                     |
 | `docker` / `podman`                     | no                            | no                     | no                    | no                 | **no** (out of scope)                                   |
 | direct `git push`                       | no                            | no                     | no                    | no                 | **no** (use `gh` instead)                               |
+| GPU (`[sandbox].expose_gpu`, #280)      | **hidden** — global flag ignored; fragment must opt in | host `/dev` visible (Landlock doesn't virtualize /dev) | n/a (no CUDA on macOS) | exposed by default (`expose_gpu = false` to hide) | exposed by default (`expose_gpu = false` to hide) |
 | Maven `~/.m2` (#286)                    | nothing (ephemeral tmpfs — re-downloads each run) | nothing (ephemeral) | nothing (ephemeral) | isolated persistent cache (`toolchains/m2-repository` ↔ `~/.m2/repository`; settings.xml stays hidden) | **real `~/.m2`** read-write (agent can write the cache host builds consume) |
 
 ### 2.1 Paranoid
@@ -308,7 +309,7 @@ Press `2` and/or `3` to toggle, `Enter` to confirm. The selection is forwarded t
 
 `install.sh` invoked **standalone** (without going through the quickstart) does not prompt. Pass `--sandbox-levels=paranoid,permissive` or set `LINCE_SANDBOX_LEVELS` to opt in.
 
-**Per-agent feature support is implicit.** Only agents that ship a `[agents.<agent>-<level>]` block in `agents-template.toml` get a variant for that level. Agents without one are silently skipped — your selection is honoured for every agent that does support the level. Today claude and codex support both paranoid and permissive; gemini, opencode, and pi follow once their respective tasks land (LINCE-100/101/102), and the multi-select picks them up automatically.
+**Per-agent feature support is implicit.** Only agents that ship a `[agents.<agent>-<level>]` block in `agents-template.toml` get a variant for that level. Agents without one are silently skipped — your selection is honoured for every agent that does support the level. Today claude and codex support both paranoid and permissive; gemini, opencode, and pi follow once their respective tasks land (LINCE-100/101/102), and the multi-select picks them up automatically. Bob ships permissive only (`sandbox_levels = ["normal", "permissive"]`) — a paranoid fragment needs bob's IBM endpoints in the credential-proxy `allow_domains` and is deliberately not shipped yet.
 
 ### 5.2 After install (manual)
 

@@ -44,7 +44,8 @@ home_rw_dirs = [".m2"]
 # GH_TOKEN / GITHUB_TOKEN being exported in their shell — the sandbox's
 # default --clearenv would otherwise wipe them. Append-merged with the
 # user's [env].passthrough.
-passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]
+# GH_ENTERPRISE_TOKEN serves gh CLI users on GitHub Enterprise hosts.
+passthrough = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"]
 
 [security]
 credential_proxy = false

@@ -22,6 +22,7 @@ Quick reference for what the sandbox blocks and what it lets through.
 | `~/.config/gcloud/` | Read-only | Vertex AI credentials |
 | Version managers (`.nvm`, `.rustup`, `.pyenv`, `.sdkman`) | Read-only | Auto-detected from PATH |
 | Toolchain caches (`.cargo/registry`, `.npm/`, `.uv-cache/`, `.go/`, `.m2/repository`) | Read-Write | Persistent across sessions, isolated from the host caches. At permissive, the real `~/.m2` is mounted instead (#286) |
+| `~/.agent-sandbox/bin/` | Read-only | Sandbox helpers, first in PATH: git-push blocker + `xdg-open` host-open bridge (#284) — inside Zellij, URL opens are forwarded to the host browser via `zellij run` |
 | `/tmp` | Read-Write | Fresh tmpfs, isolated from host |
 | Home directory (`~/`) | Tmpfs | Ephemeral overlay, hides everything not explicitly mounted |
 

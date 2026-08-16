@@ -40,12 +40,13 @@ USE_DEFAULTS=false
 AGENTS=(
     "claude|Claude Code|Anthropic's AI coding agent"
     "codex|OpenAI Codex|OpenAI's coding agent (CLI)"
+    "bob|Bob|IBM's AI coding agent (CLI)"
     "gemini|Google Gemini CLI|Google's AI coding agent"
     "opencode|OpenCode|Open-source coding agent"
     "pi|Pi|Minimal coding agent (https://pi.dev)"
 )
 # Track selection state (1=selected, 0=not)
-AGENT_SELECTED=(1 1 0 0 0)  # claude and codex on by default
+AGENT_SELECTED=(1 1 0 0 0 0)  # claude and codex on by default
 
 # Available backends: key|display_name|description|installed
 BACKENDS=(

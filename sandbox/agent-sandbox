@@ -77,6 +77,15 @@ persist_toolchains = true
 # ~/Applications/apache-maven-3.9.14/bin).
 auto_expose_path = true
 
+# Expose the host GPU inside the bwrap sandbox (#280). The default /dev is
+# a minimal synthetic devtmpfs, so without this the CUDA device nodes are
+# missing and GPU runtimes silently fall back to CPU. When true (the
+# default), /dev/nvidia* and /dev/dri are re-exposed via dev-binds at
+# normal/permissive/custom levels. Set false to hide the GPU everywhere.
+# The paranoid level ignores this global flag either way — paranoid only
+# exposes the GPU when its own fragment sets expose_gpu = true.
+# expose_gpu = true
+
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
 # don't use is harmless.
@@ -399,7 +408,7 @@ DEFAULT_BLOCKED_HOSTS: set[str] = {
 # can't inject a credential the agent doesn't have on the host, so
 # OAuth users need to drop to normal/permissive (or switch to API-key
 # auth). See docs/documentation/dashboard/sandbox-levels.md.
-OAUTH_CAPABLE_AGENTS: frozenset[str] = frozenset({"gemini", "claude"})
+OAUTH_CAPABLE_AGENTS: frozenset[str] = frozenset({"gemini", "claude", "bob"})
 
 _proxy_logger = logging.getLogger("agent-sandbox.proxy")
 
@@ -2925,6 +2934,46 @@ def ensure_git_wrapper() -> Path:
     return bin_dir
 
 
+# ---------------------------------------------------------------------------
+# Host-open bridge: xdg-open shim (#284)
+# ---------------------------------------------------------------------------
+
+XDG_OPEN_SHIM = """\
+#!/bin/bash
+# agent-sandbox: host-open bridge for xdg-open (#284)
+#
+# Inside the bwrap sandbox the home is hidden and /tmp is private, so the
+# stock xdg-open cannot see ~/.config/mimeapps.list (wrong browser picked)
+# and X11 browsers cannot start (no /tmp/.X11-unix). Instead of launching
+# a blank-profile browser inside the sandbox, forward the open to the
+# HOST: the Zellij socket is already mounted for the status pipes, and
+# `zellij run` executes commands host-side -- the URL lands in the user's
+# real default browser with their real profile. The helper pane closes
+# itself as soon as the host xdg-open returns.
+#
+# Outside Zellij, fall back to the stock xdg-open inside the sandbox.
+if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
+    exec zellij run --name "xdg-open" --close-on-exit --floating -- xdg-open "$@"
+fi
+exec /usr/bin/xdg-open "$@"
+"""
+
+
+def ensure_xdg_open_shim() -> Path:
+    """Create (or verify) the host-open xdg-open shim (#284)."""
+    bin_dir = SANDBOX_DIR / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "xdg-open"
+    try:
+        if shim.exists() and shim.read_text() == XDG_OPEN_SHIM:
+            return bin_dir
+    except OSError:
+        pass
+    shim.write_text(XDG_OPEN_SHIM)
+    shim.chmod(0o755)
+    return bin_dir
+
+
 def prepare_seatbelt_git_blocking(config: dict) -> dict[str, str]:
     """Set up git push blocking for the seatbelt backend.
 
@@ -3044,10 +3093,19 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
         cmd += ["--ro-bind", wayland_socket, f"/run/user/{uid}/{wayland_display}"]
     cmd += ["--tmpfs", "/var/tmp"]
     cmd += ["--dev", "/dev"]
+    cmd += gpu_dev_bind_args(sandbox)
     cmd += ["--proc", "/proc"]
 
     # --- 3. Hide entire $HOME ------------------------------------------------
     cmd += ["--tmpfs", home]
+
+    # --- 3b. Sandbox helper bin (git wrapper + xdg-open shim, #284) ----------
+    # SANDBOX_DIR/bin is first in the sandbox PATH (see PATH construction
+    # below) but was historically never mounted by the bwrap backend, so the
+    # git wrapper and the host-open xdg-open shim living there were inert.
+    sandbox_bin = SANDBOX_DIR / "bin"
+    if sandbox_bin.is_dir():
+        cmd += ["--ro-bind", str(sandbox_bin), str(sandbox_bin)]
 
     # --- 4. Read-only dirs (including user projects) -------------------------
     for d in sandbox.get("ro_dirs", []):
@@ -3534,9 +3592,11 @@ def cmd_init(args) -> None:
         shutil.copy2(agents_defaults_src, agents_defaults_dst)
         print(f"  agents-defaults {agents_defaults_dst}")
 
-    # Git-push wrapper
+    # Git-push wrapper + host-open xdg-open shim (#284)
     ensure_git_wrapper()
     print(f"  git wrapper   {SANDBOX_DIR / 'bin' / 'git'}")
+    ensure_xdg_open_shim()
+    print(f"  xdg-open shim {SANDBOX_DIR / 'bin' / 'xdg-open'}")
 
     # Auto-detected PATH dirs
     home_dirs = detect_home_path_dirs()
@@ -4200,6 +4260,19 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             )
             sys.exit(1)
         config = merge_sandbox_level(config, fragment)
+        if sandbox_level == "paranoid" and paranoid_gpu_denied(
+            config.get("sandbox", {}), fragment
+        ):
+            config.setdefault("sandbox", {})["expose_gpu"] = False
+            # Note only where it means something: expose_gpu defaults to
+            # true, so without this guard every paranoid run on a GPU-less
+            # host would print a misleading "hidden" line.
+            if any(n.startswith("nvidia") for n in os.listdir("/dev")):
+                print(
+                    "gpu: hidden at paranoid — set expose_gpu = true in the "
+                    "paranoid fragment itself to override (#280)",
+                    file=sys.stderr,
+                )
 
     # CLI --backend overrides the configured [sandbox].backend for this run.
     if getattr(args, "backend", None):
@@ -4216,9 +4289,11 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     agent_name = args.agent
     agent_cfg = resolve_agent_config(config, agent_name)
 
-    # Ensure git wrapper exists (only needed for bwrap backend)
-    if backend == "agent-sandbox" and config.get("security", {}).get("block_git_push", True):
-        ensure_git_wrapper()
+    # Ensure git wrapper + xdg-open shim exist (only needed for bwrap backend)
+    if backend == "agent-sandbox":
+        ensure_xdg_open_shim()
+        if config.get("security", {}).get("block_git_push", True):
+            ensure_git_wrapper()
 
     # Logging
     log_conf = config.get("logging", {})
@@ -5057,6 +5132,8 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             print(f"  agent-cfg   {cc_dir} (isolated copy)")
     print(f"  project     {project_dir}")
     print(f"  filesystem  read-only root, writable project dir")
+    if config.get("sandbox", {}).get("expose_gpu", True):
+        print(f"  gpu         exposed (/dev/nvidia*, /dev/dri) — #280 opt-in")
     print(f"  network     enabled")
     if landlock is None:
         print("  landlock    off")
@@ -6953,6 +7030,40 @@ def print_learn_report(
     print()
 
 
+def paranoid_gpu_denied(merged_sandbox: dict, fragment: dict) -> bool:
+    """#280: paranoid never inherits the GPU silently. The global
+    [sandbox].expose_gpu opt-in is honoured at every other level, but the
+    paranoid threat model (untrusted agent: unshare_net, credential proxy,
+    scratch home) must not gain the GPU driver ioctl surface as a side
+    effect of a host-wide flag — the paranoid fragment itself has to set
+    ``expose_gpu = true``. Returns True when the merged config asks for the
+    GPU but the fragment didn't explicitly opt in."""
+    return bool(merged_sandbox.get("expose_gpu", True)) and not bool(
+        (fragment.get("sandbox", {}) or {}).get("expose_gpu", False)
+    )
+
+
+def gpu_dev_bind_args(sandbox_conf: dict) -> list[str]:
+    """Opt-in GPU passthrough (#280): `--dev /dev` is a minimal synthetic
+    devtmpfs, so CUDA device nodes don't exist inside the sandbox and GPU
+    runtimes silently fall back to CPU (the userspace libs ARE visible via
+    the ro root — cuInit() just finds no device). With
+    ``[sandbox].expose_gpu = true``, re-expose the host nodes after the
+    ``--dev /dev`` mount. Globbed at run time (multi-GPU friendly);
+    ``--dev-bind-try`` no-ops on GPU-less machines. ``/dev/dri`` covers
+    Vulkan / ROCm / VAAPI."""
+    if not sandbox_conf.get("expose_gpu", True):
+        return []
+    args: list[str] = []
+    gpu_paths = [f"/dev/{n}" for n in sorted(os.listdir("/dev"))
+                 if n.startswith("nvidia")]
+    gpu_paths.append("/dev/dri")
+    for gp in gpu_paths:
+        if os.path.exists(gp):
+            args += ["--dev-bind-try", gp, gp]
+    return args
+
+
 def build_learn_bwrap_cmd(
     config: dict,
     project_dir: Path,
@@ -7013,6 +7124,7 @@ def build_learn_bwrap_cmd(
         ]
     cmd += ["--tmpfs", "/var/tmp"]
     cmd += ["--dev", "/dev"]
+    cmd += gpu_dev_bind_args(sandbox)
     cmd += ["--proc", "/proc"]
 
     # 3. HOME writable — key difference from normal run
@@ -7305,7 +7417,8 @@ def cmd_learn(args) -> None:
     agent_name = args.agent
     agent_cfg = resolve_agent_config(config, agent_name)
 
-    # Ensure git wrapper exists
+    # Ensure git wrapper + xdg-open shim exist
+    ensure_xdg_open_shim()
     if config.get("security", {}).get("block_git_push", True):
         ensure_git_wrapper()
 

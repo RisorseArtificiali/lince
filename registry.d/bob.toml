@@ -1,4 +1,4 @@
-# registry.d/claude.toml — SHIPPED agent definition. Always overwritten
+# registry.d/bob.toml — SHIPPED agent definition. Always overwritten
 # on update (#199 ownership contract) — user overrides and custom agents
 # belong in the user config, never here.
 #
@@ -8,45 +8,31 @@
 # Guarded against drift by scripts/tests/test_registry_sync.py.
 
 [agent]
-name = "claude"
-display_name = "Claude Code"
-short_label = "CLA"
-color = "blue"
-binary = "claude"
-default_args = ["--dangerously-skip-permissions"]
+name = "bob"
+display_name = "Bob"
+short_label = "BOB"
+color = "cyan"
+binary = "bob"
+default_args = ["chat", "--auto-approve", "--trust"]
 
 [sandbox]
 backend = "auto"
 default_level = "normal"
-allowed_levels = []
-home_subdir = ".claude"
+allowed_levels = ["normal", "permissive"]
+home_subdir = ".bob"
 bwrap_conflict = false
 disable_inner_sandbox_args = []
 home_ro_dirs = []
-home_rw_dirs = []
-
-[sandbox.levels.paranoid]
-scratch_home_dirs = [".claude"]
-scratch_home_files = [".claude.json"]
-unshare_net = true
-credential_proxy = true
-allow_domains = []
-
-[sandbox.levels.paranoid.env_extra]
-ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY"
-ANTHROPIC_AUTH_TOKEN = "$ANTHROPIC_AUTH_TOKEN"
-CLAUDE_CODE_OAUTH_TOKEN = "$CLAUDE_CODE_OAUTH_TOKEN"
+home_rw_dirs = [".bob"]
 
 [sandbox.levels.permissive]
 credential_proxy = false
 block_git_push = true
 allow_domains = ["api.github.com", "github.com", "objects.githubusercontent.com"]
 home_ro_dirs = [".config/gh", ".ssh/known_hosts"]
-home_rw_dirs = [".m2"]
 passthrough = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"]
 
 [dashboard]
-status_pipe_name = "claude-status"
 has_native_hooks = true
 providers = ["__discover__"]
 
@@ -57,5 +43,3 @@ PostToolUse = "running"
 SessionStart = "input"
 UserPromptSubmit = "running"
 Stop = "input"
-idle_prompt = "input"
-permission_prompt = "permission"

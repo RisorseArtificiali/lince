@@ -146,26 +146,28 @@ class ResolveTestCase(unittest.TestCase):
         self.assertNotIn("LITERALSECRET", json.dumps(view))
 
     def test_legacy_dashboard_custom_agent_and_level(self):
+        # "acme" must NOT be a shipped agent — the test covers the
+        # custom-agent-only-in-user-config path ("bob" pre-#278 shipped set).
         self.dashboard_cfg.write_text(
             '[agents.claude]\nsandbox_level = "paranoid"\n'
-            '[agents.bob]\n'
-            'command = ["bob", "--go"]\n'
-            'display_name = "Bob CLI"\nshort_label = "BOB"\ncolor = "magenta"\n'
-            'pane_title_pattern = "bob"\nstatus_pipe_name = "lince-status"\n'
+            '[agents.acme]\n'
+            'command = ["acme", "--go"]\n'
+            'display_name = "Acme CLI"\nshort_label = "ACM"\ncolor = "magenta"\n'
+            'pane_title_pattern = "acme"\nstatus_pipe_name = "lince-status"\n'
             'sandboxed = true\n'
-            '[agents.bob.event_map]\nturn_end = "input"\n',
+            '[agents.acme.event_map]\nturn_end = "input"\n',
             encoding="utf-8",
         )
         view = self.resolve()
         self.assertEqual(view["agents"]["claude"]["level"], "paranoid")
         self.assertEqual(view["agents"]["claude"]["origin"]["level"], "user")
-        bob = view["agents"]["bob"]
-        self.assertEqual(bob["binary"], "bob")
-        self.assertEqual(bob["display_name"], "Bob CLI")
-        self.assertEqual(bob["event_map"], {"turn_end": "input"})
+        acme = view["agents"]["acme"]
+        self.assertEqual(acme["binary"], "acme")
+        self.assertEqual(acme["display_name"], "Acme CLI")
+        self.assertEqual(acme["event_map"], {"turn_end": "input"})
         # derived variant for free
-        self.assertEqual(bob["variants"]["unsandboxed"]["short_label"], "BOU")
-        self.assertEqual(bob["variants"]["unsandboxed"]["color"], "red")
+        self.assertEqual(acme["variants"]["unsandboxed"]["short_label"], "ACU")
+        self.assertEqual(acme["variants"]["unsandboxed"]["color"], "red")
 
     def test_legacy_dashboard_enabled_agents_filters_in_dual_read(self):
         """v2 bridge: [dashboard].enabled_agents in the legacy dashboard config
@@ -313,19 +315,20 @@ class ResolveTestCase(unittest.TestCase):
         self.assertFalse(any(i["level"] == "error" for i in issues))
 
     def test_custom_agent_in_lince_toml(self):
+        # "acme" must NOT be a shipped agent (see the legacy-dashboard twin).
         self.write_lince(
             'version = "2.0"\n'
-            '[agents.bob]\n'
-            'binary = "bob"\ndisplay_name = "Bob CLI"\nshort_label = "BOB"\n'
+            '[agents.acme]\n'
+            'binary = "acme"\ndisplay_name = "Acme CLI"\nshort_label = "ACM"\n'
             'color = "magenta"\nprovider = "openai"\nlevel = "normal"\n'
-            '[agents.bob.dashboard]\nhas_native_hooks = false\n'
-            '[agents.bob.event_map]\nturn_end = "input"\n'
+            '[agents.acme.dashboard]\nhas_native_hooks = false\n'
+            '[agents.acme.event_map]\nturn_end = "input"\n'
         )
         view = self.resolve()
-        bob = view["agents"]["bob"]
-        self.assertEqual(bob["display_name"], "Bob CLI")
-        self.assertEqual(bob["event_map"], {"turn_end": "input"})
-        self.assertEqual(bob["variants"]["unsandboxed"]["short_label"], "BOU")
+        acme = view["agents"]["acme"]
+        self.assertEqual(acme["display_name"], "Acme CLI")
+        self.assertEqual(acme["event_map"], {"turn_end": "input"})
+        self.assertEqual(acme["variants"]["unsandboxed"]["short_label"], "ACU")
 
     def test_malformed_lince_custom_agent_fails_that_agent_only(self):
         self.write_lince(
