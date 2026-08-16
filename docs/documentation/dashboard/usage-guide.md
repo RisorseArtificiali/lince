@@ -229,7 +229,7 @@ zellij pipe --name "claude-status" --payload '{"agent_id":"agent-1","event":"Pre
 zellij pipe --name "lince-status" --payload '{"agent_id":"agent-5","event":"stopped"}'
 ```
 
-Hook scripts and their installers live in `lince-dashboard/hooks/`: `install-claude-hooks.sh`, `install-codex-hooks.sh`, `install-opencode-hooks.sh`, `install-pi-hooks.sh`.
+Hook scripts and their installers live in `lince-dashboard/hooks/`: `install-claude-hooks.sh`, `install-codex-hooks.sh`, `install-bob-hooks.sh`, `install-opencode-hooks.sh`, `install-pi-hooks.sh`.
 
 ### File Mode (fallback)
 

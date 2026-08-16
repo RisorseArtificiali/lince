@@ -35,7 +35,7 @@ The primary way to use LINCE is the **TUI Dashboard** — a Zellij WASM plugin t
 
 What the dashboard gives you:
 
-- **Multi-agent**: Spawn up to 8 AI coding agents in parallel (Claude Code, Codex, Gemini, OpenCode, Aider, and any custom agent), each in its own sandboxed pane
+- **Multi-agent**: Spawn up to 8 AI coding agents in parallel (Claude Code, Codex, Bob, Gemini, OpenCode, Aider, and any custom agent), each in its own sandboxed pane
 - **Real-time status**: See at a glance which agents are running, waiting for input, asking for permission, or stopped — five canonical states, color-coded
 - **Pane control**: Show/hide agent panes with a keystroke (`f` to focus, `h` to hide)
 - **Voice relay**: VoxCode transcriptions are piped directly to the focused agent
@@ -120,7 +120,7 @@ Dashboard:       Status updates in real-time (Running → INPUT → Stopped)
 
 ### [lince-dashboard/](lince-dashboard/)
 
-The multi-agent TUI dashboard — a Zellij WASM plugin (Rust, ~900 KB) that manages multiple AI coding agents (Claude Code, Codex, Gemini, OpenCode, and any custom agent). Spawn agents, monitor status, show/hide panes, relay voice input, persist sessions. Agent types are fully config-driven — add new agents via TOML or use the `/lince-add-supported-agent` skill. See [lince-dashboard/README.md](lince-dashboard/README.md).
+The multi-agent TUI dashboard — a Zellij WASM plugin (Rust, ~900 KB) that manages multiple AI coding agents (Claude Code, Codex, Bob, Gemini, OpenCode, and any custom agent). Spawn agents, monitor status, show/hide panes, relay voice input, persist sessions. Agent types are fully config-driven — add new agents via TOML or use the `/lince-add-supported-agent` skill. See [lince-dashboard/README.md](lince-dashboard/README.md).
 
 Documentation: [Usage Guide](https://lince.sh/documentation/#/dashboard/usage-guide) | [Configuration](https://lince.sh/documentation/#/dashboard/config-reference) | [Agent Examples](https://lince.sh/documentation/#/dashboard/agent-examples)
 

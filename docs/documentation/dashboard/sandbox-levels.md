@@ -307,7 +307,7 @@ Press `2` and/or `3` to toggle, `Enter` to confirm. The selection is forwarded t
 
 `install.sh` invoked **standalone** (without going through the quickstart) does not prompt. Pass `--sandbox-levels=paranoid,permissive` or set `LINCE_SANDBOX_LEVELS` to opt in.
 
-**Per-agent feature support is implicit.** Only agents that ship a `[agents.<agent>-<level>]` block in `agents-template.toml` get a variant for that level. Agents without one are silently skipped — your selection is honoured for every agent that does support the level. Today claude and codex support both paranoid and permissive; gemini, opencode, and pi follow once their respective tasks land (LINCE-100/101/102), and the multi-select picks them up automatically.
+**Per-agent feature support is implicit.** Only agents that ship a `[agents.<agent>-<level>]` block in `agents-template.toml` get a variant for that level. Agents without one are silently skipped — your selection is honoured for every agent that does support the level. Today claude and codex support both paranoid and permissive; gemini, opencode, and pi follow once their respective tasks land (LINCE-100/101/102), and the multi-select picks them up automatically. Bob ships permissive only (`sandbox_levels = ["normal", "permissive"]`) — a paranoid fragment needs bob's IBM endpoints in the credential-proxy `allow_domains` and is deliberately not shipped yet.
 
 ### 5.2 After install (manual)
 

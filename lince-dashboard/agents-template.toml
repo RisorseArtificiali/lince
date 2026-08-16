@@ -89,6 +89,26 @@ sandbox_level = "permissive"
 [agents.codex-permissive.env_vars]
 OPENAI_API_KEY = "$OPENAI_API_KEY"
 
+# ── Bob ─────────────────────────────────────────────────────────────
+# Bob ships normal + permissive only. No paranoid variant: it would need
+# bob's IBM endpoints (gateway, MCSP auth refresh) in the credential-proxy
+# allow_domains. Auth is IBM SSO tokens in ~/.bob (mounted rw), no env keys.
+
+[agents.bob-permissive]
+command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "bob"]
+pane_title_pattern = "agent-sandbox"
+status_pipe_name = "lince-status"
+display_name = "Bob (permissive)"
+short_label = "BO+"
+color = "yellow"
+sandboxed = true
+has_native_hooks = true
+bwrap_conflict = false
+disable_inner_sandbox_args = []
+home_rw_dirs = ["~/.bob/"]
+providers = ["__discover__"]
+sandbox_level = "permissive"
+
 # ── Gemini ──────────────────────────────────────────────────────────
 
 [agents.gemini-paranoid]
