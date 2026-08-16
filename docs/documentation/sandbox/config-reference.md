@@ -44,7 +44,7 @@ General sandbox behavior and filesystem exposure.
 | `persist_toolchains` | bool | `true` | Persist build-tool caches (cargo registry, npm cache, go modules, uv, Maven `~/.m2/repository`) between sessions. Caches live in `~/.agent-sandbox/toolchains/` — isolated from the host's own caches |
 | `auto_expose_path` | bool | `true` | Auto-detect `$PATH` entries under `$HOME` and expose them read-only. Top-level dirs are mounted, and deeper subdirectories explicitly in the host PATH are also added to the sandbox PATH (e.g. `~/Applications/apache-maven-3.9.14/bin`) |
 | `expose_gpu` | bool | `true` | Expose the host GPU inside the bwrap sandbox (#280). The default `/dev` is a minimal synthetic devtmpfs, so without this the CUDA device nodes are missing and GPU runtimes silently fall back to CPU; every `/dev/nvidia*` node plus `/dev/dri` is re-exposed via `--dev-bind-try` (multi-GPU friendly, no-op on GPU-less hosts). Set `false` to hide the GPU — the driver ioctl surface is extra kernel attack surface. **Ignored at `paranoid`** either way: the global flag never reaches paranoid runs; to expose the GPU there, set `expose_gpu = true` inside the paranoid fragment itself. The spawn banner shows `gpu exposed` when active |
-| `home_ro_dirs` | list of strings | `[".config/gcloud"]` | Additional home subdirectories to expose read-only (relative to `$HOME`). Note: this only mounts the filesystem — it does not add entries to PATH. Add the tool's `bin` directory to your host shell PATH for automatic sandbox PATH inclusion |
+| `home_ro_dirs` | list of strings | `[".config/gcloud", ".serena", ".config/mimeapps.list"]` | Additional home subdirectories (or files) to expose read-only, relative to `$HOME`. Note: this only mounts the filesystem — it does not add entries to PATH. Add the tool's `bin` directory to your host shell PATH for automatic sandbox PATH inclusion. `.config/mimeapps.list` is what makes `xdg-open` inside the sandbox pick the same default browser you chose on the host (#284) |
 | `home_rw_dirs` | list of strings | `[]` | Real home subdirectories to mount **read-write** (relative to `$HOME`). Mounted after the toolchain caches, so a real dir here shadows any isolated cache in the same subtree — this is how the permissive level mounts the real `~/.m2` over the normal-level Maven cache (#286). Missing host dirs are skipped |
 | `default_provider` | string | `""` | Default provider (env-var bundle) when `-P` / `--provider` is not specified. Set to a provider name defined in `[providers.*]` / `[<agent>.providers.*]`. Leave empty to run without a provider. The legacy spelling `default_profile` is still accepted (gh#81). |
 | `backend` | string | `"auto"` | Sandbox backend: `"agent-sandbox"` (bubblewrap, Linux), `"seatbelt"` (macOS sandbox-exec, recommended on macOS), `"nono"` (Landlock/Seatbelt, **deprecated**), or `"auto"` (prefers agent-sandbox on Linux, seatbelt on macOS) |
@@ -55,7 +55,7 @@ extra_rw = []
 ro_dirs = ["~/project"]
 persist_toolchains = true
 auto_expose_path = true
-home_ro_dirs = [".config/gcloud"]
+home_ro_dirs = [".config/gcloud", ".serena", ".config/mimeapps.list"]
 default_provider = "zai"
 backend = "auto"   # auto: Linux → agent-sandbox; macOS → seatbelt → nono (fallback)
 ```
@@ -140,7 +140,7 @@ Environment variable isolation. All host env vars are cleared; only those listed
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `passthrough` | list of strings | `["TERM", "COLORTERM", "TERM_PROGRAM", "LANG", "LC_ALL", "EDITOR", "VISUAL", "ZELLIJ", "ZELLIJ_SESSION_NAME", "LINCE_AGENT_ID"]` | Host environment variables passed into the sandbox. API keys should go in providers (`[<agent>.providers.<name>.env]`), not here |
+| `passthrough` | list of strings | `["TERM", "COLORTERM", "TERM_PROGRAM", "LANG", "LC_ALL", "EDITOR", "VISUAL", "ZELLIJ", "ZELLIJ_SESSION_NAME", "LINCE_AGENT_ID", "XDG_SESSION_TYPE"]` | Host environment variables passed into the sandbox. API keys should go in providers (`[<agent>.providers.<name>.env]`), not here. `XDG_SESSION_TYPE` lets Chromium-based browsers use their native Wayland backend: the host browser usually runs on Xwayland and the sandbox has no X11 socket, so without it opening a link fails with "Missing X server or $DISPLAY" (#284) |
 
 ### [env.extra]
 
@@ -152,7 +152,7 @@ Static environment variables set inside every sandbox run, regardless of provide
 
 ```toml
 [env]
-passthrough = ["TERM", "COLORTERM", "TERM_PROGRAM", "LANG", "LC_ALL", "EDITOR", "VISUAL"]
+passthrough = ["TERM", "COLORTERM", "TERM_PROGRAM", "LANG", "LC_ALL", "EDITOR", "VISUAL", "XDG_SESSION_TYPE"]
 
 [env.extra]
 # MY_CUSTOM_VAR = "value"
