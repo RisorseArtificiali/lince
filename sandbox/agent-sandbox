@@ -94,7 +94,10 @@ auto_expose_path = true
 # web_dashboard_open_on_launch and won't pop a browser on every launch);
 # Serena's writable data (memories/caches) lives in the project's own
 # .serena dir, which is already read-write inside the sandbox.
-home_ro_dirs = [".config/gcloud", ".serena"]
+# .config/mimeapps.list is your desktop's default-application map: without it
+# xdg-open falls back to the system mimeinfo cache and opens a different
+# browser than the one you chose on the host (#284).
+home_ro_dirs = [".config/gcloud", ".serena", ".config/mimeapps.list"]
 
 # Default provider — env-var bundle used when -P / --provider is not given.
 # Set to a name defined in [providers.*] / [<agent>.providers.*] below.
@@ -174,6 +177,10 @@ passthrough = [
     "ZELLIJ",
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
+    # Lets Chromium-based browsers use their native Wayland backend (#284).
+    # The host's Chrome typically runs on Xwayland, and the sandbox has no
+    # X11 socket, so without this it dies with "Missing X server or $DISPLAY".
+    "XDG_SESSION_TYPE",
 ]
 
 # Additional environment variables to set inside the sandbox.
