@@ -27,6 +27,7 @@ Filesystem exposure and backend selection.
 | `auto_expose_path` | bool | `true` | Auto-detect $PATH entries under $HOME and expose them read-only |
 | `expose_gpu` | bool | `true` | Expose host GPU device nodes (/dev/nvidia*, /dev/dri) inside the bwrap sandbox (#280); ignored at paranoid unless the paranoid fragment itself opts in |
 | `home_ro_dirs` | list[string] | `[".config/gcloud"]` | Extra home subdirectories to expose read-only (relative to $HOME) |
+| `home_rw_dirs` | list[string] | `[]` | Real home subdirectories to mount read-write (relative to $HOME); shadows any isolated toolchain cache in the same subtree (#286) |
 | `default_provider` | str | `""` | Provider used when -P / --provider is not given; empty = none |
 | `default_profile` | str | — | LEGACY alias of default_provider (pre-#81); run migrate-providers |
 | `backend` | str | `"auto"` | "agent-sandbox" (bwrap), "seatbelt" (macOS), "nono" (deprecated), or "auto" |

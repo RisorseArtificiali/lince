@@ -3203,7 +3203,13 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
 
         for name, target in [("cargo", ".cargo"), ("npm-cache", ".npm"),
                              ("go", ".go"), ("uv-cache", ".uv-cache"),
-                             ("uv-tools", ".uv-tools")]:
+                             ("uv-tools", ".uv-tools"),
+                             # Maven: cache the repository only (#286) — the
+                             # rest of ~/.m2 (settings.xml, credentials) stays
+                             # hidden at normal. Permissive mounts the real
+                             # ~/.m2 instead via [sandbox].home_rw_dirs below,
+                             # which shadows this bind.
+                             ("m2-repository", ".m2/repository")]:
             mount_point = f"{home}/{target}"
             d = tc / name
             d.mkdir(parents=True, exist_ok=True)
@@ -3226,6 +3232,18 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
                 # subdirs via extra_rw if needed.
             else:
                 cmd += ["--bind", str(d), mount_point]
+
+    # --- 9b. [sandbox].home_rw_dirs (level fragments / user config, #286) ----
+    # Real home subdirs mounted read-write. Placed AFTER the toolchain
+    # caches on purpose: a real dir mounted here (e.g. permissive's ".m2")
+    # shadows any isolated cache bound inside the same subtree (the
+    # "m2-repository" bind above), so the permissive fragment wins over
+    # the normal-level cache without extra plumbing. Missing host dirs are
+    # skipped — the level then degrades gracefully to the cache behavior.
+    for d in sandbox.get("home_rw_dirs", []):
+        full = home_p / d
+        if full.exists():
+            cmd += ["--bind", str(full), str(full)]
 
     # --- 10. Extra read-write dirs (config) -----------------------------------
     for d in sandbox.get("extra_rw", []):
@@ -3494,6 +3512,7 @@ def cmd_init(args) -> None:
         SANDBOX_DIR / "toolchains" / "go",
         SANDBOX_DIR / "toolchains" / "uv-cache",
         SANDBOX_DIR / "toolchains" / "uv-tools",
+        SANDBOX_DIR / "toolchains" / "m2-repository",
         SANDBOX_DIR / "bin",
         SANDBOX_DIR / "logs",
     ]
@@ -6614,7 +6633,7 @@ class StraceParser:
 
         toolchain_prefixes = tuple(
             os.path.join(home, d) for d in (
-                ".cargo", ".npm", ".cache", ".uv-cache", ".uv-tools",
+                ".cargo", ".npm", ".cache", ".uv-cache", ".uv-tools", ".m2",
                 ".go", ".rustup", ".nvm", ".pyenv", ".local/share/uv",
             )
         )
@@ -6715,6 +6734,7 @@ def _infer_path_comment(path: str) -> str:
         ".cache": "general cache directory",
         ".uv-cache": "uv package cache",
         ".uv-tools": "uv installed tools",
+        ".m2": "Maven local repository",
         ".go": "Go module cache",
         ".rustup": "Rust toolchain manager",
         ".nvm": "Node version manager",

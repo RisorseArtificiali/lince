@@ -57,6 +57,7 @@ The table below summarises the differences. Sections after it give the concrete 
 | `docker` / `podman`                     | no                            | no                     | no                    | no                 | **no** (out of scope)                                   |
 | direct `git push`                       | no                            | no                     | no                    | no                 | **no** (use `gh` instead)                               |
 | GPU (`[sandbox].expose_gpu`, #280)      | **hidden** — global flag ignored; fragment must opt in | host `/dev` visible (Landlock doesn't virtualize /dev) | n/a (no CUDA on macOS) | exposed by default (`expose_gpu = false` to hide) | exposed by default (`expose_gpu = false` to hide) |
+| Maven `~/.m2` (#286)                    | nothing (ephemeral tmpfs — re-downloads each run) | nothing (ephemeral) | nothing (ephemeral) | isolated persistent cache (`toolchains/m2-repository` ↔ `~/.m2/repository`; settings.xml stays hidden) | **real `~/.m2`** read-write (agent can write the cache host builds consume) |
 
 ### 2.1 Paranoid
 

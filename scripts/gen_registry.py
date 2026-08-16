@@ -181,6 +181,9 @@ def load_levels(name: str) -> dict[str, dict]:
         if "home_ro_dirs" in sbx:
             lv["home_ro_dirs"] = sbx["home_ro_dirs"]
             consumed.add(("sandbox", "home_ro_dirs"))
+        if "home_rw_dirs" in sbx:
+            lv["home_rw_dirs"] = sbx["home_rw_dirs"]
+            consumed.add(("sandbox", "home_rw_dirs"))
         env = frag.get("env", {})
         if "passthrough" in env:
             lv["passthrough"] = env["passthrough"]
