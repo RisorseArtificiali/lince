@@ -87,6 +87,93 @@
   <!-- Entries -->
   <section class="max-w-5xl mx-auto px-6 pb-20">
 
+    <!-- 2026-08-23 -->
+    <article id="2026-08-23" class="entry rounded-lg p-8 mb-8">
+      <header class="mb-6 pb-6 border-b border-border">
+        <div class="flex items-baseline gap-4 mb-2 flex-wrap">
+          <time class="font-mono text-sm text-muted" datetime="2026-08-23">2026-08-23</time>
+          <span class="tag tag-sandbox">sandbox</span>
+          <span class="tag tag-install">install</span>
+          <span class="tag tag-docs">docs</span>
+          <span class="tag tag-dashboard">dashboard</span>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">Seatbelt backend, config v2, shell agents &amp; lince-lab</h2>
+        <p class="text-muted leading-relaxed">
+          macOS moves to the native <span class="font-mono text-accent">sandbox-exec</span> (Seatbelt)
+          backend; the external <span class="font-mono">nono</span> backend is deprecated.
+          Configuration converges on a single versioned policy file plus a shipped agent registry,
+          the dashboard gains shell agents, and a new <span class="font-mono text-accent">lince-lab</span>
+          module provides disposable lab VMs.
+        </p>
+      </header>
+
+      <div class="space-y-6">
+
+        <div>
+          <h3 class="font-semibold mb-2 flex items-center gap-2">
+            <span class="text-accent">&#x2192;</span> Seatbelt replaces nono on macOS
+          </h3>
+          <p class="text-sm text-muted leading-relaxed mb-2">
+            The sandbox now ships a native macOS backend built on
+            <span class="font-mono text-accent">sandbox-exec</span> (Seatbelt), which is part of the
+            operating system itself: no extra install, no external dependencies. The legacy
+            <span class="font-mono">nono</span> backend still works but is deprecated;
+            <code class="font-mono text-xs bg-surface px-1 rounded">agent-sandbox run --backend</code>
+            accepts <span class="font-mono text-accent">seatbelt</span>, and installers prefer Seatbelt
+            with a deprecation notice when falling back to nono. See the
+            <a href="https://github.com/RisorseArtificiali/lince/blob/main/docs/documentation/sandbox/migration-nono-to-seatbelt.md" class="text-accent hover:underline">migration guide</a>.
+          </p>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-2 flex items-center gap-2">
+            <span class="text-accent">&#x2192;</span> Config v2: one policy file + agent registry
+          </h3>
+          <p class="text-sm text-muted leading-relaxed mb-2">
+            Configuration is converging on a single versioned policy file
+            (<span class="font-mono text-accent">~/.config/lince/lince.toml</span>) plus a shipped agent
+            registry. Get started with
+            <span class="font-mono text-accent">lince-config discover</span> and
+            <span class="font-mono text-accent">lince-config apply &lt;agent&gt;+&lt;level&gt;+&lt;provider&gt;</span>.
+            Existing installs keep working unchanged. See the
+            <a href="https://github.com/RisorseArtificiali/lince/blob/main/docs/migration-v2-users.md" class="text-accent hover:underline">user migration guide</a> and the
+            <a href="https://github.com/RisorseArtificiali/lince/blob/main/docs/migration-v2-developers.md" class="text-accent hover:underline">developer migration guide</a>.
+          </p>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-2 flex items-center gap-2">
+            <span class="text-accent">&#x2192;</span> Shell agents in the dashboard
+          </h3>
+          <p class="text-sm text-muted leading-relaxed mb-2">
+            The registry now includes plain shells (<span class="font-mono text-accent">bash</span>,
+            <span class="font-mono text-accent">zsh</span>,
+            <span class="font-mono text-accent">fish</span>) as first-class "agents", so you can keep an
+            interactive shell pane next to your AI agents inside the same dashboard. The installer
+            pre-selects your host's default shell.
+          </p>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-2 flex items-center gap-2">
+            <span class="text-accent">&#x2192;</span> lince-lab (experimental)
+          </h3>
+          <p class="text-sm text-muted leading-relaxed mb-2">
+            A new opt-in module that gives agents disposable Linux VMs (via Lima/KVM) instead of
+            sharing the host: stronger isolation for risky workloads, broker on the host, agents in
+            the lab. Linux-only in v1. See the
+            <a href="https://github.com/RisorseArtificiali/lince/tree/main/docs/documentation/lince-lab" class="text-accent hover:underline">lince-lab docs</a>.
+          </p>
+        </div>
+
+      </div>
+
+      <footer class="mt-8 pt-6 border-t border-border text-sm">
+        <a href="https://github.com/RisorseArtificiali/lince/commits/main?since=2026-05-06"
+           class="text-accent hover:underline">See all commits since May on GitHub &rarr;</a>
+      </footer>
+    </article>
+
     <!-- 2026-05-05 -->
     <article id="2026-05-05" class="entry rounded-lg p-8 mb-8">
       <header class="mb-6 pb-6 border-b border-border">
