@@ -137,7 +137,7 @@
         <div class="feature-card rounded-lg p-6">
           <div class="text-2xl mb-3">&#x1f310;</div>
           <h3 class="font-semibold mb-2">No vendor lock-in</h3>
-          <p class="text-sm text-muted leading-relaxed">Your workflow and security should not depend on a single vendor. LINCE supports Claude Code, Codex, Gemini, OpenCode, Aider, Amp &mdash; and any custom agent via config. Switch freely.</p>
+          <p class="text-sm text-muted leading-relaxed">Your workflow and security should not depend on a single vendor. LINCE supports Claude Code, Codex, Gemini, OpenCode, Aider, Amp, Bob, Pi &mdash; and any custom agent via config. Switch freely.</p>
         </div>
       </div>
     </div>
@@ -206,9 +206,9 @@
             <div><span class="text-accent">$</span> git clone https://github.com/RisorseArtificiali/lince</div>
             <div><span class="text-accent">$</span> cd lince/sandbox && ./install.sh</div>
             <div><span class="text-accent">$</span> cd ../lince-dashboard && ./install.sh</div>
-            <div><span class="text-accent">$</span> source ~/.bashrc && zd</div>
+            <div><span class="text-accent">$</span> source ~/.bashrc && lince</div>
           </div>
-          <p class="text-sm text-muted">Clone, install sandbox + dashboard, launch. See <a href="https://github.com/RisorseArtificiali/lince/blob/main/QUICKSTART.md" class="text-accent hover:underline">QUICKSTART.md</a> for details.</p>
+          <p class="text-sm text-muted">Clone, install sandbox + dashboard, launch. Requires Rust with the <span class="font-mono">wasm32-wasip1</span> target for the dashboard plugin. See <a href="https://github.com/RisorseArtificiali/lince/blob/main/QUICKSTART.md" class="text-accent hover:underline">QUICKSTART.md</a> for details.</p>
         </div>
       </div>
 
@@ -226,7 +226,7 @@
             <span class="text-amber font-bold">&#x26A0;</span>
             <h4 class="font-semibold">macOS</h4>
           </div>
-          <p class="text-muted">Experimental. Sandbox via <a href="https://nono.sh" class="text-accent hover:underline">nono</a> (Seatbelt). <a href="https://github.com/RisorseArtificiali/lince/issues/19" class="text-accent hover:underline">Looking for testers.</a></p>
+          <p class="text-muted">Experimental. Sandbox via the native <span class="font-mono">sandbox-exec</span> (Seatbelt) backend, built into macOS. The legacy <a href="https://nono.sh" class="text-accent hover:underline">nono</a> backend is deprecated &mdash; see the <a href="https://github.com/RisorseArtificiali/lince/blob/main/docs/documentation/sandbox/migration-nono-to-seatbelt.md" class="text-accent hover:underline">migration guide</a>. <a href="https://github.com/RisorseArtificiali/lince/issues/19" class="text-accent hover:underline">Looking for testers.</a></p>
         </div>
         <div class="feature-card rounded-lg p-4">
           <div class="flex items-center gap-2 mb-2">
@@ -250,8 +250,9 @@ You speak    <span class="text-muted">───></span>  <span class="text-cyan"
                               <span class="text-accent">Dashboard</span>  <span class="text-muted"><───</span>  routes to focused agent
                                      │
                             <span class="text-amber">agent-sandbox</span>  <span class="text-muted"><───</span>  isolates execution
-                              <span class="text-muted">├── bwrap</span>  ┐
-                              <span class="text-muted">├── nono</span>   ├── <span class="text-muted">choose per agent</span>
+                              <span class="text-muted">├── bwrap</span>    ┐
+                              <span class="text-muted">├── seatbelt</span> ├── <span class="text-muted">choose per agent</span>
+                              <span class="text-muted">├── nono</span> <span class="text-amber">(deprecated)</span>
                               <span class="text-muted">└── none</span>   ┘
                               ┌──────┼──────┐
                          <span class="text-white">Claude</span>   <span class="text-white">Codex</span>   <span class="text-white">Gemini</span>   <span class="text-muted">...any agent</span>
@@ -281,10 +282,10 @@ You speak    <span class="text-muted">───></span>  <span class="text-cyan"
         <div class="feature-card rounded-lg p-6">
           <div class="flex items-center gap-2 mb-3">
             <span class="text-accent font-bold">&#10003;</span>
-            <h3 class="font-semibold">nono</h3>
+            <h3 class="font-semibold">Seatbelt</h3>
           </div>
-          <p class="text-xs font-mono text-muted mb-3">Linux &amp; macOS</p>
-          <p class="text-sm text-muted leading-relaxed">Newer alternative. Integration with <a href="https://nono.sh" class="text-accent hover:underline">nono.sh</a>, an external project focused on security including network isolation. Uses Landlock on Linux, Seatbelt on macOS. Brings some additional dependencies.</p>
+          <p class="text-xs font-mono text-muted mb-3">macOS only</p>
+          <p class="text-sm text-muted leading-relaxed">macOS's native sandbox (<span class="font-mono">sandbox-exec</span>), built into the operating system. No extra install, zero external dependencies. The legacy <a href="https://nono.sh" class="text-accent hover:underline">nono</a> backend is deprecated &mdash; see the <a href="https://github.com/RisorseArtificiali/lince/blob/main/docs/documentation/sandbox/migration-nono-to-seatbelt.md" class="text-accent hover:underline">migration guide</a>.</p>
         </div>
         <div class="feature-card rounded-lg p-6">
           <div class="flex items-center gap-2 mb-3">

@@ -30,7 +30,7 @@ DIM='\033[2m'
 NC='\033[0m'
 
 # ── State ────────────────────────────────────────────────────────────
-SELECTED_BACKENDS=()       # populated by select_backends(): "bwrap", "nono", "unsandboxed"
+SELECTED_BACKENDS=()       # populated by select_backends(): "bwrap", "seatbelt", "nono", "unsandboxed"
 SELECTED_AGENTS=()
 INSTALL_VOXCODE=false
 INSTALL_LINCE_LAB=false
@@ -51,11 +51,12 @@ AGENT_SELECTED=(1 1 0 0 0 0)  # claude and codex on by default
 # Available backends: key|display_name|description|installed
 BACKENDS=(
     "bwrap|bubblewrap (bwrap)|Built-in sandbox. Same technology as Flatpak. Minimal, zero dependencies."
-    "nono|nono (nono.sh)|External sandbox with network isolation. Landlock (Linux) + Seatbelt (macOS)."
+    "seatbelt|Seatbelt (sandbox-exec)|macOS native sandbox, built into the OS. Zero dependencies. Replaces nono on macOS."
+    "nono|nono (nono.sh) — deprecated|Legacy external sandbox. Superseded by Seatbelt on macOS. Kept for compatibility."
     "unsandboxed|Unsandboxed|No isolation — agent runs with full host access."
 )
 # Track backend selection state (1=selected, 0=not)
-BACKEND_SELECTED=(1 0 0)  # bwrap on by default
+BACKEND_SELECTED=(1 0 0 0)  # bwrap on by default
 
 # Shell agents (gh#91): key|display|description. Pre-selection is computed
 # at runtime from $SHELL by select_shells() so it tracks the host's actual
@@ -117,16 +118,18 @@ select_backends() {
     echo -e "  ${DIM}backend for that agent. Different agents can use different backends.${NC}"
     echo ""
 
-    # On macOS, bwrap is not available — deselect it and select nono
+    # On macOS, bwrap is not available — pre-select seatbelt instead
     if [ "$OS_NAME" = "Darwin" ]; then
-        BACKEND_SELECTED=(0 1 0)  # nono only
-        echo -e "  ${DIM}macOS detected — bubblewrap is Linux-only.${NC}"
+        BACKEND_SELECTED=(0 1 0 0)  # seatbelt only
+        echo -e "  ${DIM}macOS detected — bubblewrap is Linux-only, Seatbelt (sandbox-exec) pre-selected.${NC}"
         echo ""
     fi
 
     # Detect installed backends
-    local has_bwrap=false has_nono=false
+    local has_bwrap=false has_seatbelt=false has_nono=false
     command -v bwrap >/dev/null 2>&1 && has_bwrap=true
+    # Seatbelt is sandbox-exec, built into macOS
+    [ -x /usr/bin/sandbox-exec ] && has_seatbelt=true
     command -v nono >/dev/null 2>&1 && has_nono=true
 
     echo -e "  ${DIM}Toggle with number keys, press Enter when done:${NC}"
@@ -154,9 +157,18 @@ select_backends() {
                         continue
                     fi
                     ;;
+                seatbelt)
+                    if [ "$has_seatbelt" = true ]; then status=" ${GREEN}(built-in)${NC}"
+                    else status=" ${YELLOW}(requires macOS 10.5+)${NC}"; fi
+                    # Hide on Linux
+                    if [ "$OS_NAME" != "Darwin" ]; then
+                        echo -e "  ${DIM}[ ] $((i+1))) $name — macOS only${NC}"
+                        continue
+                    fi
+                    ;;
                 nono)
-                    if [ "$has_nono" = true ]; then status=" ${GREEN}(installed)${NC}"
-                    else status=" ${YELLOW}(not installed — cargo install nono-cli)${NC}"; fi
+                    if [ "$has_nono" = true ]; then status=" ${RED}(deprecated)${NC}"
+                    else status=" ${YELLOW}(not installed — deprecated, consider Seatbelt on macOS)${NC}"; fi
                     ;;
             esac
 
@@ -175,10 +187,12 @@ select_backends() {
             [1-9])
                 local idx=$((REPLY - 1))
                 if [ $idx -lt ${#BACKENDS[@]} ]; then
-                    # On macOS, don't allow selecting bwrap
+                    # On macOS, don't allow selecting bwrap; on Linux, don't allow seatbelt
                     IFS='|' read -r key _ _ <<< "${BACKENDS[$idx]}"
                     if [ "$key" = "bwrap" ] && [ "$OS_NAME" = "Darwin" ]; then
                         echo -e "  ${YELLOW}bubblewrap is not available on macOS${NC}"
+                    elif [ "$key" = "seatbelt" ] && [ "$OS_NAME" != "Darwin" ]; then
+                        echo -e "  ${YELLOW}Seatbelt (sandbox-exec) is only available on macOS${NC}"
                     else
                         if [ "${BACKEND_SELECTED[$idx]}" = "1" ]; then
                             BACKEND_SELECTED[$idx]=0
@@ -243,7 +257,7 @@ select_backends() {
             echo ""
             echo -e "  ${GREEN}Good choice. Please re-select backends.${NC}"
             # Reset to bwrap default and re-run
-            BACKEND_SELECTED=(1 0 0)
+            BACKEND_SELECTED=(1 0 0 0)
             select_backends
             return
         fi
@@ -640,7 +654,7 @@ confirm_installation() {
     echo -e "${BOLD}Installation summary${NC}"
     echo ""
 
-    if has_backend bwrap || has_backend nono; then
+    if has_backend bwrap || has_backend seatbelt || has_backend nono; then
         echo -e "  ${GREEN}✓${NC} agent-sandbox    ${DIM}(secure isolation for agents)${NC}"
     fi
     echo -e "    Backends: ${BOLD}${SELECTED_BACKENDS[*]}${NC}"
@@ -756,8 +770,8 @@ do_install_lince_lab() {
 
 # ── Install sandbox ─────────────────────────────────────────────────
 do_install_sandbox() {
-    # Only install agent-sandbox if bwrap backend is selected
-    if ! has_backend bwrap; then
+    # Only install agent-sandbox if a sandboxed backend is selected
+    if ! has_backend bwrap && ! has_backend seatbelt && ! has_backend nono; then
         return
     fi
 
@@ -1055,11 +1069,15 @@ check_prerequisites() {
     fi
     if has_backend nono; then
         if command -v nono >/dev/null 2>&1; then
-            echo -e "  ${GREEN}✓${NC} nono"
+            echo -e "  ${YELLOW}✓${NC} nono (deprecated — consider Seatbelt if on macOS)"
         else
             warnings+=("nono not found")
-            echo -e "  ${YELLOW}✗${NC} nono — ${DIM}cargo install nono-cli${NC}"
+            echo -e "  ${YELLOW}✗${NC} nono — ${DIM}deprecated; cargo install nono-cli${NC}"
         fi
+    fi
+    if has_backend seatbelt && [ "$(uname -s)" != "Darwin" ]; then
+        warnings+=("seatbelt selected on a non-macOS host")
+        echo -e "  ${RED}✗${NC} seatbelt — ${DIM}only available on macOS${NC}"
     fi
 
     if [ ${#warnings[@]} -gt 0 ]; then
@@ -1083,8 +1101,11 @@ print_summary() {
     if has_backend bwrap; then
         echo -e "  ${GREEN}✓${NC} agent-sandbox (bwrap)"
     fi
+    if has_backend seatbelt; then
+        echo -e "  ${GREEN}✓${NC} agent-sandbox (seatbelt)"
+    fi
     if has_backend nono; then
-        echo -e "  ${GREEN}✓${NC} nono sandbox"
+        echo -e "  ${YELLOW}✓${NC} agent-sandbox (nono, deprecated)"
     fi
     if has_backend unsandboxed; then
         echo -e "  ${RED}!${NC} unsandboxed mode"
@@ -1161,7 +1182,12 @@ done
 print_banner
 
 if [ "$USE_DEFAULTS" = true ]; then
-    SELECTED_BACKENDS=("bwrap")
+    if [ "$(uname -s)" = "Darwin" ]; then
+        SELECTED_BACKENDS=("seatbelt")  # bwrap is Linux-only; seatbelt is built into macOS
+        echo -e "  ${DIM}Using defaults: all agents, seatbelt sandbox (macOS)${NC}"
+    else
+        SELECTED_BACKENDS=("bwrap")
+    fi
     for i in "${!AGENTS[@]}"; do AGENT_SELECTED[$i]=1; done
     SELECTED_AGENTS=()
     for i in "${!AGENTS[@]}"; do
@@ -1177,7 +1203,7 @@ if [ "$USE_DEFAULTS" = true ]; then
     SELECTED_SHELLS=("$DEFAULT_SHELL")
     SELECTED_AGENTS+=("$DEFAULT_SHELL")
     DEFAULT_SHELL_BIN=$(command -v "$DEFAULT_SHELL" 2>/dev/null || true)
-    echo -e "  ${DIM}Using defaults: all agents, $DEFAULT_SHELL shell, bwrap sandbox${NC}"
+    echo -e "  ${DIM}Using defaults: all agents, $DEFAULT_SHELL shell, $([ "$(uname -s)" = "Darwin" ] && echo seatbelt || echo bwrap) sandbox${NC}"
 else
     select_backends
     select_agents
