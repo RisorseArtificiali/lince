@@ -3400,7 +3400,7 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
             cmd[-1:-1] = opts
         else:
             cmd += opts
-        shim: list[str] = ["python3", LANDLOCK_SHIM_MOUNT, "__landlock-exec"]
+        shim: list[str] = [sys.executable, LANDLOCK_SHIM_MOUNT, "__landlock-exec"]
         for target in bwrap_rw_targets(cmd):
             shim += ["--rw", target]
         shim += ["--ro", "/"]
