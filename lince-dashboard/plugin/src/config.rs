@@ -417,6 +417,27 @@ pub fn shell_path_expr(path: &str) -> String {
     }
 }
 
+/// Resolve a path-completer match against the launch directory.
+///
+/// The legacy glob completer (used when no project roots are configured) runs
+/// in the plugin host's launch CWD and emits bare relative names like
+/// `synoptic`; the multi-root `find` emits absolute paths. Written to
+/// `project_dir` verbatim, a relative match is rejected by the absolute-path
+/// validation at the ProjectDir step — see #125. Prefix relative matches with
+/// `launch_dir` so every candidate is absolute; already-absolute and
+/// `~`-prefixed matches are location-independent and pass through unchanged.
+/// With no known launch dir there is nothing to resolve against, so the match
+/// is returned as-is.
+pub fn absolutize_under(launch_dir: Option<&str>, path: &str) -> String {
+    if path.starts_with('/') || path.starts_with('~') {
+        return path.to_string();
+    }
+    match launch_dir {
+        Some(base) if !base.is_empty() => format!("{}/{}", base.trim_end_matches('/'), path),
+        _ => path.to_string(),
+    }
+}
+
 /// Find the longest common prefix among a list of strings.
 /// Returns an empty string if the list is empty.
 /// Handles multi-byte UTF-8 correctly by snapping to char boundaries.
@@ -1221,6 +1242,41 @@ fn embedded_event_maps() -> &'static HashMap<String, HashMap<String, String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #125: the legacy glob completer emits bare relative names; they must be
+    /// resolved against the launch dir before reaching `project_dir`.
+    #[test]
+    fn absolutize_under_prefixes_relative_matches() {
+        assert_eq!(
+            absolutize_under(Some("/home/u/work"), "synoptic"),
+            "/home/u/work/synoptic"
+        );
+        // A trailing slash on the base must not double up.
+        assert_eq!(
+            absolutize_under(Some("/home/u/work/"), "synoptic"),
+            "/home/u/work/synoptic"
+        );
+    }
+
+    /// Absolute (multi-root `find`) and `~`-prefixed matches are already
+    /// location-independent and must pass through untouched — in particular
+    /// `~/api` must not become `<launch>/~/api`.
+    #[test]
+    fn absolutize_under_passes_through_absolute_and_tilde() {
+        assert_eq!(
+            absolutize_under(Some("/home/u/work"), "/srv/projects/api"),
+            "/srv/projects/api"
+        );
+        assert_eq!(absolutize_under(Some("/home/u/work"), "~/api"), "~/api");
+    }
+
+    /// With no usable launch dir there is nothing to resolve against, so the
+    /// match is returned unchanged rather than guessed at.
+    #[test]
+    fn absolutize_under_without_launch_dir_is_noop() {
+        assert_eq!(absolutize_under(None, "synoptic"), "synoptic");
+        assert_eq!(absolutize_under(Some(""), "synoptic"), "synoptic");
+    }
 
     /// Pre-#81 `agents-defaults.toml` files used `profiles = [...]`. The
     /// rename added `#[serde(alias = "profiles")]` on `AgentTypeConfig.providers`
