@@ -12,6 +12,11 @@
 
 [sandbox]
 home_ro_dirs = [".config/gh", ".ssh/known_hosts"]
+# Maven three-tier policy (#286): permissive mounts the REAL ~/.m2
+# read-write, matching the other Maven-capable agents (claude, codex,
+# gemini, opencode, pi). Normal uses the isolated toolchains/m2-repository
+# cache; paranoid isn't shipped for bob yet.
+home_rw_dirs = [".m2"]
 
 [env]
 # Keyring-auth users rely on GH_TOKEN/GITHUB_TOKEN; --clearenv would wipe them.
