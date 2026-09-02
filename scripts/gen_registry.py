@@ -52,7 +52,7 @@ REGISTRY_DIR = REPO_ROOT / "registry.d"
 
 # Shipped agents, in registry emission order (design doc §3).
 SHIPPED_AGENTS = (
-    "claude", "codex", "bob", "gemini", "aider", "opencode", "amp", "pi",
+    "claude", "codex", "bob", "gemini", "aider", "opencode", "amp", "pi", "goose",
     "bash", "zsh", "fish",
 )
 
@@ -125,6 +125,7 @@ HOME_SUBDIRS: dict[str, str] = {
     "opencode": ".config/opencode",
     "amp": ".amplication",
     "pi": ".pi",
+    "goose": ".config/goose",
     "bash": "",
     "zsh": "",
     "fish": "",

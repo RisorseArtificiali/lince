@@ -1,0 +1,31 @@
+# Sandbox-policy fragment: goose — paranoid level.
+# See docs/documentation/dashboard/sandbox-levels.md. Lists are
+# append-merged with the user's ~/.agent-sandbox/config.toml.
+#
+# OpenAI-only in practice: goose reads its Anthropic endpoint from
+# ANTHROPIC_HOST, which the credential proxy does not rewrite, and the
+# proxy strips ANTHROPIC_API_KEY from the sandbox env — so the anthropic
+# provider cannot connect here (openai works: goose honors OPENAI_BASE_URL).
+# Goose also supports Z.ai, Google, Mistral, Groq, etc.: for those use
+# sandbox_level = "normal" or "permissive", or extend allow_domains in
+# your own config.
+#
+# Keys must live in ~/.config/goose/config.yaml: a keyring-stored key is
+# neither in the per-run scratch copy nor in the (stripped) env.
+
+[env.extra]
+OPENAI_API_KEY = "$OPENAI_API_KEY"
+
+[agents.goose]
+# Per-run ephemeral copy of goose config/data/state (rsync-seeded,
+# bind-mounted, removed on exit).
+scratch_home_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
+
+[security]
+credential_proxy = true
+unshare_net = true
+# api.anthropic.com and api.openai.com are auto-included from the
+# credential rules. Extend by appending in your own config:
+#   [security]
+#   allow_domains = ["api.z.ai", "pypi.org"]
+allow_domains = []

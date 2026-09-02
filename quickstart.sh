@@ -44,9 +44,10 @@ AGENTS=(
     "gemini|Google Gemini CLI|Google's AI coding agent"
     "opencode|OpenCode|Open-source coding agent"
     "pi|Pi|Minimal coding agent (https://pi.dev)"
+    "goose|Goose|Open-source AI agent by AAIF"
 )
 # Track selection state (1=selected, 0=not)
-AGENT_SELECTED=(1 1 0 0 0 0)  # claude and codex on by default
+AGENT_SELECTED=(1 1 0 0 0 0 0)  # claude and codex on by default
 
 # Available backends: key|display_name|description|installed
 BACKENDS=(

@@ -21,7 +21,7 @@
 #     selected via the `providers` field below and the wizard's "Provider" step.
 # These are independent — you can run e.g. `paranoid + zai`. See gh#81.
 #
-# Sandbox model (claude, codex, gemini, opencode, pi):
+# Sandbox model (claude, codex, gemini, goose, opencode, pi):
 #   - sandbox_backend = "bwrap" | "nono" | "seatbelt"  (default per OS)
 #   - sandbox_level   = "paranoid" | "normal" | "permissive" | <custom>
 # When sandbox_level is set, the plugin synthesizes the launch command from
@@ -249,6 +249,37 @@ providers = ["__discover__"]
 
 [agents.gemini-unsandboxed.env_vars]
 GEMINI_API_KEY = "$GEMINI_API_KEY"
+
+
+[agents.goose]
+# Legacy fallback command — ignored when sandbox_level is set.
+command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "goose"]
+pane_title_pattern = "agent-sandbox"
+status_pipe_name = "lince-status"
+display_name = "Goose"
+short_label = "GSE"
+color = "blue"
+sandboxed = true
+has_native_hooks = false
+bwrap_conflict = false
+disable_inner_sandbox_args = []
+home_ro_dirs = ["~/.config/goose/"]
+home_rw_dirs = ["~/.local/share/goose/", "~/.local/state/goose/"]
+providers = ["__discover__"]
+sandbox_level = "normal"          # paranoid | normal | permissive (or custom; see docs)
+# sandbox_backend defaults to bwrap on Linux, seatbelt on macOS. Uncomment to override:
+# sandbox_backend = "seatbelt"
+
+[agents.goose-unsandboxed]
+command = ["goose"]
+pane_title_pattern = "goose"
+status_pipe_name = "lince-status"
+display_name = "Goose (unsandboxed)"
+short_label = "GSU"
+color = "red"
+sandboxed = false
+has_native_hooks = false
+providers = ["__discover__"]
 
 [agents.opencode]
 # Legacy fallback command — ignored when sandbox_level is set.

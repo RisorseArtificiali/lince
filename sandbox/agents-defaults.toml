@@ -147,6 +147,15 @@ AWS_SESSION_TOKEN = "$AWS_SESSION_TOKEN"
 AWS_BEARER_TOKEN_BEDROCK = "$AWS_BEARER_TOKEN_BEDROCK"
 AWS_ENDPOINT_URL_BEDROCK_RUNTIME = "$AWS_ENDPOINT_URL_BEDROCK_RUNTIME"
 
+[agents.goose]
+command = "goose"
+default_args = []
+env = {}
+home_ro_dirs = []
+home_rw_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
+bwrap_conflict = false
+disable_inner_sandbox_args = []
+
 # Raw shell sessions inside the sandbox (gh#91). Useful for quick command
 # execution or file inspection in the project dir without firing up a full
 # coding agent. The dashboard restricts shell agents to sandbox_level=normal —
