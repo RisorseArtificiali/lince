@@ -417,7 +417,9 @@ def apply_egress_lockdown(
     network is still up. That seam runs the Linux nft script on the Lima backend;
     the macOS backend overrides it (pfctl enforcement is tracked for #266). A
     nonzero result raises :class:`~lince_lab.errors.BackendError`: a VM that cannot
-    enforce egress must NOT go on to run the (now-untrusted) recipe steps.
+    enforce egress must NOT go on to run the (now-untrusted) recipe steps. This
+    fail-closed invariant is explicitly suspended on macOS until #266: the macOS
+    backend warns and leaves guest egress unrestricted during that deferral.
     """
     # Cap the lock-down exec so a wedged script errors out instead of hanging
     # forever; honor a tighter step_timeout when the caller provides one.
