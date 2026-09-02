@@ -6,7 +6,8 @@
 home_ro_dirs = [".config/gh", ".cache", ".ssh/known_hosts"]
 
 [env]
-# Keyring-auth users rely on GH_TOKEN/GITHUB_TOKEN; --clearenv would wipe them.
+# Pass GH_TOKEN/GITHUB_TOKEN through when the user has them;
+# --clearenv would otherwise wipe them.
 passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]
 
 [security]

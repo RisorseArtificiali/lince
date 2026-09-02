@@ -2,21 +2,23 @@
 # See docs/documentation/dashboard/sandbox-levels.md. Lists are
 # append-merged with the user's ~/.agent-sandbox/config.toml.
 #
-# Goose supports many providers (Z.ai via ZHIPU_API_KEY, Anthropic,
-# OpenAI, Google, etc.). Only the providers with built-in credential
-# proxy support (anthropic, openai) are reachable in paranoid — the
-# proxy intercepts and injects their API keys. For other providers
-# (Z.ai, Mistral, Groq, etc.) use sandbox_level = "normal" or
-# "permissive", or extend allow_domains in your own config.
+# OpenAI-only in practice: goose reads its Anthropic endpoint from
+# ANTHROPIC_HOST, which the credential proxy does not rewrite, and the
+# proxy strips ANTHROPIC_API_KEY from the sandbox env — so the anthropic
+# provider cannot connect here (openai works: goose honors OPENAI_BASE_URL).
+# Goose also supports Z.ai, Google, Mistral, Groq, etc.: for those use
+# sandbox_level = "normal" or "permissive", or extend allow_domains in
+# your own config.
+#
+# Keys must live in ~/.config/goose/config.yaml: a keyring-stored key is
+# neither in the per-run scratch copy nor in the (stripped) env.
 
 [env.extra]
-ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY"
 OPENAI_API_KEY = "$OPENAI_API_KEY"
 
 [agents.goose]
 # Per-run ephemeral copy of goose config/data/state (rsync-seeded,
-# bind-mounted, removed on exit). Mirrors what the nono paranoid
-# bash wrapper does.
+# bind-mounted, removed on exit).
 scratch_home_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
 
 [security]

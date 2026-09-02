@@ -32,7 +32,6 @@ credential_proxy = true
 allow_domains = []
 
 [sandbox.levels.paranoid.env_extra]
-ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY"
 OPENAI_API_KEY = "$OPENAI_API_KEY"
 
 [sandbox.levels.permissive]
