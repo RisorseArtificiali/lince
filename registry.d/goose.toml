@@ -25,6 +25,23 @@ disable_inner_sandbox_args = []
 home_ro_dirs = []
 home_rw_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
 
+[sandbox.levels.paranoid]
+scratch_home_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
+unshare_net = true
+credential_proxy = true
+allow_domains = []
+
+[sandbox.levels.paranoid.env_extra]
+ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY"
+OPENAI_API_KEY = "$OPENAI_API_KEY"
+
+[sandbox.levels.permissive]
+credential_proxy = false
+block_git_push = true
+allow_domains = ["api.github.com", "github.com", "objects.githubusercontent.com"]
+home_ro_dirs = [".config/gh", ".cache", ".ssh/known_hosts"]
+passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]
+
 [dashboard]
 has_native_hooks = false
 providers = ["__discover__"]
