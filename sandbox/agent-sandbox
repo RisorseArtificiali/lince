@@ -5819,6 +5819,66 @@ def get_project_hash(project_dir: Path) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
 
 
+# Sidecar naming the project a hashed snapshot dir came from. The hash is
+# one-way, so without it the store can only ever be addressed from inside the
+# originating directory — you cannot list or reclaim another project's
+# snapshots, or even discover that they exist (#23, #24).
+SNAPSHOT_ORIGIN_FILE = ".origin"
+
+
+def write_snapshot_origin(snapshot_base_dir: Path, project_dir: Path) -> None:
+    """Record which project a hashed snapshot dir belongs to."""
+    try:
+        snapshot_base_dir.mkdir(parents=True, exist_ok=True)
+        (snapshot_base_dir / SNAPSHOT_ORIGIN_FILE).write_text(
+            f"{project_dir}\n",
+        )
+    except OSError:
+        pass  # a missing label must never fail the snapshot itself
+
+
+def read_snapshot_origin(snapshot_base_dir: Path) -> Path | None:
+    """Project a hashed snapshot dir came from, or None if unlabelled.
+
+    Returns None for dirs created before the sidecar existed; they stay
+    listable and prunable by hash.
+    """
+    try:
+        raw = (
+            snapshot_base_dir / SNAPSHOT_ORIGIN_FILE
+        ).read_text().strip()
+    except OSError:
+        return None
+    return Path(raw) if raw else None
+
+
+def list_project_snapshot_bases() -> list[tuple[str, Path, Path | None]]:
+    """Every project in the snapshot store, not just the current directory.
+
+    Returns (hash, base_dir, origin_or_None) sorted by origin then hash.
+    """
+    root = SNAPSHOT_DIR / "projects"
+    if not root.is_dir():
+        return []
+
+    bases: list[tuple[str, Path, Path | None]] = []
+    for base in root.iterdir():
+        if base.is_dir():
+            bases.append((base.name, base, read_snapshot_origin(base)))
+
+    return sorted(bases, key=lambda b: (str(b[2] or "~"), b[0]))
+
+
+def list_config_snapshot_agents() -> list[tuple[str, Path]]:
+    """Every agent with config snapshots. Returns (agent_name, base_dir)."""
+    root = SNAPSHOT_DIR / "configs"
+    if not root.is_dir():
+        return []
+    return sorted(
+        (base.name, base) for base in root.iterdir() if base.is_dir()
+    )
+
+
 def create_snapshot(
     source_dir: Path,
     snapshot_base_dir: Path,
@@ -6033,6 +6093,7 @@ def _auto_snapshot(config: dict, project_dir: Path, agent_name: str) -> None:
             base = _get_project_snapshot_base(project_dir)
             link = _latest_snapshot(base)
             excludes = snap_conf["project_exclude"]
+            write_snapshot_origin(base, project_dir)
             try:
                 snap_path = create_snapshot(
                     project_dir, base,
@@ -6075,6 +6136,7 @@ def cmd_snapshot(args) -> None:
         link = _latest_snapshot(base)
         excludes = snap_conf["project_exclude"]
         print(f"Creating project snapshot: {project_dir}")
+        write_snapshot_origin(base, project_dir)
         snap_path = create_snapshot(
             project_dir, base, exclude=excludes, link_dest=link,
         )
@@ -6113,6 +6175,27 @@ def cmd_snapshot(args) -> None:
                 print(f"  pruned {removed} old snapshot(s)")
 
 
+def _print_snapshot_rows(snaps: list[tuple[str, Path, int]]) -> None:
+    """Render one group's snapshots, or '(none)'."""
+    if not snaps:
+        print("  (none)")
+        return
+    for ts, _path, sz in snaps:
+        print(f"  {ts}  {human_size(sz)}")
+
+
+def _project_label(phash: str, origin: Path | None) -> str:
+    """Human name for a hashed project dir.
+
+    Unlabelled dirs predate the origin sidecar; orphaned ones outlived the
+    project they snapshotted. Both stay addressable by hash.
+    """
+    if origin is None:
+        return f"[{phash}] (unknown project — no origin recorded)"
+    suffix = "" if origin.is_dir() else "  (missing — project moved/deleted)"
+    return f"{origin}{suffix}"
+
+
 def cmd_snapshot_list(args) -> None:
     """List snapshots with timestamps and disk usage."""
     config, _ = load_config()
@@ -6121,37 +6204,60 @@ def cmd_snapshot_list(args) -> None:
 
     project_only = getattr(args, "project_only", False)
     config_only = getattr(args, "config", False)
+    show_all = getattr(args, "all_projects", False)
     show_project = not config_only
     show_config = not project_only
 
-    if show_project:
+    if show_project and show_all:
+        bases = list_project_snapshot_bases()
+        total = 0
+        print("Project snapshots (all projects):")
+        if not bases:
+            print("  (none)")
+        for phash, base, origin in bases:
+            snaps = list_snapshots(base)
+            if not snaps:
+                continue  # a bare origin sidecar is not worth a heading
+            total += sum(sz for _ts, _p, sz in snaps)
+            here = " *" if origin and origin == project_dir else ""
+            print(f"\n  {_project_label(phash, origin)}{here}")
+            print(f"    hash: {phash}")
+            for ts, _path, sz in snaps:
+                print(f"    {ts}  {human_size(sz)}")
+        print(f"\n  total: {human_size(total)}")
+        print()
+    elif show_project:
         base = _get_project_snapshot_base(project_dir)
         snaps = list_snapshots(base)
         print(f"Project snapshots ({project_dir}):")
         if snaps:
             phash = get_project_hash(project_dir)
             print(f"  hash: {phash}")
-            for ts, _path, sz in snaps:
-                print(f"  {ts}  {human_size(sz)}")
-        else:
-            print("  (none)")
+        _print_snapshot_rows(snaps)
         print()
 
-    if show_config:
+    if show_config and show_all:
+        agents = list_config_snapshot_agents()
+        print("Config snapshots (all agents):")
+        if not agents:
+            print("  (none)")
+        for name, base in agents:
+            snaps = list_snapshots(base)
+            if not snaps:
+                continue
+            print(f"\n  [{name}]")
+            for ts, _path, sz in snaps:
+                print(f"    {ts}  {human_size(sz)}")
+    elif show_config:
         config_dir = _resolve_config_dir(config, agent_name)
         base = _get_config_snapshot_base(agent_name)
-        snaps = list_snapshots(base)
         label = (
             str(config_dir) if config_dir else "(not configured)"
         )
         print(
             f"Config snapshots [{agent_name}] ({label}):",
         )
-        if snaps:
-            for ts, _path, sz in snaps:
-                print(f"  {ts}  {human_size(sz)}")
-        else:
-            print("  (none)")
+        _print_snapshot_rows(list_snapshots(base))
 
 
 def cmd_snapshot_diff(args) -> None:
@@ -6409,7 +6515,23 @@ def cmd_snapshot_prune(args) -> None:
         do_project = True
         do_config = True
 
-    if do_project:
+    if do_project and getattr(args, "all_projects", False):
+        # Pruning has always been scoped to the cwd project's hash, so every
+        # other project — and every dir orphaned by a moved or deleted
+        # project — grew without bound and could not be reclaimed at all (#24).
+        max_count = snap_conf["max_project_snapshots"]
+        bases = list_project_snapshot_bases()
+        total = 0
+        for phash, base, origin in bases:
+            removed = prune_snapshots(base, max_count)
+            total += removed
+            if removed:
+                print(f"  {_project_label(phash, origin)}: removed {removed}")
+        print(
+            f"Project snapshots (all {len(bases)} project(s)): "
+            f"removed {total}, max={max_count} each",
+        )
+    elif do_project:
         base = _get_project_snapshot_base(project_dir)
         max_count = snap_conf["max_project_snapshots"]
         removed = prune_snapshots(base, max_count)
@@ -6418,7 +6540,20 @@ def cmd_snapshot_prune(args) -> None:
             f"max={max_count}",
         )
 
-    if do_config:
+    if do_config and getattr(args, "all_projects", False):
+        max_count = snap_conf["max_config_snapshots"]
+        agents = list_config_snapshot_agents()
+        total = 0
+        for name, base in agents:
+            removed = prune_snapshots(base, max_count)
+            total += removed
+            if removed:
+                print(f"  [{name}]: removed {removed}")
+        print(
+            f"Config snapshots (all {len(agents)} agent(s)): "
+            f"removed {total}, max={max_count} each",
+        )
+    elif do_config:
         base = _get_config_snapshot_base(agent_name)
         max_count = snap_conf["max_config_snapshots"]
         removed = prune_snapshots(base, max_count)
@@ -7636,6 +7771,12 @@ def main() -> None:
         action="store_true",
         help="Show only project snapshots",
     )
+    p_snl.add_argument(
+        "--all", "--all-projects", dest="all_projects",
+        action="store_true",
+        help="List snapshots from every project and agent, not just "
+             "the current directory (combines with the filters above)",
+    )
 
     # snapshot-diff
     p_snd = sub.add_parser(
@@ -7718,7 +7859,15 @@ def main() -> None:
     )
     p_snp.add_argument(
         "--all", dest="all_types", action="store_true",
-        help="Prune both project and config snapshots",
+        help="Prune both project and config snapshots (the default)",
+    )
+    # NOT spelled --all: that already means "both types" here, and
+    # repurposing it would silently change what an existing command does.
+    p_snp.add_argument(
+        "--all-projects", dest="all_projects", action="store_true",
+        help="Prune every project and agent in the store, not just the "
+             "current directory — the only way to reclaim snapshots left "
+             "behind by projects you have moved or deleted",
     )
 
     # learn
