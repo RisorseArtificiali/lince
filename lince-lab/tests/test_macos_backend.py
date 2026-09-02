@@ -31,6 +31,21 @@ def _ok(stdout: str = "", stderr: str = "", returncode: int = 0) -> subprocess.C
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+_EXEC_NONCE = "0123456789abcdef"
+_EXEC_MARKER = f"__LINCE_LAB_GUEST_EXIT_{_EXEC_NONCE}__"
+
+
+def _ssh_ok(guest_code: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
+    return _ok(stdout=stdout, stderr=f"{stderr}\n{_EXEC_MARKER}{guest_code}\n")
+
+
+def _framed_remote(payload: str) -> str:
+    return (
+        f"( {payload} ); __lince_lab_rc=$?; "
+        f"printf '\\n{_EXEC_MARKER}%s\\n' \"$__lince_lab_rc\" >&2; exit 0"
+    )
+
+
 _TEMPLATE = json.dumps(
     {
         "images": [{"location": "ghcr.io/cirruslabs/macos-sequoia-base:latest", "arch": "arm64"}],
@@ -105,6 +120,22 @@ class LifecycleTestCase(unittest.TestCase):
         argvs = [c.args[0] for c in run.call_args_list]
         self.assertIn(["tart", "delete", "lince-lab-x"], argvs)
 
+    def test_delete_cascades_to_clone_backed_snapshots(self) -> None:
+        with (
+            mock.patch.object(self.backend, "snapshot_list", return_value=["base", "candidate-2"]),
+            mock.patch("lince_lab.macos_backend.subprocess.run", return_value=_ok()) as run,
+        ):
+            self.backend.delete("lince-lab-x")
+        deletes = [c.args[0] for c in run.call_args_list if c.args[0][:2] == ["tart", "delete"]]
+        self.assertEqual(
+            deletes,
+            [
+                ["tart", "delete", "lince-lab-x__snap__base"],
+                ["tart", "delete", "lince-lab-x__snap__candidate-2"],
+                ["tart", "delete", "lince-lab-x"],
+            ],
+        )
+
     def test_status_running_and_absent(self) -> None:
         records = [{"Name": "lince-lab-x", "State": "running"}]
         with mock.patch(
@@ -168,39 +199,58 @@ class LifecycleTestCase(unittest.TestCase):
 class ExecTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.backend = MacosBackend()
+        nonce = mock.patch("lince_lab.macos_backend.secrets.token_hex", return_value=_EXEC_NONCE)
+        self.addCleanup(nonce.stop)
+        nonce.start()
 
     def test_exec_builds_ssh_remote_command_and_returns_code(self) -> None:
         # First subprocess.run = `tart ip`; second = the ssh exec.
         with mock.patch(
             "lince_lab.macos_backend.subprocess.run",
-            side_effect=[_ok(stdout="10.0.0.5\n"), _ok(stdout="hi", returncode=0)],
+            side_effect=[_ok(stdout="10.0.0.5\n"), _ssh_ok(stdout="hi")],
         ) as run:
             result = self.backend.exec("lince-lab-x", ["sh", "-c", "echo hi"])
         ssh_argv = run.call_args_list[1].args[0]
         self.assertEqual(ssh_argv[0], "ssh")
         self.assertEqual(ssh_argv[-2], "admin@10.0.0.5")
         # The remote command is one shell-quoted string (no host-side word-split).
-        self.assertEqual(ssh_argv[-1], "sh -c 'echo hi'")
+        self.assertEqual(ssh_argv[-1], _framed_remote("sh -c 'echo hi'"))
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.stdout, "hi")
 
     def test_exec_injects_workdir_and_env(self) -> None:
         with mock.patch(
             "lince_lab.macos_backend.subprocess.run",
-            side_effect=[_ok(stdout="10.0.0.5\n"), _ok()],
+            side_effect=[_ok(stdout="10.0.0.5\n"), _ssh_ok()],
         ) as run:
             self.backend.exec("lince-lab-x", ["make", "test"], workdir="/work", env={"CI": "1"})
         remote = run.call_args_list[1].args[0][-1]
-        self.assertEqual(remote, "cd /work && env CI=1 make test")
+        self.assertEqual(remote, _framed_remote("cd /work && env CI=1 make test"))
 
     def test_exec_returns_guest_nonzero_without_raising(self) -> None:
         with mock.patch(
             "lince_lab.macos_backend.subprocess.run",
-            side_effect=[_ok(stdout="10.0.0.5\n"), _ok(stderr="boom", returncode=1)],
+            side_effect=[_ok(stdout="10.0.0.5\n"), _ssh_ok(guest_code=1, stderr="boom")],
         ):
             result = self.backend.exec("lince-lab-x", ["false"])
         self.assertEqual(result.exit_code, 1)
         self.assertEqual(result.stderr, "boom")
+
+    def test_exec_distinguishes_guest_255_from_ssh_transport_failure(self) -> None:
+        with mock.patch(
+            "lince_lab.macos_backend.subprocess.run",
+            side_effect=[_ok(stdout="10.0.0.5\n"), _ssh_ok(guest_code=255, stderr="guest failed")],
+        ):
+            result = self.backend.exec("lince-lab-x", ["sh", "-c", "exit 255"])
+        self.assertEqual(result.exit_code, 255)
+        self.assertEqual(result.stderr, "guest failed")
+
+        with mock.patch(
+            "lince_lab.macos_backend.subprocess.run",
+            side_effect=[_ok(stdout="10.0.0.5\n"), _ok(stderr="Connection reset", returncode=255)],
+        ):
+            with self.assertRaisesRegex(BackendError, "ssh transport failed"):
+                self.backend.exec("lince-lab-x", ["true"])
 
 
 class CopyTestCase(unittest.TestCase):

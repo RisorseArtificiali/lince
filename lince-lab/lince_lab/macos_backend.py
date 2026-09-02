@@ -28,6 +28,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import secrets
 import shlex
 import subprocess
 import sys
@@ -248,11 +249,15 @@ class MacosBackend(Backend):
 
     def delete(self, name: str, force: bool = False) -> None:
         # A running VM cannot be deleted; best-effort stop first (honoring force),
-        # then delete. stop() reaps the tracked run process + log.
+        # then delete. stop() reaps the tracked run process + log. Clone-backed
+        # snapshots are separate Tart VMs, so remove them explicitly before the
+        # parent or they would accumulate as hidden orphan disks.
         try:
             self.stop(name, force=force)
         except BackendError:
             pass
+        for tag in self.snapshot_list(name):
+            self.snapshot_delete(name, tag)
         self._run([self._tart, "delete", name])
 
     def _reap(self, name: str) -> None:
@@ -428,7 +433,18 @@ class MacosBackend(Backend):
     ) -> ExecResult:
         ip = self._ip(name)
         remote = self._remote_command(argv, workdir, env)
-        cmd = ["ssh", *self._ssh_opts(), f"{GUEST_USER}@{ip}", remote]
+        # OpenSSH reserves client exit 255 for transport failures, but a remote
+        # command may legitimately exit 255 too. Run the command in a subshell,
+        # frame its real status on stderr with an unpredictable nonce, and make
+        # the outer remote shell exit 0. A missing frame or nonzero ssh status is
+        # then unambiguously a transport/protocol failure; do not retry because
+        # arbitrary recipe steps may not be idempotent.
+        marker = f"__LINCE_LAB_GUEST_EXIT_{secrets.token_hex(16)}__"
+        framed_remote = (
+            f"( {remote} ); __lince_lab_rc=$?; "
+            f"printf '\\n{marker}%s\\n' \"$__lince_lab_rc\" >&2; exit 0"
+        )
+        cmd = ["ssh", *self._ssh_opts(), f"{GUEST_USER}@{ip}", framed_remote]
         proc = subprocess.run(
             cmd,
             capture_output=True,
@@ -438,9 +454,22 @@ class MacosBackend(Backend):
             start_new_session=True,
             env=self._ssh_env(),
         )
-        # CRITICAL: return the guest exit code verbatim; do NOT raise — the bisect
-        # signal. (ssh returns the remote command's exit code on a live channel.)
-        return ExecResult(exit_code=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
+        stderr = proc.stderr or ""
+        frame_prefix = f"\n{marker}"
+        guest_stderr, separator, framed_status = stderr.rpartition(frame_prefix)
+        if proc.returncode != 0 or not separator:
+            detail = stderr.strip()
+            suffix = f": {detail}" if detail else ""
+            raise BackendError(f"ssh transport failed for {name!r} (exit {proc.returncode}){suffix}")
+        if not framed_status.endswith("\n") or not framed_status[:-1].isdigit():
+            raise BackendError(f"invalid ssh guest-exit frame for {name!r}")
+
+        guest_code = int(framed_status[:-1])
+        if not 0 <= guest_code <= 255:
+            raise BackendError(f"invalid guest exit code {guest_code} for {name!r}")
+        # CRITICAL: return the guest exit code verbatim; do NOT raise on guest
+        # nonzero — that is the bisect signal. Only transport failures raise.
+        return ExecResult(exit_code=guest_code, stdout=proc.stdout or "", stderr=guest_stderr)
 
     def _run_ssh(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
         """Run an ssh/scp command with askpass env, raising on a nonzero exit."""
