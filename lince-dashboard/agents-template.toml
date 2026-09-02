@@ -164,12 +164,24 @@ home_ro_dirs = ["~/.config/goose/"]
 providers = ["__discover__"]
 sandbox_level = "paranoid"
 
+# Goose paranoid is OpenAI-only in practice: goose reads its Anthropic
+# endpoint from ANTHROPIC_HOST, which the credential proxy does not
+# rewrite, and the proxy strips ANTHROPIC_API_KEY from the sandbox env —
+# so the anthropic provider cannot connect at this level (openai works,
+# goose honors OPENAI_BASE_URL). Keys must live in ~/.config/goose/config.yaml:
+# a keyring-stored key is neither in the scratch copy nor in the env.
+# Unlike most agents, goose also persists ~/.local/share/goose and
+# ~/.local/state/goose at this level — see sandbox/profiles/goose-paranoid.toml.
+
+[agents.goose-paranoid.env_vars]
+OPENAI_API_KEY = "$OPENAI_API_KEY"
+
 [agents.goose-permissive]
 command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "goose"]
 pane_title_pattern = "agent-sandbox"
 status_pipe_name = "lince-status"
 display_name = "Goose (permissive)"
-short_label = "GSM"
+short_label = "GS+"
 color = "yellow"
 sandboxed = true
 has_native_hooks = false
