@@ -357,7 +357,10 @@ class EgressLogTests(unittest.TestCase):
         self.assertEqual(doc["recipe"], "deny-demo")
         self.assertEqual(doc["egress"]["decision"], "deny")
         self.assertEqual(doc["egress"]["rules"], [])
-        self.assertEqual(result["egress_log"], str(log))
+        # Compare canonical paths: the broker resolves the artifacts root, and on
+        # macOS the tmpdir lives under /var → /private/var (a symlink), so an
+        # unresolved expectation would spuriously mismatch. Identical on Linux.
+        self.assertEqual(result["egress_log"], str(log.resolve()))
 
     def test_allow_recipe_writes_resolved_rules(self):
         backend = FakeBackend()

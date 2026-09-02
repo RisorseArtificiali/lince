@@ -433,9 +433,11 @@ def cmd_lab_broker(args: argparse.Namespace) -> int:
 def _broker_start(args: argparse.Namespace) -> int:
     """Start a :class:`BrokerServer` in-process and serve until interrupted.
 
-    Uses :class:`~lince_lab.lima_backend.LimaBackend` by default, or
+    Uses :class:`~lince_lab.lima_backend.LimaBackend` by default,
+    :class:`~lince_lab.macos_backend.MacosBackend` when ``LINCE_LAB_MACOS=1``
+    (Apple-Silicon macOS guest via Tart), or
     :class:`~lince_lab.fake_backend.FakeBackend` when ``LINCE_LAB_FAKE=1`` (the
-    test path — no KVM required).
+    test path — no VM required).
     """
     from lince_lab.broker import BrokerServer
 
@@ -444,6 +446,10 @@ def _broker_start(args: argparse.Namespace) -> int:
         from lince_lab.fake_backend import FakeBackend
 
         backend = FakeBackend()
+    elif os.environ.get("LINCE_LAB_MACOS") == "1":
+        from lince_lab.macos_backend import MacosBackend
+
+        backend = MacosBackend()
     else:
         from lince_lab.lima_backend import LimaBackend
 

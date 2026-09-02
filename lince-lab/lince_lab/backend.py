@@ -174,3 +174,24 @@ class Backend(ABC):
     def open_capture(self, name: str, argv: list[str], cols: int, rows: int) -> CaptureChannel:
         """Open a :class:`CaptureChannel` wrapping ``argv`` at grid ``cols``x``rows``."""
         ...
+
+    # ── egress policy (concrete default; OS-specific backends override) ───────
+    def apply_egress_lockdown(
+        self, name: str, allow_ips: list[str], allow_ports: list[int], timeout: float = 180.0
+    ) -> None:
+        """Enforce the egress posture on ``name`` (deny by default; allowlist when given).
+
+        The default runs the Linux ``nft`` lock-down script in the guest via
+        :meth:`exec` and raises :class:`~lince_lab.errors.BackendError` on a
+        nonzero exit. Backends whose guest is not Linux (e.g. macOS) override this
+        with an OS-appropriate mechanism. This lives on the seam — not in the
+        broker — so egress enforcement is per-backend, not Linux-assuming.
+        """
+        from lince_lab.errors import BackendError
+        from lince_lab.templates import egress_lockdown_argv
+
+        result = self.exec(name, egress_lockdown_argv(allow_ips, allow_ports), timeout=timeout)
+        if result.exit_code != 0:
+            raise BackendError(
+                f"egress lock-down failed on {name} (exit {result.exit_code}): {result.stderr.strip() or 'no detail'}"
+            )

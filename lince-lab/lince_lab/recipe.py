@@ -32,7 +32,7 @@ from lince_lab.backend import Backend
 from lince_lab.capture import Capture, Grid
 from lince_lab.errors import BackendError, DataError
 from lince_lab.paths import parse_size, resolves_under, slug_vm_name
-from lince_lab.templates import build_template, egress_lockdown_argv, resolve_allow_ips, resolve_allow_map
+from lince_lab.templates import build_template, resolve_allow_ips, resolve_allow_map
 
 # Snapshot tag baked after provisioning so retries / bisect can reset cheaply.
 BASE_SNAPSHOT_TAG = "base-clean"
@@ -412,11 +412,12 @@ def apply_egress_lockdown(
 
     Resolves the recipe's allow posture (``mode = "allow"`` → its ``allow_hosts``
     resolved to IPs host-side, fail-closed to deny when none resolve; else a
-    drop-only deny), pins the resolved IPs into the guest ``/etc/hosts``, and runs
-    the nft lock-down via ``backend.exec(vm, egress_lockdown_argv(...))`` while the
-    network is still up (so the script can install ``nft`` if needed). A nonzero
-    exit raises :class:`~lince_lab.errors.BackendError`: a VM that cannot enforce
-    egress must NOT go on to run the (now-untrusted) recipe steps.
+    drop-only deny), pins the resolved IPs into the guest ``/etc/hosts``, and
+    applies the lock-down via ``backend.apply_egress_lockdown(...)`` while the
+    network is still up. That seam runs the Linux nft script on the Lima backend;
+    the macOS backend overrides it (pfctl enforcement is tracked for #266). A
+    nonzero result raises :class:`~lince_lab.errors.BackendError`: a VM that cannot
+    enforce egress must NOT go on to run the (now-untrusted) recipe steps.
     """
     # Cap the lock-down exec so a wedged script errors out instead of hanging
     # forever; honor a tighter step_timeout when the caller provides one.
@@ -438,12 +439,13 @@ def apply_egress_lockdown(
     if host_ip_map and allow_ips:
         _pin_guest_etc_hosts(backend, vm_name, host_ip_map, timeout=timeout)
 
-    result = backend.exec(vm_name, egress_lockdown_argv(allow_ips, allow_ports), timeout=timeout)
-    if result.exit_code != 0:
-        raise BackendError(
-            f"egress lock-down failed on {vm_name} (exit {result.exit_code}): "
-            f"{result.stderr.strip() or 'no detail'}; refusing to run steps unprotected"
-        )
+    # Apply through the backend seam so a non-Linux guest (macOS) enforces egress
+    # its own way instead of running the Linux nft script (which fail-closes on a
+    # guest with no nft). Preserve the recipe-specific framing on failure.
+    try:
+        backend.apply_egress_lockdown(vm_name, allow_ips, allow_ports, timeout=timeout)
+    except BackendError as exc:
+        raise BackendError(f"{exc}; refusing to run steps unprotected") from exc
 
 
 def _pin_guest_etc_hosts(

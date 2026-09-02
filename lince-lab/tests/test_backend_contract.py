@@ -131,5 +131,14 @@ class LimaBackendContractTest(BackendContractMixin, unittest.TestCase):  # pragm
         return LimaBackend()
 
 
+@unittest.skipUnless(os.environ.get("LINCE_LAB_TART") == "1", "LINCE_LAB_TART!=1: macOS backend skipped")
+class MacosBackendContractTest(BackendContractMixin, unittest.TestCase):  # pragma: no cover - Tart only
+    @staticmethod
+    def make_backend() -> Backend:
+        from lince_lab.macos_backend import MacosBackend  # imported lazily; macOS/Tart-only glue
+
+        return MacosBackend()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

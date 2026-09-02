@@ -63,6 +63,15 @@ class DefaultsTest(unittest.TestCase):
         self.assertNotIn("capture_tool", loaded)
         self.assertNotIn("lima_version", loaded)
 
+    def test_macos_image_in_allowlist(self) -> None:
+        # The Tart (macOS-guest) backend keys on this image entry; arch must be
+        # arm64 and the location must be a cirruslabs OCI ref (Epic #268).
+        loaded = cfg.load_config(pathlib.Path("/nonexistent"))
+        self.assertIn("macos-sequoia", loaded["images"])
+        entry = loaded["images"]["macos-sequoia"]
+        self.assertEqual(entry["arch"], "arm64")
+        self.assertTrue(entry["location"].startswith("ghcr.io/cirruslabs/"))
+
     def test_user_file_overlays_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "config.toml"
