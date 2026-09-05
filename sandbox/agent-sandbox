@@ -4171,23 +4171,25 @@ def landlock_plan(config: dict, sandbox_level: str | None,
 _SANDBOX_INTERRUPTED = object()
 
 
-def _forward_sigint_to_descendants(root_pid: int) -> bool:
-    """Send SIGINT to all descendant processes of *root_pid*.
+def _forward_signal_to_descendants(root_pid: int, sig: int) -> bool:
+    """Send *sig* to all descendant processes of *root_pid*.
 
-    With ``start_new_session=True`` the bwrap process (root_pid) is in its
-    own session and does not receive terminal SIGINT.  We need to forward
+    With ``start_new_session=True`` the sandbox root (root_pid) is in its
+    own session and does not receive terminal signals.  We need to forward
     the signal to the agent (e.g. goose) so it can cancel the current
     operation.
 
     The process tree is::
 
-        bwrap (root_pid) → bwrap-clone (PID 1 in namespace) → goose
+        sandbox root (root_pid) → bwrap-clone (PID 1 in namespace) → goose
 
-    bwrap-clone has ``SIGNAL_UNKILLABLE`` and ignores SIGINT.
+    bwrap-clone has ``SIGNAL_UNKILLABLE`` and ignores SIGINT/SIGTERM.
     goose catches SIGINT and handles it (cancel request, return to prompt).
-    root_pid (bwrap) itself is **not** signaled, so it survives.
+    root_pid itself is **not** signaled, so it survives.
 
-    Returns True if at least one descendant was signaled.
+    Returns True if at least one descendant was signaled.  Always False on
+    systems without /proc (macOS) — see _signal_tree for the killpg path
+    that covers those backends.
     """
     import glob
 
@@ -4221,10 +4223,80 @@ def _forward_sigint_to_descendants(root_pid: int) -> bool:
 
     for pid in to_signal:
         try:
-            os.kill(pid, signal.SIGINT)
+            os.kill(pid, sig)
         except OSError:
             pass
     return True
+
+
+def _signal_tree(proc: subprocess.Popen, sig: int) -> None:
+    """Send *sig* to the whole sandbox tree rooted at *proc*.
+
+    Two delivery paths, both needed:
+
+    * ``os.killpg`` on the child's own process group — the run backends
+      spawn the sandbox with ``start_new_session=True``, so its process
+      group covers the root and every descendant that stayed in it.  This
+      is the only path that works on macOS (seatbelt/nono), where /proc
+      does not exist.  If the child shares *our* process group (cmd_learn
+      spawns without a new session), killpg is skipped — it would signal
+      agent-sandbox itself, and the terminal has already delivered the
+      signal to that group anyway.
+    * a /proc walk for descendants that left the group (bwrap's inner
+      PID 1) — see _forward_signal_to_descendants.
+
+    The direct child is signaled separately as well, mirroring what
+    ``subprocess.run``'s KeyboardInterrupt path did via ``Popen.kill()``.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:
+        pgid = None  # root already gone; descendants are all we can hit
+    if pgid is not None and pgid != os.getpgid(0):
+        try:
+            os.killpg(pgid, sig)
+        except OSError:
+            pass
+    _forward_signal_to_descendants(proc.pid, sig)
+    try:
+        proc.send_signal(sig)
+    except OSError:  # already reaped — nothing left to signal
+        pass
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill the sandbox tree and reap the root (legacy Ctrl+C path).
+
+    The old implementation used ``subprocess.run``, which on
+    ``KeyboardInterrupt`` kills the child and reaps it before the
+    exception surfaces, while the terminal delivered SIGINT to the whole
+    foreground process group.  With ``start_new_session=True`` the sandbox
+    is in its own session: it never saw the terminal's SIGINT, and only
+    the bwrap backend has ``--die-with-parent`` — on seatbelt and nono an
+    unsignaled child survives agent-sandbox's exit as an orphan still
+    attached to the terminal.  So the kill must be done by hand.
+
+    Escalates SIGINT → SIGTERM → SIGKILL across the whole tree — the
+    SIGINT leg restores the signal delivery the foreground group used to
+    provide — with a short grace period per step.  Always ends with
+    ``wait()`` so the root is reaped before returning.
+    """
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+        if proc.poll() is not None:
+            return
+        _signal_tree(proc, sig)
+        try:
+            proc.wait(timeout=2)
+            return
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            # Timed out, or an impatient extra Ctrl+C while already
+            # tearing down: escalate to the next (stronger) signal.
+            continue
+    if proc.poll() is None:
+        try:
+            proc.wait(timeout=5)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            pass  # SIGKILLed but stuck in uninterruptible sleep; nothing more to do
 
 
 def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
@@ -4237,7 +4309,10 @@ def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
     seconds forces termination (``SIGTERM`` → ``SIGKILL``).
 
     When *graceful_interrupt* is False, Ctrl+C terminates the sandbox
-    immediately (legacy behaviour).
+    immediately (legacy behaviour): the sandbox tree is killed and the
+    root reaped before returning, restoring the old ``subprocess.run``
+    contract (which killed and reaped the child on KeyboardInterrupt while
+    the terminal delivered SIGINT to the whole foreground group).
 
     Returns the child's exit code on normal or forced termination.
     Returns ``_SANDBOX_INTERRUPTED`` when the sandbox is terminated by a
@@ -4248,6 +4323,13 @@ def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
             return proc.wait()
         except KeyboardInterrupt:
             print("\nSandbox terminated.")
+            # The sandbox runs in its own session (start_new_session=True),
+            # so it never received the terminal's SIGINT — and only the
+            # bwrap backend has --die-with-parent to mask that.  Kill the
+            # tree and reap the root ourselves (what subprocess.run's
+            # KeyboardInterrupt path used to do), or seatbelt/nono leak
+            # the agent as an orphan still attached to the terminal.
+            _kill_tree(proc)
             return _SANDBOX_INTERRUPTED
 
     _RESET_SECS = 3
@@ -4266,18 +4348,23 @@ def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
 
             if interrupt_count >= 2:
                 print("\nForce terminating sandbox...")
+                # Signal the whole tree, not just the root: seatbelt and
+                # nono have no parent-death mechanism, so a root-only kill
+                # would orphan the agent exactly like the legacy branch
+                # did before _kill_tree.
                 try:
-                    proc.send_signal(signal.SIGTERM)
+                    _signal_tree(proc, signal.SIGTERM)
                     return proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    _signal_tree(proc, signal.SIGKILL)
                     return proc.wait()
             # First Ctrl+C: the child is in its own session (start_new_session)
             # so it did NOT receive terminal SIGINT.  Forward SIGINT to the
-            # agent (goose) by signaling bwrap's descendants — bwrap-clone
-            # (PID 1 in namespace) ignores it via SIGNAL_UNKILLABLE, while
-            # goose catches it and can cancel the current request.
-            _forward_sigint_to_descendants(proc.pid)
+            # agent (goose) by signaling the sandbox's descendants —
+            # bwrap-clone (PID 1 in namespace) ignores it via
+            # SIGNAL_UNKILLABLE, while goose catches it and can cancel the
+            # current request.
+            _forward_signal_to_descendants(proc.pid, signal.SIGINT)
             continue
 
 
