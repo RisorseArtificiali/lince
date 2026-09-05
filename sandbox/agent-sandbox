@@ -4411,7 +4411,19 @@ def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
                     _signal_tree(proc, signal.SIGTERM)
                     return proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    _signal_tree(proc, signal.SIGKILL)
+                    pass  # SIGTERM grace expired — fall through to SIGKILL
+                except KeyboardInterrupt:
+                    # A third, impatient Ctrl+C during the SIGTERM grace:
+                    # escalate to SIGKILL now instead of letting the
+                    # interrupt escape _sandbox_wait as a traceback (and
+                    # skipping the fallback below).
+                    pass
+                _signal_tree(proc, signal.SIGKILL)
+                try:
+                    return proc.wait(timeout=5)
+                except KeyboardInterrupt:
+                    # SIGKILL is already delivered; reap even if the user
+                    # keeps pressing.
                     return proc.wait()
             # First Ctrl+C: the child is in its own session (start_new_session)
             # so it did NOT receive terminal SIGINT.  Forward SIGINT to the
@@ -7733,8 +7745,6 @@ def cmd_learn(args) -> None:
     # 1. Load config and check backend first
     config, config_path = load_config()
     project_dir = Path.cwd().resolve()
-    graceful_interrupt = config.get("security", {}).get("graceful_interrupt", True)
-
     # 1a. Gate: learn mode requires strace (Linux-only). Seatbelt and nono
     # backends cannot use strace-based learn mode.
     _learn_backend = resolve_backend(config)
@@ -7846,7 +7856,16 @@ def cmd_learn(args) -> None:
                     proc.kill()
                     proc.wait()
         else:
-            _sandbox_wait(proc, graceful_interrupt)
+            # strace shares our process group (no start_new_session), so
+            # by the time our wait() raises KeyboardInterrupt the terminal
+            # has already SIGINTed the whole tree — strace itself exits on
+            # it — and graceful mode's premise (the sandbox never saw the
+            # signal) cannot hold here.  Always use legacy semantics: on
+            # interrupt, _kill_tree tears the tree down and reaps strace
+            # BEFORE _sandbox_wait returns, so the trace file is final by
+            # the time we parse it below — the discarded-looking result is
+            # safe to ignore for that reason.
+            _sandbox_wait(proc, graceful_interrupt=False)
             proc.poll()  # ensure returncode is set
 
     except KeyboardInterrupt:

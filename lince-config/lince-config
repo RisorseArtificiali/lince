@@ -467,6 +467,12 @@ SANDBOX_CONFIG_SCHEMA = {
                 "unshare_pid": _d(_BOOL, "PID namespace: hide host processes", True),
                 "new_session": _d(_BOOL, "New terminal session (anti terminal-escape; "
                                          "may interfere with Ctrl+C)", False),
+                "graceful_interrupt": _d(_BOOL, "Graceful Ctrl+C: forward SIGINT into "
+                                                "the sandbox so the agent can cancel "
+                                                "and return to the prompt; a second "
+                                                "press within 3s force-exits (Linux "
+                                                "only — needs /proc; elsewhere "
+                                                "immediate exit)", True),
                 "block_git_push": _d(_BOOL, "Block git push via a PATH wrapper", True),
                 "credential_proxy": _d(_BOOL, "Inject API keys on the host side — "
                                               "keys never enter the sandbox env", False),

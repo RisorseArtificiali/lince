@@ -93,6 +93,11 @@
           "description": "New terminal session (anti terminal-escape; may interfere with Ctrl+C)",
           "default": false
         },
+        "graceful_interrupt": {
+          "type": "boolean",
+          "description": "Graceful Ctrl+C: forward SIGINT into the sandbox so the agent can cancel and return to the prompt; a second press within 3s force-exits (Linux only \u2014 needs /proc; elsewhere immediate exit)",
+          "default": true
+        },
         "block_git_push": {
           "type": "boolean",
           "description": "Block git push via a PATH wrapper",

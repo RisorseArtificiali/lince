@@ -162,10 +162,13 @@ unshare_pid = true
 new_session = false
 
 # Graceful Ctrl+C: when true (default), the first Ctrl+C while the agent
-# is working does NOT terminate the sandbox. The agent receives SIGINT
-# via the shared process group and is expected to handle it (e.g. cancel
-# the current LLM request and return to the prompt). A second Ctrl+C
-# within 3 seconds forces termination (SIGTERM → SIGKILL).
+# is working does NOT terminate the sandbox. agent-sandbox forwards
+# SIGINT into it (the sandbox runs in its own session and never sees the
+# terminal's signal) and the agent is expected to handle it — e.g. cancel
+# the current LLM request and return to the prompt; every press is
+# acknowledged with a hint. A second Ctrl+C within 3 seconds forces
+# termination (SIGTERM → SIGKILL). Requires /proc (Linux); elsewhere this
+# falls back to immediate exit.
 # Set to false to restore the old behaviour (immediate exit on Ctrl+C).
 graceful_interrupt = true
 
