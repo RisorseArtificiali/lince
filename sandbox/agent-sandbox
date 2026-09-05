@@ -222,10 +222,13 @@ unshare_pid = true
 new_session = false
 
 # Graceful Ctrl+C: when true (default), the first Ctrl+C while the agent
-# is working does NOT terminate the sandbox. The agent receives SIGINT
-# via the shared process group and is expected to handle it (e.g. cancel
-# the current LLM request and return to the prompt). A second Ctrl+C
-# within 3 seconds forces termination (SIGTERM → SIGKILL).
+# is working does NOT terminate the sandbox. agent-sandbox forwards
+# SIGINT into it (the sandbox runs in its own session and never sees the
+# terminal's signal) and the agent is expected to handle it — e.g. cancel
+# the current LLM request and return to the prompt; every press is
+# acknowledged with a hint. A second Ctrl+C within 3 seconds forces
+# termination (SIGTERM → SIGKILL). Requires /proc (Linux); elsewhere this
+# falls back to immediate exit.
 # Set to false to restore the old behaviour (immediate exit on Ctrl+C).
 graceful_interrupt = true
 
@@ -4265,6 +4268,20 @@ def _forward_signal_to_descendants(root_pid: int, sig: int) -> bool:
     return True
 
 
+def _can_forward_interrupts() -> bool:
+    """True when graceful interrupt mode can work on this platform.
+
+    Graceful mode forwards SIGINT to the sandbox's descendants via a
+    /proc walk — the sandbox itself is in its own session
+    (start_new_session=True) and never sees the terminal's signal.
+    Without /proc (macOS: seatbelt and nono backends) the walk finds
+    nothing and the first Ctrl+C would be a silent no-op; combined with
+    the 3 s counter reset in _sandbox_wait, spaced presses could never
+    reach force-termination.  cmd_run gates graceful mode on this check.
+    """
+    return os.path.isdir("/proc")
+
+
 def _signal_tree(proc: subprocess.Popen, sig: int) -> None:
     """Send *sig* to the whole sandbox tree rooted at *proc*.
 
@@ -4339,10 +4356,12 @@ def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
     """Wait for a sandboxed child process, handling Ctrl+C.
 
     When *graceful_interrupt* is True, the first Ctrl+C does **not**
-    terminate the sandbox.  The child already received ``SIGINT`` via the
-    shared process group and is expected to handle it (e.g. cancel an LLM
-    request and return to the prompt).  A second Ctrl+C within three
-    seconds forces termination (``SIGTERM`` → ``SIGKILL``).
+    terminate the sandbox: SIGINT is forwarded to the sandbox's
+    descendants (the sandbox runs in its own session and never sees the
+    terminal's signal) so the agent can handle it — e.g. cancel an LLM
+    request and return to the prompt — and every press is acknowledged
+    with a hint.  A second Ctrl+C within three seconds forces
+    termination (``SIGTERM`` → ``SIGKILL``).
 
     When *graceful_interrupt* is False, Ctrl+C terminates the sandbox
     immediately (legacy behaviour): the sandbox tree is killed and the
@@ -4399,8 +4418,16 @@ def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
             # agent (goose) by signaling the sandbox's descendants —
             # bwrap-clone (PID 1 in namespace) ignores it via
             # SIGNAL_UNKILLABLE, while goose catches it and can cancel the
-            # current request.
-            _forward_signal_to_descendants(proc.pid, signal.SIGINT)
+            # current request.  Always acknowledge the press: a forward
+            # that signals nothing (no /proc, or the tree vanished in a
+            # race) must not be a silent no-op — with the counter reset
+            # above, silence would make force-exit unreachable.
+            if _forward_signal_to_descendants(proc.pid, signal.SIGINT):
+                print(f"\nInterrupt forwarded to the sandbox — press Ctrl+C "
+                      f"again within {_RESET_SECS}s to force exit.")
+            else:
+                print(f"\nCould not deliver the interrupt into the sandbox — "
+                      f"press Ctrl+C again within {_RESET_SECS}s to force exit.")
             continue
 
 
@@ -4498,6 +4525,23 @@ def cmd_run(args, agent_extra: list[str]) -> None:
 
     sec = config.get("security", {})
     graceful_interrupt = sec.get("graceful_interrupt", True)
+    # Graceful mode can only work where SIGINT can be forwarded into the
+    # sandbox (the /proc walk — Linux: bwrap and nono/Landlock).  On macOS
+    # there is no /proc: the first Ctrl+C would forward nothing (a silent
+    # no-op) and the 3 s counter reset in _sandbox_wait would keep spaced
+    # presses from ever force-terminating.  Fall back to the legacy
+    # immediate exit there — what seatbelt/nono did before graceful mode
+    # existed.  (Gated on /proc, not on the backend name: nono also runs
+    # on Linux via Landlock, where forwarding does work.)
+    if graceful_interrupt and not _can_forward_interrupts():
+        graceful_interrupt = False
+        if "graceful_interrupt" in sec:  # explicitly requested, not default
+            print(
+                "\033[33m⚠  graceful_interrupt=true is unsupported on this "
+                "platform (no /proc to forward SIGINT into the sandbox); "
+                "falling back to immediate exit on Ctrl+C.\033[0m",
+                file=sys.stderr,
+            )
 
     # --- nono backend path (simpler — nono handles isolation itself) -------
     if backend == "nono":
