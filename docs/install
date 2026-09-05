@@ -45,7 +45,8 @@ case "$OS_NAME" in
     ;;
   Darwin)
     echo -e "${YELLOW}[*] Platform: macOS ($ARCH) — experimental support${NC}"
-    echo "    Sandbox via nono (Seatbelt). Some features may need validation."
+    echo "    Sandbox via the native Seatbelt backend (sandbox-exec, built into macOS)."
+    echo "    The legacy nono backend is deprecated. Some features may need validation."
     echo "    See: https://github.com/RisorseArtificiali/lince/issues/19"
     ;;
   *)
@@ -170,13 +171,14 @@ if [ "$OS_NAME" = "Linux" ]; then
     echo "    Install: sudo dnf install bubblewrap  (or: sudo apt install bubblewrap)"
   fi
 elif [ "$OS_NAME" = "Darwin" ]; then
-  if check_cmd nono; then
-    echo -e "  ${GREEN}✓${NC} nono"
+  # Seatbelt (sandbox-exec) is built into macOS — nothing to install.
+  if [ -x /usr/bin/sandbox-exec ]; then
+    echo -e "  ${GREEN}✓${NC} Seatbelt backend (sandbox-exec, built-in)"
   else
-    MISSING+=("nono")
-    echo -e "  ${YELLOW}✗${NC} nono not found"
-    echo "    Install: brew install nono"
-    echo "    See: https://github.com/nicholasgasior/nono"
+    MISSING+=("macOS with sandbox-exec support")
+    echo -e "  ${YELLOW}✗${NC} sandbox-exec not found at /usr/bin/sandbox-exec"
+    echo "    Seatbelt is built into macOS; a missing sandbox-exec usually means"
+    echo "    an unsupported or heavily modified system."
   fi
 fi
 

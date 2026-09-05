@@ -11,6 +11,8 @@ The following agent types ship in `agents-defaults.toml` and are available in th
 | `claude` | Claude Code | CLA | Yes | Yes | Default. Rich status via `claude-status` pipe. |
 | `claude-unsandboxed` | Claude Code (unsandboxed) | CLU | No | Yes | Red `CLU!` label. |
 | `codex` | OpenAI Codex | CDX | Yes | Yes | `bwrap_conflict` handled automatically. Maps `agent-turn-complete` → `INPUT`. |
+| `bob` | Bob | BOB | Yes | Yes | IBM's CLI. Claude-style hooks (`hook_event_name` contract) but no `Notification` event, so PERMISSION is never shown. Levels: normal + permissive only. |
+| `bob-unsandboxed` | Bob (unsandboxed) | BOU | No | Yes | Bare `bob` chat TUI — keeps bob's own approval prompts. |
 | `gemini` | Google Gemini CLI | GEM | Yes | No | Wrapper-only (Tier B). |
 | `opencode` | OpenCode | OPC | Yes | Yes | Maps OpenCode `session.*` events to canonical statuses. |
 | `pi` | Pi (multi-provider) | PI  | Yes | Yes | Provider env vars passed through (`OPENAI_API_KEY`, etc.). Native hook via `lince-pi-hook.ts`. |
@@ -255,10 +257,10 @@ No other fields are accepted: token counts, tool names, subagent counters and si
 
 ### Native Hooks
 
-Per-agent hook scripts live under `lince-dashboard/hooks/` and are installed via the matching `install-<agent>-hooks.sh` script (`install-claude-hooks.sh`, `install-codex-hooks.sh`, `install-opencode-hooks.sh`, `install-pi-hooks.sh`). Each script:
+Per-agent hook scripts live under `lince-dashboard/hooks/` and are installed via the matching `install-<agent>-hooks.sh` script (`install-claude-hooks.sh`, `install-codex-hooks.sh`, `install-bob-hooks.sh`, `install-opencode-hooks.sh`, `install-pi-hooks.sh`). Each script:
 
 1. Writes the hook binary/script.
-2. Wires it into the target agent's native event system (Claude's `~/.claude/settings.json`, Codex's `notify`, OpenCode events, Pi extension).
+2. Wires it into the target agent's native event system (Claude's `~/.claude/settings.json`, Codex's `notify`, Bob's `~/.bob/settings/settings.json`, OpenCode events, Pi extension).
 3. The hook emits the minimal JSON above to the appropriate Zellij pipe (`claude-status` or `lince-status`).
 
 ### lince-agent-wrapper

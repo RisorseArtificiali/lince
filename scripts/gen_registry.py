@@ -52,7 +52,7 @@ REGISTRY_DIR = REPO_ROOT / "registry.d"
 
 # Shipped agents, in registry emission order (design doc §3).
 SHIPPED_AGENTS = (
-    "claude", "codex", "gemini", "aider", "opencode", "amp", "pi",
+    "claude", "codex", "bob", "gemini", "aider", "opencode", "amp", "pi", "goose",
     "bash", "zsh", "fish",
 )
 
@@ -119,11 +119,13 @@ DASHBOARD_SUPPLEMENTS: dict[str, dict] = {
 HOME_SUBDIRS: dict[str, str] = {
     "claude": ".claude",
     "codex": ".codex",
+    "bob": ".bob",
     "gemini": ".gemini",
     "aider": ".aider",
     "opencode": ".config/opencode",
     "amp": ".amplication",
     "pi": ".pi",
+    "goose": ".config/goose",
     "bash": "",
     "zsh": "",
     "fish": "",
@@ -180,6 +182,9 @@ def load_levels(name: str) -> dict[str, dict]:
         if "home_ro_dirs" in sbx:
             lv["home_ro_dirs"] = sbx["home_ro_dirs"]
             consumed.add(("sandbox", "home_ro_dirs"))
+        if "home_rw_dirs" in sbx:
+            lv["home_rw_dirs"] = sbx["home_rw_dirs"]
+            consumed.add(("sandbox", "home_rw_dirs"))
         env = frag.get("env", {})
         if "passthrough" in env:
             lv["passthrough"] = env["passthrough"]

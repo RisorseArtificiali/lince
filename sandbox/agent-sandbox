@@ -77,6 +77,15 @@ persist_toolchains = true
 # ~/Applications/apache-maven-3.9.14/bin).
 auto_expose_path = true
 
+# Expose the host GPU inside the bwrap sandbox (#280). The default /dev is
+# a minimal synthetic devtmpfs, so without this the CUDA device nodes are
+# missing and GPU runtimes silently fall back to CPU. When true (the
+# default), /dev/nvidia* and /dev/dri are re-exposed via dev-binds at
+# normal/permissive/custom levels. Set false to hide the GPU everywhere.
+# The paranoid level ignores this global flag either way — paranoid only
+# exposes the GPU when its own fragment sets expose_gpu = true.
+# expose_gpu = true
+
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
 # don't use is harmless.
@@ -85,7 +94,10 @@ auto_expose_path = true
 # web_dashboard_open_on_launch and won't pop a browser on every launch);
 # Serena's writable data (memories/caches) lives in the project's own
 # .serena dir, which is already read-write inside the sandbox.
-home_ro_dirs = [".config/gcloud", ".serena"]
+# .config/mimeapps.list is your desktop's default-application map: without it
+# xdg-open falls back to the system mimeinfo cache and opens a different
+# browser than the one you chose on the host (#284).
+home_ro_dirs = [".config/gcloud", ".serena", ".config/mimeapps.list"]
 
 # Default provider — env-var bundle used when -P / --provider is not given.
 # Set to a name defined in [providers.*] / [<agent>.providers.*] below.
@@ -165,6 +177,10 @@ passthrough = [
     "ZELLIJ",
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
+    # Lets Chromium-based browsers use their native Wayland backend (#284).
+    # The host's Chrome typically runs on Xwayland, and the sandbox has no
+    # X11 socket, so without this it dies with "Missing X server or $DISPLAY".
+    "XDG_SESSION_TYPE",
 ]
 
 # Additional environment variables to set inside the sandbox.
@@ -407,7 +423,7 @@ DEFAULT_BLOCKED_HOSTS: set[str] = {
 # can't inject a credential the agent doesn't have on the host, so
 # OAuth users need to drop to normal/permissive (or switch to API-key
 # auth). See docs/documentation/dashboard/sandbox-levels.md.
-OAUTH_CAPABLE_AGENTS: frozenset[str] = frozenset({"gemini", "claude"})
+OAUTH_CAPABLE_AGENTS: frozenset[str] = frozenset({"gemini", "claude", "bob"})
 
 _proxy_logger = logging.getLogger("agent-sandbox.proxy")
 
@@ -3052,6 +3068,7 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
         cmd += ["--ro-bind", wayland_socket, f"/run/user/{uid}/{wayland_display}"]
     cmd += ["--tmpfs", "/var/tmp"]
     cmd += ["--dev", "/dev"]
+    cmd += gpu_dev_bind_args(sandbox)
     cmd += ["--proc", "/proc"]
 
     # --- 3. Hide entire $HOME ------------------------------------------------
@@ -3153,7 +3170,13 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
 
         for name, target in [("cargo", ".cargo"), ("npm-cache", ".npm"),
                              ("go", ".go"), ("uv-cache", ".uv-cache"),
-                             ("uv-tools", ".uv-tools")]:
+                             ("uv-tools", ".uv-tools"),
+                             # Maven: cache the repository only (#286) — the
+                             # rest of ~/.m2 (settings.xml, credentials) stays
+                             # hidden at normal. Permissive mounts the real
+                             # ~/.m2 instead via [sandbox].home_rw_dirs below,
+                             # which shadows this bind.
+                             ("m2-repository", ".m2/repository")]:
             mount_point = f"{home}/{target}"
             d = tc / name
             d.mkdir(parents=True, exist_ok=True)
@@ -3176,6 +3199,18 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
                 # subdirs via extra_rw if needed.
             else:
                 cmd += ["--bind", str(d), mount_point]
+
+    # --- 9b. [sandbox].home_rw_dirs (level fragments / user config, #286) ----
+    # Real home subdirs mounted read-write. Placed AFTER the toolchain
+    # caches on purpose: a real dir mounted here (e.g. permissive's ".m2")
+    # shadows any isolated cache bound inside the same subtree (the
+    # "m2-repository" bind above), so the permissive fragment wins over
+    # the normal-level cache without extra plumbing. Missing host dirs are
+    # skipped — the level then degrades gracefully to the cache behavior.
+    for d in sandbox.get("home_rw_dirs", []):
+        full = home_p / d
+        if full.exists():
+            cmd += ["--bind", str(full), str(full)]
 
     # --- 10. Extra read-write dirs (config) -----------------------------------
     for d in sandbox.get("extra_rw", []):
@@ -3373,7 +3408,7 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
             cmd[-1:-1] = opts
         else:
             cmd += opts
-        shim: list[str] = ["python3", LANDLOCK_SHIM_MOUNT, "__landlock-exec"]
+        shim: list[str] = [sys.executable, LANDLOCK_SHIM_MOUNT, "__landlock-exec"]
         for target in bwrap_rw_targets(cmd):
             shim += ["--rw", target]
         shim += ["--ro", "/"]
@@ -3444,6 +3479,7 @@ def cmd_init(args) -> None:
         SANDBOX_DIR / "toolchains" / "go",
         SANDBOX_DIR / "toolchains" / "uv-cache",
         SANDBOX_DIR / "toolchains" / "uv-tools",
+        SANDBOX_DIR / "toolchains" / "m2-repository",
         SANDBOX_DIR / "bin",
         SANDBOX_DIR / "logs",
     ]
@@ -4391,6 +4427,19 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             )
             sys.exit(1)
         config = merge_sandbox_level(config, fragment)
+        if sandbox_level == "paranoid" and paranoid_gpu_denied(
+            config.get("sandbox", {}), fragment
+        ):
+            config.setdefault("sandbox", {})["expose_gpu"] = False
+            # Note only where it means something: expose_gpu defaults to
+            # true, so without this guard every paranoid run on a GPU-less
+            # host would print a misleading "hidden" line.
+            if any(n.startswith("nvidia") for n in os.listdir("/dev")):
+                print(
+                    "gpu: hidden at paranoid — set expose_gpu = true in the "
+                    "paranoid fragment itself to override (#280)",
+                    file=sys.stderr,
+                )
 
     # CLI --backend overrides the configured [sandbox].backend for this run.
     if getattr(args, "backend", None):
@@ -5255,6 +5304,8 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             print(f"  agent-cfg   {cc_dir} (isolated copy)")
     print(f"  project     {project_dir}")
     print(f"  filesystem  read-only root, writable project dir")
+    if config.get("sandbox", {}).get("expose_gpu", True):
+        print(f"  gpu         exposed (/dev/nvidia*, /dev/dri) — #280 opt-in")
     print(f"  network     enabled")
     if landlock is None:
         print("  landlock    off")
@@ -5988,6 +6039,66 @@ def get_project_hash(project_dir: Path) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
 
 
+# Sidecar naming the project a hashed snapshot dir came from. The hash is
+# one-way, so without it the store can only ever be addressed from inside the
+# originating directory — you cannot list or reclaim another project's
+# snapshots, or even discover that they exist (#23, #24).
+SNAPSHOT_ORIGIN_FILE = ".origin"
+
+
+def write_snapshot_origin(snapshot_base_dir: Path, project_dir: Path) -> None:
+    """Record which project a hashed snapshot dir belongs to."""
+    try:
+        snapshot_base_dir.mkdir(parents=True, exist_ok=True)
+        (snapshot_base_dir / SNAPSHOT_ORIGIN_FILE).write_text(
+            f"{project_dir}\n",
+        )
+    except OSError:
+        pass  # a missing label must never fail the snapshot itself
+
+
+def read_snapshot_origin(snapshot_base_dir: Path) -> Path | None:
+    """Project a hashed snapshot dir came from, or None if unlabelled.
+
+    Returns None for dirs created before the sidecar existed; they stay
+    listable and prunable by hash.
+    """
+    try:
+        raw = (
+            snapshot_base_dir / SNAPSHOT_ORIGIN_FILE
+        ).read_text().strip()
+    except OSError:
+        return None
+    return Path(raw) if raw else None
+
+
+def list_project_snapshot_bases() -> list[tuple[str, Path, Path | None]]:
+    """Every project in the snapshot store, not just the current directory.
+
+    Returns (hash, base_dir, origin_or_None) sorted by origin then hash.
+    """
+    root = SNAPSHOT_DIR / "projects"
+    if not root.is_dir():
+        return []
+
+    bases: list[tuple[str, Path, Path | None]] = []
+    for base in root.iterdir():
+        if base.is_dir():
+            bases.append((base.name, base, read_snapshot_origin(base)))
+
+    return sorted(bases, key=lambda b: (str(b[2] or "~"), b[0]))
+
+
+def list_config_snapshot_agents() -> list[tuple[str, Path]]:
+    """Every agent with config snapshots. Returns (agent_name, base_dir)."""
+    root = SNAPSHOT_DIR / "configs"
+    if not root.is_dir():
+        return []
+    return sorted(
+        (base.name, base) for base in root.iterdir() if base.is_dir()
+    )
+
+
 def create_snapshot(
     source_dir: Path,
     snapshot_base_dir: Path,
@@ -6202,6 +6313,7 @@ def _auto_snapshot(config: dict, project_dir: Path, agent_name: str) -> None:
             base = _get_project_snapshot_base(project_dir)
             link = _latest_snapshot(base)
             excludes = snap_conf["project_exclude"]
+            write_snapshot_origin(base, project_dir)
             try:
                 snap_path = create_snapshot(
                     project_dir, base,
@@ -6244,6 +6356,7 @@ def cmd_snapshot(args) -> None:
         link = _latest_snapshot(base)
         excludes = snap_conf["project_exclude"]
         print(f"Creating project snapshot: {project_dir}")
+        write_snapshot_origin(base, project_dir)
         snap_path = create_snapshot(
             project_dir, base, exclude=excludes, link_dest=link,
         )
@@ -6282,6 +6395,27 @@ def cmd_snapshot(args) -> None:
                 print(f"  pruned {removed} old snapshot(s)")
 
 
+def _print_snapshot_rows(snaps: list[tuple[str, Path, int]]) -> None:
+    """Render one group's snapshots, or '(none)'."""
+    if not snaps:
+        print("  (none)")
+        return
+    for ts, _path, sz in snaps:
+        print(f"  {ts}  {human_size(sz)}")
+
+
+def _project_label(phash: str, origin: Path | None) -> str:
+    """Human name for a hashed project dir.
+
+    Unlabelled dirs predate the origin sidecar; orphaned ones outlived the
+    project they snapshotted. Both stay addressable by hash.
+    """
+    if origin is None:
+        return f"[{phash}] (unknown project — no origin recorded)"
+    suffix = "" if origin.is_dir() else "  (missing — project moved/deleted)"
+    return f"{origin}{suffix}"
+
+
 def cmd_snapshot_list(args) -> None:
     """List snapshots with timestamps and disk usage."""
     config, _ = load_config()
@@ -6290,37 +6424,60 @@ def cmd_snapshot_list(args) -> None:
 
     project_only = getattr(args, "project_only", False)
     config_only = getattr(args, "config", False)
+    show_all = getattr(args, "all_projects", False)
     show_project = not config_only
     show_config = not project_only
 
-    if show_project:
+    if show_project and show_all:
+        bases = list_project_snapshot_bases()
+        total = 0
+        print("Project snapshots (all projects):")
+        if not bases:
+            print("  (none)")
+        for phash, base, origin in bases:
+            snaps = list_snapshots(base)
+            if not snaps:
+                continue  # a bare origin sidecar is not worth a heading
+            total += sum(sz for _ts, _p, sz in snaps)
+            here = " *" if origin and origin == project_dir else ""
+            print(f"\n  {_project_label(phash, origin)}{here}")
+            print(f"    hash: {phash}")
+            for ts, _path, sz in snaps:
+                print(f"    {ts}  {human_size(sz)}")
+        print(f"\n  total: {human_size(total)}")
+        print()
+    elif show_project:
         base = _get_project_snapshot_base(project_dir)
         snaps = list_snapshots(base)
         print(f"Project snapshots ({project_dir}):")
         if snaps:
             phash = get_project_hash(project_dir)
             print(f"  hash: {phash}")
-            for ts, _path, sz in snaps:
-                print(f"  {ts}  {human_size(sz)}")
-        else:
-            print("  (none)")
+        _print_snapshot_rows(snaps)
         print()
 
-    if show_config:
+    if show_config and show_all:
+        agents = list_config_snapshot_agents()
+        print("Config snapshots (all agents):")
+        if not agents:
+            print("  (none)")
+        for name, base in agents:
+            snaps = list_snapshots(base)
+            if not snaps:
+                continue
+            print(f"\n  [{name}]")
+            for ts, _path, sz in snaps:
+                print(f"    {ts}  {human_size(sz)}")
+    elif show_config:
         config_dir = _resolve_config_dir(config, agent_name)
         base = _get_config_snapshot_base(agent_name)
-        snaps = list_snapshots(base)
         label = (
             str(config_dir) if config_dir else "(not configured)"
         )
         print(
             f"Config snapshots [{agent_name}] ({label}):",
         )
-        if snaps:
-            for ts, _path, sz in snaps:
-                print(f"  {ts}  {human_size(sz)}")
-        else:
-            print("  (none)")
+        _print_snapshot_rows(list_snapshots(base))
 
 
 def cmd_snapshot_diff(args) -> None:
@@ -6578,7 +6735,23 @@ def cmd_snapshot_prune(args) -> None:
         do_project = True
         do_config = True
 
-    if do_project:
+    if do_project and getattr(args, "all_projects", False):
+        # Pruning has always been scoped to the cwd project's hash, so every
+        # other project — and every dir orphaned by a moved or deleted
+        # project — grew without bound and could not be reclaimed at all (#24).
+        max_count = snap_conf["max_project_snapshots"]
+        bases = list_project_snapshot_bases()
+        total = 0
+        for phash, base, origin in bases:
+            removed = prune_snapshots(base, max_count)
+            total += removed
+            if removed:
+                print(f"  {_project_label(phash, origin)}: removed {removed}")
+        print(
+            f"Project snapshots (all {len(bases)} project(s)): "
+            f"removed {total}, max={max_count} each",
+        )
+    elif do_project:
         base = _get_project_snapshot_base(project_dir)
         max_count = snap_conf["max_project_snapshots"]
         removed = prune_snapshots(base, max_count)
@@ -6587,7 +6760,20 @@ def cmd_snapshot_prune(args) -> None:
             f"max={max_count}",
         )
 
-    if do_config:
+    if do_config and getattr(args, "all_projects", False):
+        max_count = snap_conf["max_config_snapshots"]
+        agents = list_config_snapshot_agents()
+        total = 0
+        for name, base in agents:
+            removed = prune_snapshots(base, max_count)
+            total += removed
+            if removed:
+                print(f"  [{name}]: removed {removed}")
+        print(
+            f"Config snapshots (all {len(agents)} agent(s)): "
+            f"removed {total}, max={max_count} each",
+        )
+    elif do_config:
         base = _get_config_snapshot_base(agent_name)
         max_count = snap_conf["max_config_snapshots"]
         removed = prune_snapshots(base, max_count)
@@ -6757,7 +6943,7 @@ class StraceParser:
 
         toolchain_prefixes = tuple(
             os.path.join(home, d) for d in (
-                ".cargo", ".npm", ".cache", ".uv-cache", ".uv-tools",
+                ".cargo", ".npm", ".cache", ".uv-cache", ".uv-tools", ".m2",
                 ".go", ".rustup", ".nvm", ".pyenv", ".local/share/uv",
             )
         )
@@ -6858,6 +7044,7 @@ def _infer_path_comment(path: str) -> str:
         ".cache": "general cache directory",
         ".uv-cache": "uv package cache",
         ".uv-tools": "uv installed tools",
+        ".m2": "Maven local repository",
         ".go": "Go module cache",
         ".rustup": "Rust toolchain manager",
         ".nvm": "Node version manager",
@@ -7153,6 +7340,40 @@ def print_learn_report(
     print()
 
 
+def paranoid_gpu_denied(merged_sandbox: dict, fragment: dict) -> bool:
+    """#280: paranoid never inherits the GPU silently. The global
+    [sandbox].expose_gpu opt-in is honoured at every other level, but the
+    paranoid threat model (untrusted agent: unshare_net, credential proxy,
+    scratch home) must not gain the GPU driver ioctl surface as a side
+    effect of a host-wide flag — the paranoid fragment itself has to set
+    ``expose_gpu = true``. Returns True when the merged config asks for the
+    GPU but the fragment didn't explicitly opt in."""
+    return bool(merged_sandbox.get("expose_gpu", True)) and not bool(
+        (fragment.get("sandbox", {}) or {}).get("expose_gpu", False)
+    )
+
+
+def gpu_dev_bind_args(sandbox_conf: dict) -> list[str]:
+    """Opt-in GPU passthrough (#280): `--dev /dev` is a minimal synthetic
+    devtmpfs, so CUDA device nodes don't exist inside the sandbox and GPU
+    runtimes silently fall back to CPU (the userspace libs ARE visible via
+    the ro root — cuInit() just finds no device). With
+    ``[sandbox].expose_gpu = true``, re-expose the host nodes after the
+    ``--dev /dev`` mount. Globbed at run time (multi-GPU friendly);
+    ``--dev-bind-try`` no-ops on GPU-less machines. ``/dev/dri`` covers
+    Vulkan / ROCm / VAAPI."""
+    if not sandbox_conf.get("expose_gpu", True):
+        return []
+    args: list[str] = []
+    gpu_paths = [f"/dev/{n}" for n in sorted(os.listdir("/dev"))
+                 if n.startswith("nvidia")]
+    gpu_paths.append("/dev/dri")
+    for gp in gpu_paths:
+        if os.path.exists(gp):
+            args += ["--dev-bind-try", gp, gp]
+    return args
+
+
 def build_learn_bwrap_cmd(
     config: dict,
     project_dir: Path,
@@ -7213,6 +7434,7 @@ def build_learn_bwrap_cmd(
         ]
     cmd += ["--tmpfs", "/var/tmp"]
     cmd += ["--dev", "/dev"]
+    cmd += gpu_dev_bind_args(sandbox)
     cmd += ["--proc", "/proc"]
 
     # 3. HOME writable — key difference from normal run
@@ -7770,6 +7992,12 @@ def main() -> None:
         action="store_true",
         help="Show only project snapshots",
     )
+    p_snl.add_argument(
+        "--all", "--all-projects", dest="all_projects",
+        action="store_true",
+        help="List snapshots from every project and agent, not just "
+             "the current directory (combines with the filters above)",
+    )
 
     # snapshot-diff
     p_snd = sub.add_parser(
@@ -7852,7 +8080,15 @@ def main() -> None:
     )
     p_snp.add_argument(
         "--all", dest="all_types", action="store_true",
-        help="Prune both project and config snapshots",
+        help="Prune both project and config snapshots (the default)",
+    )
+    # NOT spelled --all: that already means "both types" here, and
+    # repurposing it would silently change what an existing command does.
+    p_snp.add_argument(
+        "--all-projects", dest="all_projects", action="store_true",
+        help="Prune every project and agent in the store, not just the "
+             "current directory — the only way to reclaim snapshots left "
+             "behind by projects you have moved or deleted",
     )
 
     # learn

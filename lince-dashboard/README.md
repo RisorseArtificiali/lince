@@ -107,6 +107,7 @@ lince-dashboard/
 ├── hooks/
 │   ├── claude-status-hook.sh   # Claude Code hook → pipe + file
 │   ├── codex-status-hook.sh    # Codex notify hook → pipe + file
+│   ├── bob-status-hook.sh      # Bob (IBM) hook → pipe + file
 │   ├── lince-agent-wrapper     # Generic wrapper for agents without native hooks
 │   └── install-hooks.sh        # Hook installer
 ├── layouts/
@@ -144,6 +145,7 @@ lince-dashboard/
 - Test hook manually: `echo '{"hook_event_name":"Stop"}' | LINCE_AGENT_ID=test-1 bash ~/.local/bin/claude-status-hook.sh`
 - Check file fallback: `cat /tmp/lince-dashboard/claude-test-1.state`
 - Verify Codex notify is installed: check `~/.codex/config.toml` for the LINCE managed `notify` block
+- Verify Bob hooks are installed: check `~/.bob/settings/settings.json` for `bob-status-hook.sh` entries under `hooks`
 - Ensure sandbox passes env vars (see [Sandbox Integration](https://lince.sh/documentation/#/dashboard/usage-guide?id=sandbox-integration))
 
 ### Agent panes not hiding

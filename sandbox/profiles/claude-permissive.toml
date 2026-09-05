@@ -30,6 +30,13 @@
 # via persist_toolchains, so a blanket ~/.cache mount is unnecessary.
 home_ro_dirs = [".config/gh", ".ssh/known_hosts"]
 
+# Maven three-tier policy (#286): permissive mounts the REAL ~/.m2
+# read-write (trusted agent — same posture as .config/gh above; note the
+# agent can write the cache the HOST builds also consume). Normal uses an
+# isolated persistent cache (toolchains/m2-repository); paranoid gets
+# nothing (ephemeral tmpfs).
+home_rw_dirs = [".m2"]
+
 [env]
 # Pass host-env GitHub tokens through. gh CLI authenticated via
 # `gh auth login --with-token` reads from ~/.config/gh/hosts.yml (mounted
@@ -37,7 +44,8 @@ home_ro_dirs = [".config/gh", ".ssh/known_hosts"]
 # GH_TOKEN / GITHUB_TOKEN being exported in their shell — the sandbox's
 # default --clearenv would otherwise wipe them. Append-merged with the
 # user's [env].passthrough.
-passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]
+# GH_ENTERPRISE_TOKEN serves gh CLI users on GitHub Enterprise hosts.
+passthrough = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"]
 
 [security]
 credential_proxy = false

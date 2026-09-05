@@ -127,9 +127,12 @@ Create a filesystem snapshot of the project directory and/or the agent config di
 
 ```
 agent-sandbox snapshot-list [-a AGENT] [-p DIR] [--config-only | --project-only]
+                            [--all]
 ```
 
 List available snapshots grouped by type (project/config) with timestamps and disk usage.
+
+By default only the current directory's project is shown. `--all` lists every project and agent in the store, labelled by project path, with a running disk-usage total — useful when you work across several repositories and want to see where the space went.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -137,6 +140,28 @@ List available snapshots grouped by type (project/config) with timestamps and di
 | `-p`, `--project` | `.` (cwd) | Project directory |
 | `--config-only` | off | Show only config snapshots |
 | `--project-only` | off | Show only project snapshots |
+| `--all`, `--all-projects` | off | List every project and agent, not just the current directory |
+
+```
+$ agent-sandbox snapshot-list --all --project-only
+Project snapshots (all projects):
+
+  /home/u/alpha *
+    hash: f0b4f623dc47
+    20260731T094810  14 B
+
+  /home/u/beta
+    hash: 29cf69c51318
+    20260731T094810  13 B
+
+  /home/u/deleted  (missing — project moved/deleted)
+    hash: 0985dd0c546f
+    20260731T094810  13 B
+
+  total: 40 B
+```
+
+`*` marks the current directory's project. Snapshot directories are namespaced by a one-way hash of the project path, so each one also records the path it came from; directories created before that record existed are listed by hash as `(unknown project — no origin recorded)` and remain fully listable and prunable.
 
 ---
 
@@ -183,9 +208,12 @@ Interactive restore from a snapshot. Presents each changed file for per-file acc
 ```
 agent-sandbox snapshot-prune [-a AGENT] [-p DIR]
                              [--config-only] [--project-only] [--all]
+                             [--all-projects]
 ```
 
 Remove old snapshots beyond the configured maximum count (`max_project_snapshots`, `max_config_snapshots`).
+
+By default pruning is scoped to the current directory's project, so snapshots belonging to other projects — and to projects you have since moved or deleted — are never reclaimed. `--all-projects` prunes every project and agent in the store, applying the same per-project maximum to each.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -193,7 +221,17 @@ Remove old snapshots beyond the configured maximum count (`max_project_snapshots
 | `-p`, `--project` | `.` (cwd) | Project directory |
 | `--config-only` | off | Prune only config snapshots |
 | `--project-only` | off | Prune only project snapshots |
-| `--all` | off | Prune both project and config snapshots |
+| `--all` | off | Prune both project and config snapshots (this is already the default) |
+| `--all-projects` | off | Prune every project and agent, not just the current directory |
+
+> `--all` and `--all-projects` are different axes: `--all` selects *which kinds* of snapshot to prune (project vs config), `--all-projects` selects *whose* (current directory vs the whole store).
+
+```
+$ agent-sandbox snapshot-prune --all-projects --project-only
+  /home/u/beta: removed 4
+  /home/u/deleted  (missing — project moved/deleted): removed 4
+Project snapshots (all 4 project(s)): removed 12, max=3 each
+```
 
 ---
 

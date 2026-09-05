@@ -22,7 +22,7 @@ and the dashboard (`lince-dashboard`). Replaces the two divergent
 |---|---|---|
 | `[agent]` | `name`, `display_name`, `short_label`, `color`, `binary`, `default_args` | identity + launch facts. `default_args` are sandbox-coupled flags — never applied to unsandboxed variants (§3.5) |
 | `[sandbox]` | `backend`, `default_level`, `allowed_levels`, `home_subdir`, `bwrap_conflict`, `disable_inner_sandbox_args`, `home_ro_dirs`, `home_rw_dirs` | jail facts; home dirs in relative form (`.codex`, not `~/.codex/`) |
-| `[sandbox.levels.<level>]` | `scratch_home_dirs`, `scratch_home_files`, `unshare_net`, `credential_proxy`, `block_git_push`, `allow_domains`, `home_ro_dirs`, `passthrough`, `[…env_extra]` | per-level policy, absorbed from `sandbox/profiles/<agent>-<level>.toml` |
+| `[sandbox.levels.<level>]` | `scratch_home_dirs`, `scratch_home_files`, `unshare_net`, `credential_proxy`, `block_git_push`, `allow_domains`, `home_ro_dirs`, `home_rw_dirs`, `passthrough`, `[…env_extra]` | per-level policy, absorbed from `sandbox/profiles/<agent>-<level>.toml` |
 | `[dashboard]` | `status_pipe_name` (default `lince-status`), `has_native_hooks`, `providers` | `pane_title_pattern` is derived: `agent-sandbox` when sandboxed, `binary` when not |
 | `[variants.unsandboxed]` | any | exceptions to the §3.5 derivation rule only |
 | `[env]` | agent env vars, or `provider_env = "all"` | single merged table (kills the sandbox/dashboard env duplication); `provider_env = "all"` expands to the union of all provider env-var NAMES from `providers.toml` |

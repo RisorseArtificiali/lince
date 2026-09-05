@@ -1,4 +1,4 @@
-# registry.d/pi.toml — SHIPPED agent definition. Always overwritten
+# registry.d/goose.toml — SHIPPED agent definition. Always overwritten
 # on update (#199 ownership contract) — user overrides and custom agents
 # belong in the user config, never here.
 #
@@ -8,58 +8,39 @@
 # Guarded against drift by scripts/tests/test_registry_sync.py.
 
 [agent]
-name = "pi"
-display_name = "Pi"
-short_label = "PI "
+name = "goose"
+display_name = "Goose"
+short_label = "GSE"
 color = "blue"
-binary = "pi"
+binary = "goose"
 default_args = []
 
 [sandbox]
 backend = "auto"
 default_level = "normal"
 allowed_levels = []
-home_subdir = ".pi"
+home_subdir = ".config/goose"
 bwrap_conflict = false
 disable_inner_sandbox_args = []
 home_ro_dirs = []
-home_rw_dirs = [".pi"]
+home_rw_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
 
 [sandbox.levels.paranoid]
-scratch_home_dirs = [".pi"]
+scratch_home_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
 unshare_net = true
 credential_proxy = true
 allow_domains = []
 
 [sandbox.levels.paranoid.env_extra]
-ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY"
-ANTHROPIC_AUTH_TOKEN = "$ANTHROPIC_AUTH_TOKEN"
 OPENAI_API_KEY = "$OPENAI_API_KEY"
-GEMINI_API_KEY = "$GEMINI_API_KEY"
-GOOGLE_API_KEY = "$GOOGLE_API_KEY"
 
 [sandbox.levels.permissive]
 credential_proxy = false
 block_git_push = true
 allow_domains = ["api.github.com", "github.com", "objects.githubusercontent.com"]
 home_ro_dirs = [".config/gh", ".cache", ".ssh/known_hosts"]
-home_rw_dirs = [".m2"]
-passthrough = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"]
+passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]
 
 [dashboard]
-has_native_hooks = true
+has_native_hooks = false
 providers = ["__discover__"]
-
-# provider_env = "all" expands to the union of all provider env-var
-# NAMES from registry.d/providers.toml (design §3.4) — the 31-var
-# multi-provider bundle is stored once, not copy-pasted 4x.
-[env]
-provider_env = "all"
-
-# Once per agent; all variants inherit (design §3.5).
-[event_map]
-session_start = "input"
-turn_start = "running"
-tool_call = "running"
-turn_end = "input"
-session_shutdown = "stopped"

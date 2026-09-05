@@ -197,7 +197,7 @@ Static variables can also be set via `[env.extra]` for every run regardless of p
 | **Tmpfs home is writable** | The `$HOME` tmpfs overlay is writable (that is how tmpfs works). The agent can create temporary files like `~/temp.txt`, but they are ephemeral and vanish when the sandbox exits. They never touch your real home directory |
 | **Credential proxy and HTTPS** | The proxy rewrites `*_BASE_URL` to `http://localhost:PORT`. All major AI SDKs support base URL overrides, so this is transparent. Custom HTTP clients that ignore `*_BASE_URL` env vars will not benefit from the proxy |
 | **Learn mode accuracy** | `strace` captures actual I/O but may miss paths checked with `access()` or `stat()` without opening. The learn sandbox is permissive, so the agent may access paths blocked in the real sandbox. Use the report as guidance, not as an exhaustive spec |
-| **Snapshot disk usage** | Snapshots use hardlinks for deduplication but still consume disk for changed files. Monitor with `agent-sandbox snapshot-list` and configure `max_project_snapshots` / `max_config_snapshots` |
+| **Snapshot disk usage** | Snapshots use hardlinks for deduplication but still consume disk for changed files. Monitor with `agent-sandbox snapshot-list --all`, reclaim across every project with `agent-sandbox snapshot-prune --all-projects`, and configure `max_project_snapshots` / `max_config_snapshots` |
 
 ---
 
