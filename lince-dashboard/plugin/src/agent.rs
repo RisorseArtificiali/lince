@@ -294,7 +294,8 @@ fn synthesize_sandboxed_command(
         "codex" => (
             vec![
                 "codex".to_string(),
-                "--full-auto".to_string(),
+                "-a".to_string(),
+                "never".to_string(),
                 "--sandbox".to_string(),
                 "danger-full-access".to_string(),
             ],

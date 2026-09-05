@@ -52,7 +52,7 @@ sandbox_backend = "auto"
 #
 # Example: override codex to use a custom model
 # [agents.codex]
-# default_args = ["--full-auto", "--model", "o4-mini"]
+# default_args = ["-a", "never", "--model", "o4-mini"]
 #
 # Example: add a custom agent
 # [agents.custom-agent]

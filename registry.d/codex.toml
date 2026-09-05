@@ -13,7 +13,7 @@ display_name = "OpenAI Codex"
 short_label = "CDX"
 color = "cyan"
 binary = "codex"
-default_args = ["--full-auto"]
+default_args = ["-a", "never"]
 
 [sandbox]
 backend = "auto"
@@ -49,7 +49,7 @@ providers = ["__discover__"]
 # Exceptions to the derivation rule (design §3.5); all other
 # variant fields are derived from the base definition.
 [variants.unsandboxed]
-command = ["codex", "--full-auto"]
+command = ["codex", "--sandbox", "workspace-write", "-a", "never"]
 bwrap_conflict = false
 
 [env]

@@ -358,17 +358,17 @@ data confirms this: `claude-unsandboxed` today is `command = ["claude"]`
 disabled and **no sandbox** — a security regression vs today. Verification status of
 the derivation, per field: labels/colors/titles/`sandboxed` follow the rule for all 8
 shipped pairs; the `command` field does **not** follow a single rule (claude drops
-its args, codex keeps `--full-auto`), so codex carries an explicit exception.
+its args, codex keeps `--sandbox workspace-write -a never`), so codex carries an explicit exception.
 
 Exceptions go in an optional `[variants.unsandboxed]` override table.
-**The rule is NOT exception-free**: today `codex-unsandboxed` keeps `--full-auto`
-(`command = ["codex", "--full-auto"]`, lince-dashboard/agents-defaults.toml:144) and
+**The rule is NOT exception-free**: today `codex-unsandboxed` keeps `--sandbox workspace-write -a never`
+(`command = ["codex", "--sandbox", "workspace-write", "-a", "never"]`, lince-dashboard/agents-defaults.toml:144) and
 flips `bwrap_conflict = true → false` (verified, lince-dashboard/agents-defaults.toml:123
 vs :152), so `registry.d/codex.toml` ships:
 
 ```toml
 [variants.unsandboxed]
-command = ["codex", "--full-auto"]
+command = ["codex", "--sandbox", "workspace-write", "-a", "never"]
 bwrap_conflict = false
 ```
 

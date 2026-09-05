@@ -141,7 +141,7 @@ OPENAI_API_KEY = "$OPENAI_API_KEY"
 turn_complete = "input"
 
 [agents.codex-unsandboxed]
-command = ["codex", "--full-auto"]
+command = ["codex", "--sandbox", "workspace-write", "-a", "never"]
 pane_title_pattern = "codex"
 status_pipe_name = "lince-status"
 display_name = "OpenAI Codex (unsandboxed)"

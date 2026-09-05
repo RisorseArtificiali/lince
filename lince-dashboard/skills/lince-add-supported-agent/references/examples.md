@@ -76,7 +76,7 @@ remain unknown because Codex doesn't surface them.
 ```toml
 [agents.codex]
 command = "codex"
-default_args = ["--full-auto"]
+default_args = ["-a", "never"]
 env = {}
 home_ro_dirs = [".codex"]
 home_rw_dirs = []
