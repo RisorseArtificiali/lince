@@ -134,11 +134,16 @@ HOME_SUBDIRS: dict[str, str] = {
 # Per-variant exceptions to the §3.5 derivation rule. The diff-guard verifies
 # derived+exceptions == legacy, so a new exception in the legacy file fails
 # the test instead of drifting silently.
-#   codex: keeps --full-auto outside the sandbox (claude deliberately drops
-#   --dangerously-skip-permissions — see §3.5 security note) and flips
-#   bwrap_conflict off (no outer bwrap to conflict with).
+#   codex: keeps auto-edit semantics outside the sandbox — explicit
+#   workspace-write + no approvals (codex CLI >= 0.144 removed --full-auto;
+#   claude deliberately drops --dangerously-skip-permissions — see §3.5
+#   security note) and flips bwrap_conflict off (no outer bwrap to conflict
+#   with).
 VARIANT_EXCEPTIONS: dict[str, dict] = {
-    "codex": {"command": ["codex", "--full-auto"], "bwrap_conflict": False},
+    "codex": {
+        "command": ["codex", "--sandbox", "workspace-write", "-a", "never"],
+        "bwrap_conflict": False,
+    },
 }
 
 DEFAULT_STATUS_PIPE = "lince-status"

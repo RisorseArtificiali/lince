@@ -43,7 +43,7 @@ disable_inner_sandbox_args = []
 
 [agents.codex]
 command = "codex"
-default_args = ["--full-auto"]
+default_args = ["-a", "never"]
 env = {}
 home_ro_dirs = []
 home_rw_dirs = [".codex"]

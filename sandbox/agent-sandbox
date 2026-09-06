@@ -144,7 +144,7 @@ use_real_config = false
 
 # [agents.codex]
 # command = "codex"
-# default_args = ["--full-auto"]
+# default_args = ["-a", "never"]
 # home_ro_dirs = [".codex"]
 # bwrap_conflict = true
 # disable_inner_sandbox_args = ["--sandbox", "danger-full-access"]

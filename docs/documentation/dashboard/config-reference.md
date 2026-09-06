@@ -72,7 +72,7 @@ Override an existing agent (e.g. change Codex model):
 
 ```toml
 [agents.codex]
-command = ["codex", "--full-auto", "--model", "o4-mini"]
+command = ["codex", "--sandbox", "workspace-write", "-a", "never", "--model", "o4-mini"]
 pane_title_pattern = "codex"
 status_pipe_name = "lince-status"
 display_name = "OpenAI Codex (o4-mini)"

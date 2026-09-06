@@ -248,7 +248,7 @@ For sandboxed agents, `env_unset` is a no-op because `--clearenv` already starts
 | Field | Purpose | Example |
 |-------|---------|---------|
 | `command` | Binary to execute | `"codex"` |
-| `default_args` | Default CLI args | `["--full-auto"]` |
+| `default_args` | Default CLI args | `["-a", "never"]` |
 | `env` | Env vars to set | `{ OPENAI_API_KEY = "$OPENAI_API_KEY" }` |
 | `home_ro_dirs` | Home dirs to mount read-only | `[".codex", ".config/codex"]` |
 | `home_rw_dirs` | Home dirs to mount read-write | `[]` |
@@ -284,7 +284,7 @@ Use `--dry-run` to verify what gets injected:
 
 ```bash
 agent-sandbox run -a codex-bwrap -p ~/project --dry-run
-# Shows: ... codex --full-auto --sandbox danger-full-access
+# Shows: ... codex -a never --sandbox danger-full-access
 ```
 
 ## Status Pipes
