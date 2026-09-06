@@ -294,6 +294,7 @@ fn synthesize_sandboxed_command(
         "codex" => (
             vec![
                 "codex".to_string(),
+                "--no-alt-screen".to_string(),
                 "-a".to_string(),
                 "never".to_string(),
                 "--sandbox".to_string(),

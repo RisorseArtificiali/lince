@@ -106,7 +106,7 @@ lince-dashboard/
 │       └── state_file.rs       # Save/restore agent state (.lince-dashboard)
 ├── hooks/
 │   ├── claude-status-hook.sh   # Claude Code hook → pipe + file
-│   ├── codex-status-hook.sh    # Codex notify hook → pipe + file
+│   ├── codex-status-hook.sh    # Codex lifecycle/notify hooks → pipe + file
 │   ├── bob-status-hook.sh      # Bob (IBM) hook → pipe + file
 │   ├── lince-agent-wrapper     # Generic wrapper for agents without native hooks
 │   └── install-hooks.sh        # Hook installer
@@ -144,9 +144,29 @@ lince-dashboard/
 - Verify hooks are installed: check `~/.claude/settings.json` for `hooks` section
 - Test hook manually: `echo '{"hook_event_name":"Stop"}' | LINCE_AGENT_ID=test-1 bash ~/.local/bin/claude-status-hook.sh`
 - Check file fallback: `cat /tmp/lince-dashboard/claude-test-1.state`
-- Verify Codex notify is installed: check `~/.codex/config.toml` for the LINCE managed `notify` block
+- For Codex, run `bash hooks/install-codex-hooks.sh`, then open `/hooks` in Codex and review/trust the `codex-status-hook.sh` handlers. Restart the Codex session. The installer merges lifecycle events into `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and preserves other hooks. Legacy `notify` alone can only report turn completion, so it cannot switch the dashboard to `RUNNING`.
 - Verify Bob hooks are installed: check `~/.bob/settings/settings.json` for `bob-status-hook.sh` entries under `hooks`
 - Ensure sandbox passes env vars (see [Sandbox Integration](https://lince.sh/documentation/#/dashboard/usage-guide?id=sandbox-integration))
+
+### Codex scrolling and multiline input
+
+Lince starts Codex with `--no-alt-screen` to retain Zellij's pane scrollback.
+After updating Lince, start a new Codex pane. Use the mouse wheel, or `Ctrl+s`
+then `PageUp`/`PageDown` (`Esc` returns to normal mode).
+
+The shipped Zellij config maps `Shift+Enter` to LF, Codex's `Ctrl+j` newline.
+Existing Zellij configs are preserved by updates: add this inside `keybinds`
+in your active config and restart Zellij:
+
+```kdl
+shared_among "normal" "locked" {
+    bind "Shift Enter" { Write 10; }
+}
+```
+
+The host terminal must send a distinct key sequence for `Shift+Enter`.
+If it sends ordinary Enter, use `Ctrl+j`, or `Ctrl+g` to compose in your editor.
+A trailing backslash is not a portable multiline shortcut for Codex.
 
 ### Agent panes not hiding
 - This is a known Zellij behavior — `hide_pane_with_id` requires `ChangeApplicationState` permission

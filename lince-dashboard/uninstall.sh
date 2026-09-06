@@ -6,6 +6,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}   LINCE Dashboard — Uninstaller${NC}"
@@ -218,7 +219,7 @@ fi
 echo ""
 
 # ── Codex notify in config.toml ────────────────────────────────────────
-CODEX_CONFIG="$HOME/.codex/config.toml"
+CODEX_CONFIG="${CODEX_HOME:-$HOME/.codex}/config.toml"
 CODEX_BLOCK_START="# >>> LINCE Dashboard Codex notify >>>"
 CODEX_BLOCK_END="# <<< LINCE Dashboard Codex notify <<<"
 if [ -f "$CODEX_CONFIG" ]; then
@@ -241,6 +242,14 @@ else
     echo "  Codex config not found — skipping notify cleanup"
 fi
 echo ""
+
+CODEX_HOOKS="${CODEX_HOME:-$HOME/.codex}/hooks.json"
+if [ -f "$CODEX_HOOKS" ] && grep -Fq 'codex-status-hook.sh' "$CODEX_HOOKS"; then
+    if confirm "  Remove Lince Codex lifecycle handlers from $CODEX_HOOKS?"; then
+        python3 "$SCRIPT_DIR/hooks/codex-hooks-config.py" "$CODEX_HOOKS" --remove
+        echo -e "${GREEN}  ✓ Removed Lince handlers (other hooks preserved)${NC}"
+    fi
+fi
 
 # ── Shell aliases ────────────────────────────────────────────────
 ALIAS_REMOVED=false

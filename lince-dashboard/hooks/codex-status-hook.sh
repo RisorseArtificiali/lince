@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# codex-status-hook.sh — Codex notify hook that reports turn-complete status
+# codex-status-hook.sh — Codex lifecycle/notify hook that reports agent status
 # to the lince-dashboard Zellij plugin via pipe (primary) and file (fallback).
 #
 # Emits a minimal JSON contract: {"agent_id": "<id>", "event": "<native_name>"}
@@ -8,8 +8,8 @@
 # See LINCE-118 / LINCE-122.
 #
 # Codex notify runs an external program and appends a JSON payload as an argv
-# item (some integrations may prefer stdin, so we support both). The payload's
-# `type` field (e.g. "agent-turn-complete") is forwarded as the native event.
+# item; lifecycle hooks deliver JSON on stdin using `hook_event_name`.
+# Prefer that field, then the legacy notify `type` field.
 # If `type` is missing, we synthesize "turn_complete" to preserve historical
 # semantics (codex notify fires on turn completion).
 #
@@ -50,8 +50,11 @@ extract_json_field() {
     fi
 }
 
-EVENT_TYPE=$(extract_json_field "type")
-NATIVE_EVENT="${EVENT_TYPE:-turn_complete}"
+NATIVE_EVENT=$(extract_json_field "hook_event_name")
+if [ -z "$NATIVE_EVENT" ]; then
+    EVENT_TYPE=$(extract_json_field "type")
+    NATIVE_EVENT="${EVENT_TYPE:-turn_complete}"
+fi
 
 PAYLOAD="{\"agent_id\":\"${AGENT_ID}\",\"event\":\"${NATIVE_EVENT}\"}"
 
