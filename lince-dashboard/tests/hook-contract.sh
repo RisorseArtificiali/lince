@@ -169,6 +169,22 @@ run_capture codex-fallback \
     "${HOOKS_DIR}/codex-status-hook.sh"
 validate_payload codex-fallback "test-codex" '^turn_complete$'
 
+# Lifecycle hooks use stdin and take precedence over the legacy notify type.
+for event in SessionStart UserPromptSubmit PreToolUse PermissionRequest PostToolUse PreCompact PostCompact Stop Interrupt SessionEnd; do
+    run_capture "codex-$event" \
+        bash -c 'printf "{\"hook_event_name\":\"%s\",\"type\":\"agent-turn-complete\"}" "$1" | bash "$0"' \
+        "${HOOKS_DIR}/codex-status-hook.sh" "$event"
+    validate_payload "codex-$event" "test-codex" "^${event}$"
+    if [ "$(cat "$STATE_DIR/test-codex.state")" != "$event" ]; then
+        echo "FAIL [codex-$event] file fallback did not receive lifecycle event"
+        FAIL=1
+    fi
+done
+
+run_capture codex-argv \
+    bash "${HOOKS_DIR}/codex-status-hook.sh" '{"type":"agent-turn-complete"}'
+validate_payload codex-argv "test-codex" '^agent-turn-complete$'
+
 # --- bob-status-hook.sh: hook_event_name forwarded verbatim ----------------
 # Bob's contract is Claude-style (hook_event_name on stdin) but has no
 # Notification event; missing hook_event_name must exit 0 with no payload.

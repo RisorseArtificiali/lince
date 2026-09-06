@@ -141,7 +141,7 @@ HOME_SUBDIRS: dict[str, str] = {
 #   with).
 VARIANT_EXCEPTIONS: dict[str, dict] = {
     "codex": {
-        "command": ["codex", "--sandbox", "workspace-write", "-a", "never"],
+        "command": ["codex", "--no-alt-screen", "--sandbox", "workspace-write", "-a", "never"],
         "bwrap_conflict": False,
     },
 }
