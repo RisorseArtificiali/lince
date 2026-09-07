@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# install-codex-hooks.sh — Install Codex notify integration for lince-dashboard.
+# install-codex-hooks.sh — Install Codex lifecycle and notify integration.
 #
 # What it does:
 #   1. Copies the Codex notify hook to ~/.local/bin/
 #   2. Copies the shared agent wrapper to ~/.local/bin/
 #   3. Inserts a managed top-level notify entry into ~/.codex/config.toml
 #      unless the user already has a different notify command configured
-#   4. Prints sandbox env passthrough requirements
+#   4. Merges lifecycle handlers into Codex hooks.json (preserving user hooks)
+#   5. Prints sandbox env passthrough requirements and hook trust instructions
 #
 # Notes:
-#   - Codex notify runs on turn completion, so this complements the generic
-#     lince-agent-wrapper instead of replacing it.
+#   - Legacy notify reports completion only; lifecycle hooks also report work.
 
 set -euo pipefail
 
@@ -24,7 +24,7 @@ HOOK_SRC="$SCRIPT_DIR/codex-status-hook.sh"
 HOOK_DEST="$HOME/.local/bin/codex-status-hook.sh"
 WRAPPER_SRC="$SCRIPT_DIR/lince-agent-wrapper"
 WRAPPER_DEST="$HOME/.local/bin/lince-agent-wrapper"
-CONFIG_DIR="$HOME/.codex"
+CONFIG_DIR="${CODEX_HOME:-$HOME/.codex}"
 CONFIG_FILE="$CONFIG_DIR/config.toml"
 BLOCK_START="# >>> LINCE Dashboard Codex notify >>>"
 BLOCK_END="# <<< LINCE Dashboard Codex notify <<<"
@@ -41,14 +41,14 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
-echo -e "${GREEN}[1/4] Installing Codex notify hook...${NC}"
+echo -e "${GREEN}[1/5] Installing Codex status hook...${NC}"
 mkdir -p "$HOME/.local/bin"
 cp "$HOOK_SRC" "$HOOK_DEST"
 chmod +x "$HOOK_DEST"
 echo -e "${GREEN}  Installed: $HOOK_DEST${NC}"
 
 echo ""
-echo -e "${GREEN}[2/4] Installing shared agent wrapper...${NC}"
+echo -e "${GREEN}[2/5] Installing shared agent wrapper...${NC}"
 if [ -f "$WRAPPER_SRC" ]; then
     cp "$WRAPPER_SRC" "$WRAPPER_DEST"
     chmod +x "$WRAPPER_DEST"
@@ -58,7 +58,7 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}[3/4] Configuring Codex notify...${NC}"
+echo -e "${GREEN}[3/5] Configuring Codex notify...${NC}"
 
 mkdir -p "$CONFIG_DIR"
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -106,6 +106,8 @@ elif [ "$OTHER_NOTIFY" = "OTHER" ]; then
     echo -e "${YELLOW}  ⚠ Existing Codex notify setting found in $CONFIG_FILE — leaving it unchanged${NC}"
     echo -e "${YELLOW}    Add this manually if you want LINCE idle updates:${NC}"
     echo "    $HOOK_LINE"
+elif [ "$OTHER_NOTIFY" = "OURS" ]; then
+    echo -e "${GREEN}  ✓ Notify already configured${NC}"
 else
     TMP_FILE="$(mktemp)"
     awk -v start="$BLOCK_START" -v end="$BLOCK_END" '
@@ -138,7 +140,14 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}[4/4] Sandbox configuration requirements${NC}"
+echo -e "${GREEN}[4/5] Configuring Codex lifecycle hooks...${NC}"
+python3 "$SCRIPT_DIR/codex-hooks-config.py" "$CONFIG_DIR/hooks.json"
+echo "  Hooks: $CONFIG_DIR/hooks.json"
+echo "  In Codex, open /hooks and review/trust the codex-status-hook.sh handlers."
+echo "  Codex skips new or changed hooks until trusted. Then start a new session."
+
+echo ""
+echo -e "${GREEN}[5/5] Sandbox configuration requirements${NC}"
 echo ""
 echo -e "${YELLOW}  IMPORTANT: For Codex status updates to work inside agent-sandbox, you must${NC}"
 echo -e "${YELLOW}  add these environment variables to your sandbox config passthrough:${NC}"
@@ -155,4 +164,4 @@ echo "Config:      $CONFIG_FILE"
 echo ""
 echo "To verify:"
 echo "  LINCE_AGENT_ID=test-1 bash $HOOK_DEST '{\"type\":\"agent-turn-complete\"}'"
-echo "  cat /tmp/lince-dashboard/test-1.state  # should show: idle"
+echo "  cat /tmp/lince-dashboard/test-1.state  # should show: agent-turn-complete"

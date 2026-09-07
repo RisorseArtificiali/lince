@@ -71,7 +71,7 @@ class ResolveTestCase(unittest.TestCase):
         self.assertEqual(claude["dashboard"]["status_pipe_name"], "claude-status")
         # variant derivation incl. the codex exception
         self.assertEqual(view["agents"]["codex"]["variants"]["unsandboxed"]["command"],
-                         ["codex", "--sandbox", "workspace-write", "-a", "never"])
+                         ["codex", "--no-alt-screen", "--sandbox", "workspace-write", "-a", "never"])
         self.assertFalse(view["agents"]["codex"]["variants"]["unsandboxed"]["bwrap_conflict"])
         self.assertEqual(claude["variants"]["unsandboxed"]["command"], ["claude"])
         self.assertEqual(claude["variants"]["unsandboxed"]["short_label"], "CLU")

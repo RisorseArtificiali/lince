@@ -132,16 +132,23 @@ sandbox_level = "normal"          # paranoid | normal | permissive (or custom; s
 OPENAI_API_KEY = "$OPENAI_API_KEY"
 
 # Native hook events emitted by codex-status-hook.sh → canonical AgentStatus.
-# Codex notify currently fires on turn completion; the hook forwards the
-# payload's `type` field (typically "agent-turn-complete") as the native event,
-# falling back to "turn_complete" if missing. Both map to "input" (waiting
-# for the user's next prompt). See LINCE-118 / LINCE-122.
+# Lifecycle hooks report the full turn; notify remains a completion fallback.
 [agents.codex.event_map]
+SessionStart = "input"
+UserPromptSubmit = "running"
+PreToolUse = "running"
+PostToolUse = "running"
+PermissionRequest = "permission"
+PreCompact = "running"
+PostCompact = "running"
+Stop = "input"
+Interrupt = "input"
+SessionEnd = "stopped"
 "agent-turn-complete" = "input"
 turn_complete = "input"
 
 [agents.codex-unsandboxed]
-command = ["codex", "--sandbox", "workspace-write", "-a", "never"]
+command = ["codex", "--no-alt-screen", "--sandbox", "workspace-write", "-a", "never"]
 pane_title_pattern = "codex"
 status_pipe_name = "lince-status"
 display_name = "OpenAI Codex (unsandboxed)"
@@ -156,6 +163,16 @@ providers = ["__discover__"]
 OPENAI_API_KEY = "$OPENAI_API_KEY"
 
 [agents.codex-unsandboxed.event_map]
+SessionStart = "input"
+UserPromptSubmit = "running"
+PreToolUse = "running"
+PostToolUse = "running"
+PermissionRequest = "permission"
+PreCompact = "running"
+PostCompact = "running"
+Stop = "input"
+Interrupt = "input"
+SessionEnd = "stopped"
 "agent-turn-complete" = "input"
 turn_complete = "input"
 

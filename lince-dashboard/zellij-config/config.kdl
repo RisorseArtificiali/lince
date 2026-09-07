@@ -1,4 +1,9 @@
 keybinds clear-defaults=true {
+    shared_among "normal" "locked" {
+        // Send LF (Ctrl+J) to the composer even without enhanced keyboard
+        // support inside the pane. The host must distinguish Shift+Enter.
+        bind "Shift Enter" { Write 10; }
+    }
     locked {
         bind "Ctrl l" { SwitchToMode "normal"; }
     }
