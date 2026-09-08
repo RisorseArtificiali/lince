@@ -221,6 +221,14 @@ unshare_pid = true
 # May interfere with Ctrl+C propagation. Disable if you have issues.
 new_session = false
 
+# Graceful Ctrl+C: when true (default), the first Ctrl+C while the agent
+# is working does NOT terminate the sandbox. The agent receives SIGINT
+# via the shared process group and is expected to handle it (e.g. cancel
+# the current LLM request and return to the prompt). A second Ctrl+C
+# within 3 seconds forces termination (SIGTERM → SIGKILL).
+# Set to false to restore the old behaviour (immediate exit on Ctrl+C).
+graceful_interrupt = true
+
 # Block git push via a wrapper script
 block_git_push = true
 
@@ -4194,6 +4202,121 @@ def landlock_plan(config: dict, sandbox_level: str | None,
     }
 
 
+# Sentinel returned by _sandbox_wait when the sandbox is terminated by a
+# user interrupt in legacy (non-graceful) mode.
+_SANDBOX_INTERRUPTED = object()
+
+
+def _forward_sigint_to_descendants(root_pid: int) -> bool:
+    """Send SIGINT to all descendant processes of *root_pid*.
+
+    With ``start_new_session=True`` the bwrap process (root_pid) is in its
+    own session and does not receive terminal SIGINT.  We need to forward
+    the signal to the agent (e.g. goose) so it can cancel the current
+    operation.
+
+    The process tree is::
+
+        bwrap (root_pid) → bwrap-clone (PID 1 in namespace) → goose
+
+    bwrap-clone has ``SIGNAL_UNKILLABLE`` and ignores SIGINT.
+    goose catches SIGINT and handles it (cancel request, return to prompt).
+    root_pid (bwrap) itself is **not** signaled, so it survives.
+
+    Returns True if at least one descendant was signaled.
+    """
+    import glob
+
+    # Build parent → children map from /proc
+    children_of: dict[int, list[int]] = {}
+    for stat_path in glob.glob("/proc/[0-9]*/stat"):
+        try:
+            with open(stat_path) as fh:
+                data = fh.read()
+            # Format: "pid (comm) state ppid ..."
+            # comm can contain spaces and parens.
+            lparen = data.find("(")
+            rparen = data.rfind(")")
+            pid = int(data[:lparen].strip())
+            fields = data[rparen + 2:].split()
+            ppid = int(fields[1])
+            children_of.setdefault(ppid, []).append(pid)
+        except (OSError, ValueError, IndexError):
+            continue
+
+    # BFS to collect all descendant PIDs (not root_pid itself)
+    to_signal: list[int] = []
+    queue = list(children_of.get(root_pid, []))
+    while queue:
+        pid = queue.pop(0)
+        to_signal.append(pid)
+        queue.extend(children_of.get(pid, []))
+
+    if not to_signal:
+        return False
+
+    for pid in to_signal:
+        try:
+            os.kill(pid, signal.SIGINT)
+        except OSError:
+            pass
+    return True
+
+
+def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool):
+    """Wait for a sandboxed child process, handling Ctrl+C.
+
+    When *graceful_interrupt* is True, the first Ctrl+C does **not**
+    terminate the sandbox.  The child already received ``SIGINT`` via the
+    shared process group and is expected to handle it (e.g. cancel an LLM
+    request and return to the prompt).  A second Ctrl+C within three
+    seconds forces termination (``SIGTERM`` → ``SIGKILL``).
+
+    When *graceful_interrupt* is False, Ctrl+C terminates the sandbox
+    immediately (legacy behaviour).
+
+    Returns the child's exit code on normal or forced termination.
+    Returns ``_SANDBOX_INTERRUPTED`` when the sandbox is terminated by a
+    user interrupt in legacy mode.
+    """
+    if not graceful_interrupt:
+        try:
+            return proc.wait()
+        except KeyboardInterrupt:
+            print("\nSandbox terminated.")
+            return _SANDBOX_INTERRUPTED
+
+    _RESET_SECS = 3
+    interrupt_count = 0
+    last_interrupt = 0.0
+
+    while True:
+        try:
+            return proc.wait()
+        except KeyboardInterrupt:
+            now = time.monotonic()
+            if now - last_interrupt > _RESET_SECS:
+                interrupt_count = 0
+            interrupt_count += 1
+            last_interrupt = now
+
+            if interrupt_count >= 2:
+                print("\nForce terminating sandbox...")
+                try:
+                    proc.send_signal(signal.SIGTERM)
+                    return proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    return proc.wait()
+            # First Ctrl+C: the child is in its own session (start_new_session)
+            # so it did NOT receive terminal SIGINT.  Forward SIGINT to the
+            # agent (goose) by signaling bwrap's descendants — bwrap-clone
+            # (PID 1 in namespace) ignores it via SIGNAL_UNKILLABLE, while
+            # goose catches it and can cancel the current request.
+            _forward_sigint_to_descendants(proc.pid)
+            continue
+
+
 def cmd_run(args, agent_extra: list[str]) -> None:
     config, config_path = load_config()
 
@@ -4287,6 +4410,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     profile = provider
 
     sec = config.get("security", {})
+    graceful_interrupt = sec.get("graceful_interrupt", True)
 
     # --- nono backend path (simpler — nono handles isolation itself) -------
     if backend == "nono":
@@ -4350,6 +4474,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         print(f"  isolation   Landlock LSM / Seatbelt")
         print(f"  network     enabled")
         print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+        print(f"  interrupt   {'graceful (2×Ctrl+C to force)' if graceful_interrupt else 'immediate exit'}")
         print(
             f"  permissions "
             f"{'ask (safe mode)' if args.safe else 'per agent defaults'}"
@@ -4385,10 +4510,12 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             )
 
         try:
-            result = subprocess.run(cmd, cwd=str(project_dir))
-            sys.exit(result.returncode)
-        except KeyboardInterrupt:
-            print("\nSandbox terminated.")
+            proc = subprocess.Popen(cmd, cwd=str(project_dir),
+                                    start_new_session=True)
+            result = _sandbox_wait(proc, graceful_interrupt)
+            if result is _SANDBOX_INTERRUPTED:
+                sys.exit(130)
+            sys.exit(result)
         except FileNotFoundError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             sys.exit(1)
@@ -4629,6 +4756,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         if sb_proxy:
             print(f"  cred proxy  127.0.0.1:{sb_proxy_port} (direct TCP)")
         print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+        print(f"  interrupt   {'graceful (2×Ctrl+C to force)' if graceful_interrupt else 'immediate exit'}")
         print(
             f"  permissions "
             f"{'ask (safe mode)' if args.safe else 'per agent defaults'}"
@@ -4677,10 +4805,12 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         write_policy_record(args.id, sb_record)
 
         try:
-            result = subprocess.run(cmd, cwd=str(project_dir))
-            sys.exit(result.returncode)
-        except KeyboardInterrupt:
-            print("\nSandbox terminated.")
+            proc = subprocess.Popen(cmd, cwd=str(project_dir),
+                                    start_new_session=True)
+            result = _sandbox_wait(proc, graceful_interrupt)
+            if result is _SANDBOX_INTERRUPTED:
+                sys.exit(130)
+            sys.exit(result)
         except FileNotFoundError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             sys.exit(1)
@@ -5101,6 +5231,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         print(f"  landlock    fs only (ABI {landlock_abi})")
     print(f"  pid isolat. {'on' if sec.get('unshare_pid', True) else 'off'}")
     print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+    print(f"  interrupt   {'graceful (2×Ctrl+C to force)' if graceful_interrupt else 'immediate exit'}")
     print(f"  env vars    clearenv + whitelist")
     if proxy:
         targets = [
@@ -5200,16 +5331,18 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     write_policy_record(args.id, bwrap_record)
 
     try:
-        result = subprocess.run(cmd, cwd=str(project_dir))
+        proc = subprocess.Popen(cmd, cwd=str(project_dir),
+                                start_new_session=True)
+        result = _sandbox_wait(proc, graceful_interrupt)
+        if result is _SANDBOX_INTERRUPTED:
+            sys.exit(130)
         snap_conf = _get_snapshot_config(config)
         if snap_conf["auto_config"] or snap_conf["auto_project"]:
             print(
                 "\nTip: run 'agent-sandbox snapshot-diff' to see "
                 "what changed since the pre-run snapshot.",
             )
-        sys.exit(result.returncode)
-    except KeyboardInterrupt:
-        print("\nSandbox terminated.")
+        sys.exit(result)
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -7469,6 +7602,7 @@ def cmd_learn(args) -> None:
     # 1. Load config and check backend first
     config, config_path = load_config()
     project_dir = Path.cwd().resolve()
+    graceful_interrupt = config.get("security", {}).get("graceful_interrupt", True)
 
     # 1a. Gate: learn mode requires strace (Linux-only). Seatbelt and nono
     # backends cannot use strace-based learn mode.
@@ -7581,10 +7715,10 @@ def cmd_learn(args) -> None:
                     proc.kill()
                     proc.wait()
         else:
-            proc.wait()
+            _sandbox_wait(proc, graceful_interrupt)
+            proc.poll()  # ensure returncode is set
 
     except KeyboardInterrupt:
-        print("\n\nInterrupted, terminating agent...")
         if proc and proc.poll() is None:
             proc.send_signal(signal.SIGTERM)
             try:
