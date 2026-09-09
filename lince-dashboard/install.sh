@@ -9,6 +9,9 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/check-zellij.sh
+source "$SCRIPT_DIR/../scripts/check-zellij.sh"
+
 # Sandbox isolation levels (paranoid/normal/permissive) are no longer chosen at
 # install time. Under Config v2 they are a dimension of each agent, offered by
 # the dashboard's New Agent wizard at spawn time; the old install-time selection
@@ -99,11 +102,7 @@ echo -e "${GREEN}[1/14] Checking prerequisites...${NC}"
 
 MISSING=()
 
-if ! command -v zellij >/dev/null 2>&1; then
-    MISSING+=("zellij (>= 0.40)")
-else
-    echo -e "${GREEN}  ✓ zellij $(zellij --version 2>/dev/null | awk '{print $2}')${NC}"
-fi
+check_zellij_version || exit 1
 
 if ! command -v rustc >/dev/null 2>&1; then
     MISSING+=("rustc")

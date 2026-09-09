@@ -143,22 +143,26 @@ else
   fi
 fi
 
-# Zellij
-if check_cmd zellij; then
-  echo -e "  ${GREEN}✓${NC} zellij $(zellij --version 2>/dev/null | awk '{print $2}')"
-else
-  MISSING+=("zellij (>= 0.40)")
-  echo -e "  ${YELLOW}✗${NC} zellij not found"
-  echo ""
-  echo "    Install Zellij:"
-  if [ "$OS_NAME" = "Darwin" ]; then
-    echo "      brew install zellij"
-  else
-    echo "      mkdir -p ~/.local/bin && curl -L https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz | tar xz && mv zellij ~/.local/bin/"
-    echo "      # Or via cargo:"
-    echo "      cargo install --locked zellij"
-  fi
-  echo ""
+# Zellij — standalone bootstrap, before the repository is available.
+check_zellij_version() {
+    local detected
+    detected=$(zellij --version 2>/dev/null) || detected="unavailable"
+    if printf '%s\n' "$detected" | awk '
+        /^zellij [0-9]+\.[0-9]+\.[0-9]+$/ {
+            split($2, v, ".")
+            ok = (v[1] > 0 || v[2] > 45 || (v[2] == 45 && v[3] >= 1))
+        }
+        END { exit !ok }
+    '; then
+        printf '%s\n' "$detected"
+        return 0
+    fi
+    printf 'Zellij >= 0.45.1 required for reliable Codex scrollback (found: %s).\n' "$detected" >&2
+    printf 'Install/upgrade: https://github.com/zellij-org/zellij/releases (then restart Zellij).\n' >&2
+    return 1
+}
+if ! check_zellij_version; then
+  MISSING+=("zellij (>= 0.45.1)")
 fi
 
 # Sandbox backend

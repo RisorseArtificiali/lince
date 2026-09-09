@@ -19,6 +19,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/check-zellij.sh
+source "$SCRIPT_DIR/scripts/check-zellij.sh"
+
 # ── Colors & formatting ──────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -956,13 +959,8 @@ check_prerequisites() {
         echo -e "  ${RED}✗${NC} git not found"
     fi
 
-    # Zellij
-    if command -v zellij >/dev/null 2>&1; then
-        echo -e "  ${GREEN}✓${NC} zellij $(zellij --version 2>/dev/null | awk '{print $2}')"
-    else
-        warnings+=("zellij not found (required for dashboard)")
-        echo -e "  ${YELLOW}✗${NC} zellij not found — needed for dashboard"
-    fi
+    # A hard prerequisite: do not install components with broken scrollback.
+    check_zellij_version || exit 1
 
     # Rustup (distro rustc alone cannot provide wasm32 targets needed for dashboard)
     if command -v rustup >/dev/null 2>&1; then

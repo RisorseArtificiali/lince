@@ -50,7 +50,7 @@ For a detailed step-by-step guide with scenarios (Mini/Full/Custom), troubleshoo
 ### Prerequisites
 
 - **Linux** (tested on Fedora 43, works on Ubuntu/Debian/Arch)
-- **Zellij** >= 0.40
+- **Zellij** >= 0.45.1
 - **Claude Code** (`npm install -g @anthropic-ai/claude-code`)
 - **bubblewrap** (`sudo dnf install bubblewrap` / `sudo apt install bubblewrap`)
 - **Rust** with `wasm32-wasip1` target (for building the dashboard plugin)
