@@ -9,6 +9,9 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/check-zellij.sh
+source "$SCRIPT_DIR/../scripts/check-zellij.sh"
+
 # Pick a backup path that never clobbers an earlier backup, even when two
 # updates run within the same second (timestamp collision → -1, -2, ... suffix).
 unique_backup_path() {
@@ -30,6 +33,8 @@ echo ""
 
 # Ensure rustup toolchain takes precedence
 export PATH="$HOME/.cargo/bin:$PATH"
+
+check_zellij_version || exit 1
 
 # ── Build ──────────────────────────────────────────────────────────────
 echo -e "${GREEN}[1/8] Building plugin...${NC}"

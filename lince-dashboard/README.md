@@ -24,7 +24,7 @@ Sandboxed agents run inside [agent-sandbox](../sandbox/) (bubblewrap, Linux) or 
 
 ## Prerequisites
 
-- **Zellij** >= 0.40 (0.43.x recommended)
+- **Zellij** >= 0.45.1
 - **Rust** with `wasm32-wasip1` target (`rustup target add wasm32-wasip1`)
 - **At least one supported AI coding agent** (Claude Code, Codex, Gemini, OpenCode, Aider, Amp)
 - **A sandbox backend** (at least one):
@@ -136,7 +136,7 @@ lince-dashboard/
 
 ### Plugin won't load
 - Check the WASM file exists: `ls ~/.config/zellij/plugins/lince-dashboard.wasm`
-- Verify Zellij version: `zellij --version` (need >= 0.40)
+- Verify Zellij version: `zellij --version` (need >= 0.45.1)
 - Check layout path: `zellij --layout ~/.config/zellij/layouts/dashboard.kdl`
 - Grant permissions when Zellij prompts
 
