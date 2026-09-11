@@ -3,6 +3,10 @@
 [dashboard]
 # Plugin colors: default (inherit Zellij), minimal-mono, dracula, gruvbox
 # theme = "default"
+# Two columns (d toggles compact/full in the current session)
+# compact = true
+# Used by lince-dashboard-launch; restart to change the layout
+# sidebar_width = 30
 # Default sandbox profile for new agents (empty = no -P flag)
 # default_profile = ""
 

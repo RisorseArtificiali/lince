@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Launch a dashboard layout with the configured sidebar width."""
+from __future__ import annotations
+import argparse
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import tomllib
+
+
+def sidebar_layout(text: str, width: int) -> str:
+    if not 18 <= width <= 60:
+        raise ValueError("sidebar_width must be between 18 and 60 percent")
+    # Only the two named root columns change; nested shell/voice panes keep
+    # their vertical proportions. Geometry inside Rust comes from PaneUpdate.
+    import re
+    text = re.sub(r'pane size="\d+%" split_direction="horizontal"',
+                  f'pane size="{width}%" split_direction="horizontal"', text, count=1)
+    return re.sub(r'pane size="\d+%" name="lince-viewport"',
+                  f'pane size="{100 - width}%" name="lince-viewport"', text, count=1)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--layout", default="dashboard-tiled")
+    parser.add_argument("--sidebar-width", type=int)
+    parser.add_argument("--print-layout", action="store_true")
+    args, zellij_args = parser.parse_known_args()
+    config_path = Path.home() / ".config/lince-dashboard/config.toml"
+    config = tomllib.loads(config_path.read_text()).get("dashboard", {}) if config_path.exists() else {}
+    width = args.sidebar_width if args.sidebar_width is not None else config.get("sidebar_width", 30)
+    layouts = Path.home() / ".config/zellij/layouts"
+    source = layouts / f"{args.layout}.kdl"
+    if not source.exists():
+        source = Path(__file__).resolve().parent / "layouts" / f"{args.layout}.kdl"
+    text = sidebar_layout(source.read_text(), width)
+    if args.print_layout:
+        print(text)
+        return 0
+    with tempfile.TemporaryDirectory(prefix="lince-layout-") as directory:
+        layout = Path(directory) / "dashboard.kdl"
+        layout.write_text(text)
+        return subprocess.call(["zellij", "--layout", str(layout), *zellij_args])
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, TypeError) as error:
+        raise SystemExit(f"lince: {error}")

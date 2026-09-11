@@ -259,3 +259,19 @@ with deterministic sample agents, using `tests/render-theme-previews.py`:
 ![Minimal mono palette](../../assets/dashboard-theme-minimal-mono.svg)
 ![Dracula palette](../../assets/dashboard-theme-dracula.svg)
 ![Gruvbox palette](../../assets/dashboard-theme-gruvbox.svg)
+
+### Sidebar density and width
+
+`[dashboard] compact = true` enables the two-column list. `d` switches between
+compact and full detail for the current session; `i` shows information about
+the selected agent. The project heading is shared, type names use three cells,
+custom names eight cells, and generated `<project>-<number>` names become
+`P-<number>`. Status is `R` (running), `I` (input), `P` (permission), `S` (stopped)
+or `-` (unknown). `>` marks selection, `*` the focused agent and `!` a sandbox
+level other than normal (including unknown/unsandboxed); `i` explains it.
+Provider information is in `i`, as requested in #293's refined two-column design.
+
+`sidebar_width = 30` sets the percentage used by `lince-dashboard-launch` at
+startup (18–60). `--sidebar-width 25` overrides it for one launch. Changing the
+width does not move agent overlays out of alignment: their rectangle follows
+the named viewport, including when panes are resized interactively.

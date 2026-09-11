@@ -324,6 +324,8 @@ LINCE_SCHEMA = {
                 "sandbox_colors": _STR_MAP,
                 "project_search_roots": _STR_LIST,
                 "project_search_max_depth": _INT,
+                "compact": _d(_BOOL, "Two-column agent list; d toggles density in the current session", False),
+                "sidebar_width": _d({"type": "integer", "minimum": 18, "maximum": 60}, "Sidebar width percentage at launch (18-60)", 30),
                 "theme": _d(_STR, "Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox", "default"),
                 "instance_icons": _STR_LIST,
             },
@@ -659,6 +661,8 @@ DASHBOARD_CONFIG_SCHEMA = {
                                                       "the wizard's Tab completion"),
                 "project_search_max_depth": _d(_INT, "find -maxdepth for "
                                                      "project_search_roots", 3),
+                "compact": _d(_BOOL, "Two-column agent list; d toggles density in the current session", False),
+                "sidebar_width": _d({"type": "integer", "minimum": 18, "maximum": 60}, "Sidebar width percentage at launch (18-60)", 30),
                 "theme": _d(_STR, "Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox", "default"),
                 "instance_icons": _d(_STR_LIST, "Pool of per-instance marker glyphs "
                                                 "(#166); empty disables markers"),

@@ -6,6 +6,7 @@ use crate::types::{
 };
 
 use crate::theme;
+use unicode_width::UnicodeWidthChar;
 
 fn color_name_to_ansi(name: &str) -> String { theme::color(name) }
 fn selection_bg_for_color(_name: &str) -> String { theme::selection() }
@@ -214,11 +215,17 @@ pub fn render_dashboard(
     relay_phase: Option<&RelayPhase>,
     agent_types: &HashMap<String, AgentTypeConfig>,
     sandbox_colors: &SandboxColors,
+    compact: bool,
 ) {
     if rows == 0 || cols == 0 {
         return;
     }
 
+    if compact {
+        render_compact(agents, selected, focused, detail, rows, cols, status_message,
+            name_prompt, relay_phase, agent_types);
+        return;
+    }
     render_header(agents.len(), cols);
 
     if rows < 6 {
@@ -1163,6 +1170,7 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
 
     push_box_line(&mut lines, &format!("  {}Actions{}", BOLD, RESET), box_width);
     push_box_line(&mut lines, &format!("  {}Enter / f{}  Focus agent pane", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, "  d          Toggle compact/full table", box_width);
     push_box_line(&mut lines, &format!("  {}i{}          Toggle info panel", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, &format!("  {}r{}          Rename selected agent", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, &format!("  {}x{}          Kill agent", theme::color("cyan"), RESET), box_width);
@@ -1275,8 +1283,139 @@ mod previews {
             println!("PREVIEW:{name}");
             theme::set(name, None);
             render_dashboard(&agents, 0, Some("lince-1"), None, 14, 76,
-                None, None, None, &crate::config::embedded_agent_types(), &SandboxColors::default());
+                None, None, None, &crate::config::embedded_agent_types(), &SandboxColors::default(), false);
             println!("\nENDPREVIEW");
         }
+    }
+}
+
+/// Cell-aware clipping for dense views. Never forwards controls from agent names.
+pub(crate) fn clip_cells(text: &str, width: usize) -> String {
+    let mut used = 0;
+    text.chars().filter(|c| !c.is_control()).take_while(|c| {
+        used += c.width().unwrap_or(0);
+        used <= width
+    }).collect()
+}
+
+pub(crate) fn status_letter(status: &AgentStatus) -> char {
+    match status {
+        AgentStatus::Unknown => '-', AgentStatus::Running => 'R',
+        AgentStatus::WaitingForInput => 'I', AgentStatus::PermissionRequired => 'P',
+        AgentStatus::Stopped => 'S',
+    }
+}
+
+pub(crate) fn compact_name(agent: &AgentInfo) -> String {
+    let leaf = agent.project_dir.trim_end_matches('/').rsplit('/').next().unwrap_or("");
+    let short = agent.name.strip_prefix(&format!("{leaf}-"))
+        .filter(|suffix| !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()))
+        .map(|suffix| format!("P-{suffix}"))
+        .unwrap_or_else(|| agent.name.clone());
+    format!("{}-{}", clip_cells(crate::agent::agent_type_base_name(&agent.agent_type), 3), clip_cells(&short, 8))
+}
+
+pub(crate) fn sandbox_badge(agent: &AgentInfo, types: &HashMap<String, AgentTypeConfig>) -> String {
+    use crate::sandbox_backend::SandboxBackend;
+    if matches!(agent.sandbox_backend, Some(SandboxBackend::None))
+        || types.get(&agent.agent_type).map_or(false, |cfg| !cfg.sandboxed) {
+        return "NOSB".into();
+    }
+    agent.sandbox_level.clone().or_else(|| types.get(&agent.agent_type).and_then(|cfg| cfg.sandbox_level.clone()))
+        .unwrap_or_else(|| "unknown".into())
+}
+
+pub(crate) fn needs_attention(status: &AgentStatus) -> bool {
+    matches!(status, AgentStatus::WaitingForInput | AgentStatus::PermissionRequired)
+}
+
+fn render_compact(
+    agents: &[AgentInfo], selected: usize, focused: Option<&str>, detail: Option<&str>,
+    rows: usize, cols: usize, message: Option<&str>, prompt: Option<&NamePromptState>,
+    relay: Option<&RelayPhase>, types: &HashMap<String, AgentTypeConfig>,
+) {
+    let available = rows.saturating_sub(1);
+    if let Some(agent) = detail.and_then(|id| agents.iter().find(|a| a.id == id)) {
+        // Information occupies the whole sidebar; no ten-row table reservation.
+        let lines = vec![format!("Name: {}", agent.name), format!("ID: {}", agent.id),
+            format!("Type: {}", agent.agent_type), format!("Status: {}", agent.status_display()),
+            format!("Sandbox: {}", sandbox_badge(agent, types)),
+            format!("Backend: {}", agent.sandbox_backend.as_ref().map(|b| b.display_name()).unwrap_or("unknown")),
+            format!("Provider: {}", agent.provider.as_deref().unwrap_or("default")),
+            format!("Directory: {}", agent.project_dir),
+            format!("Started: {}", agent.started_at.map(format_elapsed).unwrap_or_else(|| "-".into())),
+            format!("Enforced: {}", agent.enforced.as_ref().map(|p| p.badge()).unwrap_or_else(|| "unknown".into())),
+            format!("Error: {}", agent.last_error.as_deref().unwrap_or("-"))];
+        for r in 0..available {
+            println!("{}", clip_cells(lines.get(r).map(String::as_str).unwrap_or(""), cols));
+        }
+    } else {
+        // Virtual rows preserve project grouping without repeating paths per agent.
+        let mut lines: Vec<(Option<usize>, String)> = Vec::new();
+        let mut previous = "";
+        for (i, agent) in agents.iter().enumerate() {
+            if agent.project_dir != previous {
+                previous = &agent.project_dir;
+                let leaf = previous.trim_end_matches('/').rsplit('/').next().unwrap_or(previous);
+                let duplicate = agents.iter().any(|a| a.project_dir != previous
+                    && a.project_dir.trim_end_matches('/').rsplit('/').next() == Some(leaf));
+                let heading = if duplicate { previous } else { leaf };
+                lines.push((None, clip_cells(heading, cols)));
+            }
+            let badge = sandbox_badge(agent, types);
+            let marker = if badge != "normal" { '!' } else { ' ' };
+            let focus = if focused == Some(agent.id.as_str()) { '*' } else if i == selected { '>' } else { ' ' };
+            let name = clip_cells(&format!("{focus}{marker}{}", compact_name(agent)), cols.saturating_sub(2));
+            let width: usize = name.chars().map(|c| c.width().unwrap_or(0)).sum();
+            let text = if cols < 3 { status_letter(&agent.status).to_string() } else {
+                format!("{}{} {}{}{}", name, " ".repeat(cols.saturating_sub(width + 2)),
+                    theme::status(&agent.status), status_letter(&agent.status), RESET)
+            };
+            let selected_style = if i == selected { theme::selection() } else { String::new() };
+            lines.push((Some(i), format!("{selected_style}{text}{RESET}")));
+        }
+        if agents.is_empty() { lines.push((None, clip_cells("n: new agent  ?: help", cols))); }
+        let selected_row = lines.iter().position(|(i, _)| *i == Some(selected)).unwrap_or(0);
+        let offset = selected_row.saturating_sub(available.saturating_sub(1));
+        for r in 0..available {
+            println!("{}", lines.get(offset + r).map(|(_, line)| line.as_str()).unwrap_or(""));
+        }
+    }
+    if let Some(prompt) = prompt {
+        render_name_prompt_bar(prompt, cols);
+    } else if let Some(RelayPhase::MessagePrompt { input }) = relay {
+        render_relay_message_prompt(input, cols);
+    } else {
+        let waiting = agents.iter().filter(|a| needs_attention(&a.status)).count();
+        let footer = message.map(str::to_string).unwrap_or_else(||
+            if matches!(relay, Some(RelayPhase::DeliveryPending { .. })) {
+                "Enter:send Esc:cancel".into()
+            } else { format!("!{waiting} i:info d:full ?:help") });
+        print!("{}", clip_cells(&footer, cols));
+    }
+}
+
+#[cfg(test)]
+mod compact_tests {
+    use super::*;
+    #[test]
+    fn generated_names_and_unicode_do_not_lose_identity() {
+        let mut agent = preview_agent("lince-12", AgentStatus::Unknown);
+        assert_eq!(compact_name(&agent), "cla-P-12");
+        agent.name = "lince-review".into();
+        assert_eq!(compact_name(&agent), "cla-lince-re");
+        agent.name = "界界界界界".into();
+        assert_eq!(compact_name(&agent), "cla-界界界界");
+        assert_eq!(clip_cells("界abc", 1), "");
+        assert_eq!(clip_cells("a\nb", 2), "ab");
+    }
+    #[test]
+    fn statuses_and_sandbox_are_not_color_only() {
+        let mut agent = preview_agent("lince-1", AgentStatus::PermissionRequired);
+        assert_eq!(status_letter(&agent.status), 'P');
+        assert!(needs_attention(&agent.status));
+        assert!(!needs_attention(&AgentStatus::Unknown));
+        agent.sandbox_backend = Some(crate::sandbox_backend::SandboxBackend::None);
+        assert_eq!(sandbox_badge(&agent, &HashMap::new()), "NOSB");
     }
 }

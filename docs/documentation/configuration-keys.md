@@ -154,6 +154,8 @@ Dashboard behavior and defaults.
 | `sandbox_colors` | table | — | Color per sandbox level (paranoid/normal/permissive/default) |
 | `project_search_roots` | list[string] | — | Roots scanned recursively by the wizard's Tab completion |
 | `project_search_max_depth` | int | `3` | find -maxdepth for project_search_roots |
+| `compact` | bool | `false` | Two-column agent list; d toggles density in the current session |
+| `sidebar_width` | int | `30` | Sidebar width percentage at launch (18-60) |
 | `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | Pool of per-instance marker glyphs (#166); empty disables markers |
 
@@ -261,6 +263,8 @@ User intent, versioned, default-deny — design config-v2 §2. Project overlays 
 | `sandbox_colors` | table | — | — |
 | `project_search_roots` | list[string] | — | — |
 | `project_search_max_depth` | int | — | — |
+| `compact` | bool | `false` | Two-column agent list; d toggles density in the current session |
+| `sidebar_width` | int | `30` | Sidebar width percentage at launch (18-60) |
 | `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | — |
 

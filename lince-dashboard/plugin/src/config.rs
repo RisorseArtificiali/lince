@@ -261,6 +261,8 @@ pub struct ProviderDetails {
 pub struct DashboardConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default)]
+    pub compact: bool,
     /// Runtime geometry of the named viewport in our own tab.
     #[serde(skip)]
     pub viewport: Option<crate::pane_manager::Viewport>,
@@ -357,6 +359,7 @@ impl Default for DashboardConfig {
     fn default() -> Self {
         DashboardConfig {
             theme: default_theme(),
+            compact: false,
             viewport: None,
             default_provider: None,
             providers_by_agent: HashMap::new(),

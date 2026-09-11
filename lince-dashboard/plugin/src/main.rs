@@ -658,6 +658,7 @@ impl ZellijPlugin for State {
             self.relay_state.as_ref().map(|r| &r.phase),
             &self.config.agent_types,
             &self.config.sandbox_colors,
+            self.config.compact,
         );
     }
 
@@ -780,6 +781,10 @@ impl State {
         }
 
         match bare {
+            BareKey::Char('d') => {
+                self.config.compact = !self.config.compact;
+                true
+            }
             BareKey::Char('n') => {
                 // gh#62: when session_defaults is set, use the session's agent_type
                 // to seed the default name; otherwise fall back to the static default.

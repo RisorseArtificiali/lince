@@ -100,6 +100,18 @@
           "description": "find -maxdepth for project_search_roots",
           "default": 3
         },
+        "compact": {
+          "type": "boolean",
+          "description": "Two-column agent list; d toggles density in the current session",
+          "default": false
+        },
+        "sidebar_width": {
+          "type": "integer",
+          "minimum": 18,
+          "maximum": 60,
+          "description": "Sidebar width percentage at launch (18-60)",
+          "default": 30
+        },
         "theme": {
           "type": "string",
           "description": "Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox",
