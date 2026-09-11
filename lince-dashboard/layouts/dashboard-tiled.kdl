@@ -56,7 +56,7 @@ layout {
                 }
             }
             // Right column — 60%, full height (B)
-            pane size="60%" {
+            pane size="60%" name="lince-viewport" {
                 // B — Agent (full height)
                 command "lince-viewport-placeholder"
             }

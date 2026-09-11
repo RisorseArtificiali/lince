@@ -27,6 +27,7 @@ use crate::types::{
 };
 
 struct State {
+    own_id: u32,
     config: DashboardConfig,
     config_error: Option<String>,
     config_path: Option<String>,
@@ -72,6 +73,7 @@ struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            own_id: 0,
             config: DashboardConfig::default(),
             config_error: None,
             config_path: None,
@@ -145,6 +147,7 @@ register_plugin!(State);
 
 impl ZellijPlugin for State {
     fn load(&mut self, configuration: BTreeMap<String, String>) {
+        self.own_id = get_plugin_ids().plugin_id;
         if let Some(raw_path) = configuration.get("config_path") {
             let path = config::expand_tilde(raw_path);
             self.config_path = Some(path);
@@ -202,6 +205,17 @@ impl ZellijPlugin for State {
             }
             Event::Key(key) => self.handle_key(key),
             Event::PaneUpdate(manifest) => {
+                let viewport = pane_manager::find_viewport(&manifest, self.own_id);
+                if viewport != self.config.viewport {
+                    self.config.viewport = viewport;
+                    if self.config.agent_layout.is_tiled() {
+                        if let Some(rect) = viewport {
+                            let panes = self.agents.iter().filter_map(|a| a.pane_id)
+                                .map(|pid| (PaneId::Terminal(pid), rect.coordinates())).collect();
+                            change_floating_panes_coordinates(panes);
+                        }
+                    }
+                }
                 let changed = agent::reconcile_panes(&mut self.agents, &manifest, &self.config.agent_layout, &self.config.agent_types);
                 if changed {
                     self.sort_agents_by_dir();
@@ -274,7 +288,9 @@ impl ZellijPlugin for State {
                             let prev_agent_types = std::mem::take(&mut self.config.agent_types);
                             let prev_providers = std::mem::take(&mut self.config.providers_by_agent);
                             let prev_details = std::mem::take(&mut self.config.provider_details_by_agent);
+                            let viewport = self.config.viewport;
                             self.config = cfg;
+                            self.config.viewport = viewport;
                             self.config_error = err;
                             if self.config.agent_types.is_empty() {
                                 self.config.agent_types = prev_agent_types;
@@ -1600,7 +1616,7 @@ impl State {
     fn focus_selected(&mut self) {
         if let Some(agent) = self.agents.get(self.selected_index) {
             if pane_manager::focus_agent(
-                agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout,
+                agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
             ) {
                 self.focused_agent = Some(agent.id.clone());
                 self.status_message = Some(format!("Focused {}", agent.name));
@@ -1702,7 +1718,7 @@ impl State {
         // Show the agent pane after delivering text
         if pane_manager::focus_agent(
             &self.agents[idx], &self.agents,
-            &self.config.focus_mode, &self.config.agent_layout,
+            &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
         ) {
             self.focused_agent = Some(self.agents[idx].id.clone());
             self.selected_index = idx;
@@ -1980,6 +1996,7 @@ impl State {
                 &self.agents,
                 &self.config.focus_mode,
                 &self.config.agent_layout,
+                self.config.viewport,
             ) {
                 self.focused_agent = Some(target_id);
                 self.selected_index = target_idx;

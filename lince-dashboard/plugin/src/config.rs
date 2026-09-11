@@ -259,6 +259,9 @@ pub struct ProviderDetails {
 /// Main dashboard configuration, deserialized from the `[dashboard]` TOML table.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DashboardConfig {
+    /// Runtime geometry of the named viewport in our own tab.
+    #[serde(skip)]
+    pub viewport: Option<crate::pane_manager::Viewport>,
     /// Default provider (env-var bundle) name. Was `default_profile` pre-#81;
     /// the legacy spelling is still accepted as a serde alias.
     #[serde(default, alias = "default_profile")]
@@ -349,6 +352,7 @@ pub struct DashboardConfig {
 impl Default for DashboardConfig {
     fn default() -> Self {
         DashboardConfig {
+            viewport: None,
             default_provider: None,
             providers_by_agent: HashMap::new(),
             provider_details_by_agent: HashMap::new(),
