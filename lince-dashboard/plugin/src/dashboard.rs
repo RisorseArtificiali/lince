@@ -1,3 +1,9 @@
+// One rendering sink for both the local pane and a passive dialog surface.
+macro_rules! print { ($($arg:tt)*) => { crate::render_output::write(format_args!($($arg)*)) }; }
+macro_rules! println {
+    () => { crate::render_output::write(format_args!("\n")) };
+    ($($arg:tt)*) => { crate::render_output::write(format_args!("{}\n", format_args!($($arg)*))) };
+}
 use std::collections::HashMap;
 
 use crate::config::{AgentTypeConfig, SandboxColors};
@@ -216,14 +222,15 @@ pub fn render_dashboard(
     agent_types: &HashMap<String, AgentTypeConfig>,
     sandbox_colors: &SandboxColors,
     compact: bool,
+    info_scroll: usize,
 ) {
     if rows == 0 || cols == 0 {
         return;
     }
 
-    if compact {
+    if compact || detail.is_some() {
         render_compact(agents, selected, focused, detail, rows, cols, status_message,
-            name_prompt, relay_phase, agent_types);
+            name_prompt, relay_phase, agent_types, info_scroll);
         return;
     }
     render_header(agents.len(), cols);
@@ -794,13 +801,13 @@ fn relay_pending_hints() -> Vec<KeyHint> {
 /// Return the context-appropriate key hints.
 fn status_bar_hints(empty: bool, focused: bool, detail: bool) -> Vec<KeyHint> {
     if empty {
-        vec![("n", "New-defaults"), ("N", "New-wizard"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("n", "New-defaults"), ("N", "New-wizard"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else if focused {
-        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+PgDn/Up", "Cycle"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+PgDn/Up", "Cycle"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else if detail {
-        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("x", "Kill"), ("n", "New"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("x", "Kill"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else {
-        vec![("n", "New-defaults"), ("N", "New-wizard"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("Q", "Save+Quit"), ("?", "Help")]
+        vec![("n", "New-defaults"), ("N", "New-wizard"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     }
 }
 
@@ -877,6 +884,7 @@ pub fn render_wizard(
     cols: usize,
     _agent_types: &HashMap<String, AgentTypeConfig>,
     sandbox_colors: &SandboxColors,
+    quick_start: bool,
 ) {
     if rows == 0 || cols == 0 {
         return;
@@ -907,6 +915,9 @@ pub fn render_wizard(
 
     let header = format!("  Step {}/{}: {}", step_num, total_steps, step_label);
     push_box_line(&mut lines, &header, box_width);
+    if quick_start || !matches!(wizard.step, WizardStep::Name | WizardStep::ProjectDir) {
+        push_box_line(&mut lines, "  [n] Use defaults; ask only for name", box_width);
+    }
 
     match wizard.step {
         WizardStep::AgentType => {
@@ -1150,54 +1161,18 @@ pub fn render_wizard(
 // ── Overlay: Help (keybinding reference) ────────────────────────────
 
 pub fn render_help_overlay(rows: usize, cols: usize) {
-    if rows == 0 || cols == 0 {
-        return;
+    if rows == 0 || cols == 0 { return; }
+    let hints = ["LINCE — Keybindings", "Alt+d        Expanded agent list",
+        "Alt+i/h      Info / help", "Alt+s        Toggle sidebar",
+        "Alt+b        Bar: hidden / summary / full", "Alt+n        New agent wizard",
+        "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
+        "Alt+PgUp/Dn  Cycle agents", "i            Info (PgUp/Dn scroll)",
+        "n            New agent", "N            New agent wizard", "r            Rename selected",
+        "x            Kill selected", "s            Relay last message", "S            Relay N messages",
+        "Alt+q / Q    Save and quit", "q (list)     Quit without saving", "Esc / ?      Close help"];
+    for row in 0..rows {
+        println!("{}", clip_cells(hints.get(row).copied().unwrap_or(""), cols));
     }
-
-    let box_width: usize = 48.min(cols.saturating_sub(4));
-    let mut lines: Vec<String> = Vec::new();
-
-    push_title_border(&mut lines, " Keybindings ", box_width);
-    push_box_line(&mut lines, "", box_width);
-
-    push_box_line(&mut lines, &format!("  {}Navigation{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}j / Down{}   Move selection down", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}k / Up{}     Move selection up", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}1-9{}        Select & focus agent #", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Alt+1-9{}    Global: switch to agent #", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Alt+PgDn/Up{} Cycle to next/prev agent", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, "", box_width);
-
-    push_box_line(&mut lines, &format!("  {}Actions{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Enter / f{}  Focus agent pane", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, "  Alt+d      Open dashboard from any pane", box_width);
-    push_box_line(&mut lines, "  d          Toggle compact/full table", box_width);
-    push_box_line(&mut lines, &format!("  {}i{}          Toggle info panel", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}r{}          Rename selected agent", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}x{}          Kill agent", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}h / Esc{}    Unfocus / close / back", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, "", box_width);
-
-    push_box_line(&mut lines, &format!("  {}Create{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}n{}          New agent (name prompt)", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}N{}          New agent wizard", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, "", box_width);
-
-    push_box_line(&mut lines, &format!("  {}Relay{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}s{}          Relay last message to agent", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}S{}          Relay N messages (prompt)", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, "", box_width);
-
-    push_box_line(&mut lines, &format!("  {}Other{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Q{}          Save state & quit Zellij", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}?{}          Toggle this help", theme::color("cyan"), RESET), box_width);
-    push_box_line(&mut lines, "", box_width);
-
-    let help = format!("  Press {}?{} or {}Esc{} to close", theme::color("cyan"), RESET, theme::color("cyan"), RESET);
-    lines.push(format!("\u{2502}{}\u{2502}", pad_to_width(&help, box_width.saturating_sub(2))));
-    push_bottom_border(&mut lines, box_width);
-
-    render_centered_box(&lines, rows, cols, box_width);
 }
 
 #[cfg(test)]
@@ -1284,7 +1259,7 @@ mod previews {
             println!("PREVIEW:{name}");
             theme::set(name, None);
             render_dashboard(&agents, 0, Some("lince-1"), None, 14, 76,
-                None, None, None, &crate::config::embedded_agent_types(), &SandboxColors::default(), false);
+                None, None, None, &crate::config::embedded_agent_types(), &SandboxColors::default(), false, 0);
             println!("\nENDPREVIEW");
         }
     }
@@ -1307,13 +1282,10 @@ pub(crate) fn status_letter(status: &AgentStatus) -> char {
     }
 }
 
-pub(crate) fn compact_name(agent: &AgentInfo) -> String {
-    let leaf = agent.project_dir.trim_end_matches('/').rsplit('/').next().unwrap_or("");
-    let short = agent.name.strip_prefix(&format!("{leaf}-"))
-        .filter(|suffix| !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()))
-        .map(|suffix| format!("P-{suffix}"))
-        .unwrap_or_else(|| agent.name.clone());
-    format!("{}-{}", clip_cells(crate::agent::agent_type_base_name(&agent.agent_type), 3), clip_cells(&short, 8))
+pub(crate) fn compact_name(agent: &AgentInfo, types: &HashMap<String, AgentTypeConfig>) -> String {
+    let label = types.get(&agent.agent_type).map(|cfg| cfg.short_label.as_str()).unwrap_or("???");
+    let name: String = agent.name.chars().filter(|c| !c.is_control()).take(5).collect();
+    format!("{}-{name}", clip_cells(label, 3))
 }
 
 pub(crate) fn sandbox_badge(agent: &AgentInfo, types: &HashMap<String, AgentTypeConfig>) -> String {
@@ -1333,7 +1305,7 @@ pub(crate) fn needs_attention(status: &AgentStatus) -> bool {
 fn render_compact(
     agents: &[AgentInfo], selected: usize, focused: Option<&str>, detail: Option<&str>,
     rows: usize, cols: usize, message: Option<&str>, prompt: Option<&NamePromptState>,
-    relay: Option<&RelayPhase>, types: &HashMap<String, AgentTypeConfig>,
+    relay: Option<&RelayPhase>, types: &HashMap<String, AgentTypeConfig>, info_scroll: usize,
 ) {
     let available = rows.saturating_sub(1);
     if let Some(agent) = detail.and_then(|id| agents.iter().find(|a| a.id == id)) {
@@ -1347,13 +1319,17 @@ fn render_compact(
             format!("Started: {}", agent.started_at.map(format_elapsed).unwrap_or_else(|| "-".into())),
             format!("Enforced: {}", agent.enforced.as_ref().map(|p| p.badge()).unwrap_or_else(|| "unknown".into())),
             format!("Error: {}", agent.last_error.as_deref().unwrap_or("-"))];
+        let wrapped: Vec<String> = lines.iter().flat_map(|line| wrap_cells(line, cols)).collect();
+        let offset = info_scroll.min(wrapped.len().saturating_sub(available));
         for r in 0..available {
-            println!("{}", clip_cells(lines.get(r).map(String::as_str).unwrap_or(""), cols));
+            println!("{}", wrapped.get(offset + r).map(String::as_str).unwrap_or(""));
         }
     } else {
         // Virtual rows preserve project grouping without repeating paths per agent.
         let mut lines: Vec<(Option<usize>, String)> = Vec::new();
         let mut previous = "";
+        let mut group_index = 0;
+        let number_width = agents.len().to_string().len();
         for (i, agent) in agents.iter().enumerate() {
             if agent.project_dir != previous {
                 previous = &agent.project_dir;
@@ -1361,12 +1337,17 @@ fn render_compact(
                 let duplicate = agents.iter().any(|a| a.project_dir != previous
                     && a.project_dir.trim_end_matches('/').rsplit('/').next() == Some(leaf));
                 let heading = if duplicate { previous } else { leaf };
-                lines.push((None, clip_cells(heading, cols)));
+                let heading = clip_cells(&format!("┌ {heading} "), cols);
+                let width: usize = heading.chars().map(|c| c.width().unwrap_or(0)).sum();
+                lines.push((None, format!("{BOLD}{}{}{}{RESET}", theme::group(group_index),
+                    heading, "─".repeat(cols.saturating_sub(width)))));
+                group_index += 1;
             }
             let badge = sandbox_badge(agent, types);
             let marker = if badge != "normal" { '!' } else { ' ' };
             let focus = if focused == Some(agent.id.as_str()) { '*' } else if i == selected { '>' } else { ' ' };
-            let name = clip_cells(&format!("{focus}{marker}{}", compact_name(agent)), cols.saturating_sub(2));
+            let label = types.get(&agent.agent_type).map(|cfg| cfg.short_label.as_str()).unwrap_or("???");
+            let name = clip_cells(&format!("{focus}{marker}{:>number_width$} {}", i + 1, clip_cells(label, 3)), cols.saturating_sub(2));
             let width: usize = name.chars().map(|c| c.width().unwrap_or(0)).sum();
             let text = if cols < 3 { status_letter(&agent.status).to_string() } else {
                 format!("{}{} {}{}{}", name, " ".repeat(cols.saturating_sub(width + 2)),
@@ -1388,10 +1369,10 @@ fn render_compact(
         render_relay_message_prompt(input, cols);
     } else {
         let waiting = agents.iter().filter(|a| needs_attention(&a.status)).count();
-        let footer = message.map(str::to_string).unwrap_or_else(||
+        let footer = if detail.is_some() { "PgUp/PgDn scroll i:close".into() } else { message.map(str::to_string).unwrap_or_else(||
             if matches!(relay, Some(RelayPhase::DeliveryPending { .. })) {
                 "Enter:send Esc:cancel".into()
-            } else { format!("!{waiting} i:info d:full ?:help") });
+            } else { format!("!{waiting} Alt+d:list i:info") }) };
         print!("{}", clip_cells(&footer, cols));
     }
 }
@@ -1402,11 +1383,13 @@ mod compact_tests {
     #[test]
     fn generated_names_and_unicode_do_not_lose_identity() {
         let mut agent = preview_agent("lince-12", AgentStatus::Unknown);
-        assert_eq!(compact_name(&agent), "cla-P-12");
-        agent.name = "lince-review".into();
-        assert_eq!(compact_name(&agent), "cla-lince-re");
-        agent.name = "界界界界界".into();
-        assert_eq!(compact_name(&agent), "cla-界界界界");
+        let types = crate::config::embedded_agent_types();
+        assert_eq!(compact_name(&agent, &types), "CLA-lince");
+        agent.agent_type = "codex".into();
+        agent.name = "pippo-long".into();
+        assert_eq!(compact_name(&agent, &types), "CDX-pippo");
+        agent.name = "界界界界界界".into();
+        assert_eq!(compact_name(&agent, &types), "CDX-界界界界界");
         assert_eq!(clip_cells("界abc", 1), "");
         assert_eq!(clip_cells("a\nb", 2), "ab");
     }
@@ -1418,5 +1401,74 @@ mod compact_tests {
         assert!(!needs_attention(&AgentStatus::Unknown));
         agent.sandbox_backend = Some(crate::sandbox_backend::SandboxBackend::None);
         assert_eq!(sandbox_badge(&agent, &HashMap::new()), "NOSB");
+    }
+}
+
+fn wrap_cells(text: &str, cols: usize) -> Vec<String> {
+    if cols == 0 { return Vec::new(); }
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    let mut width = 0;
+    for c in text.chars().filter(|c| !c.is_control()) {
+        let cell_width = c.width().unwrap_or(0);
+        if width + cell_width > cols && !line.is_empty() {
+            lines.push(std::mem::take(&mut line));
+            width = 0;
+        }
+        if cell_width <= cols { line.push(c); width += cell_width; }
+    }
+    lines.push(line);
+    lines
+}
+
+#[cfg(test)]
+mod dense_render_tests {
+    use super::*;
+    fn visible_width(line: &str) -> usize {
+        let mut escape = false;
+        line.chars().filter(|c| {
+            if *c == '\x1b' { escape = true; return false; }
+            if escape { if c.is_ascii_alphabetic() { escape = false; } return false; }
+            true
+        }).map(|c| c.width().unwrap_or(0)).sum()
+    }
+    #[test]
+    fn compact_frame_fits_even_tiny_or_unicode_viewports() {
+        let agents = vec![preview_agent("界界界界界", AgentStatus::PermissionRequired)];
+        for rows in [1, 3, 8] {
+            for cols in [1, 2, 18, 25, 40] {
+                let frame = crate::render_output::capture(|| render_dashboard(&agents, 0, None,
+                    None, rows, cols, None, None, None, &HashMap::new(), &SandboxColors::default(), true, 0));
+                assert!(frame.lines().count() <= rows);
+                assert!(frame.lines().all(|line| visible_width(line) <= cols), "{rows}x{cols}: {frame:?}");
+            }
+        }
+    }
+    #[test]
+    fn compact_projects_have_colored_rules_and_global_agent_numbers() {
+        theme::set("default", None);
+        let mut agents: Vec<_> = (1..=12).map(|i| preview_agent(&format!("lince-{i}"), AgentStatus::Running)).collect();
+        agents[11].project_dir = "/work/other".into();
+        let frame = crate::render_output::capture(|| render_dashboard(&agents, 11, None,
+            None, 18, 28, None, None, None, &crate::config::embedded_agent_types(), &SandboxColors::default(), true, 0));
+        assert!(frame.contains(&format!("{BOLD}{}┌ lince ", theme::group(0))));
+        assert!(frame.contains(&format!("{BOLD}{}┌ other ", theme::group(1))));
+        assert!(frame.contains(" 1 CLA"));
+        assert!(frame.contains("12 CLA"));
+        assert!(!frame.contains("lince-12"));
+        assert!(!frame.contains("P-1"));
+        assert!(frame.contains("───"));
+        assert!(frame.lines().all(|line| visible_width(line) <= 28));
+    }
+    #[test]
+    fn detail_pages_wrap_long_paths_without_losing_cells() {
+        assert_eq!(wrap_cells("ab界cd", 4), vec!["ab界", "cd"]);
+        let mut agent = preview_agent("lince-1", AgentStatus::Unknown);
+        agent.project_dir = format!("/work/{}/tail", "long-directory/".repeat(8));
+        let render = |scroll| crate::render_output::capture(|| render_dashboard(&[agent.clone()], 0,
+            None, Some("lince-1"), 8, 25, None, None, None, &HashMap::new(), &SandboxColors::default(), false, scroll));
+        assert!(render(0).contains("Name:"));
+        assert_ne!(render(0), render(8));
+        assert!(render(999).contains("tail"));
     }
 }

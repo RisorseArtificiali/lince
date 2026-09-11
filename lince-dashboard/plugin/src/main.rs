@@ -8,12 +8,26 @@ mod state_file;
 mod types;
 mod theme;
 mod attention;
+mod render_output;
 
+use crate::types::{SavedView, StatusBarMode};
 use std::collections::BTreeMap;
 use zellij_tile::prelude::*;
 
 use crate::config::{DashboardConfig, DEFAULT_AGENT_TYPE};
 use crate::sandbox_backend::DetectedBackends;
+
+// Zellij caches grants by WASM URL, shared by all three roles. Request the
+// same capabilities so a passive role cannot overwrite the controller grant.
+const UI_PERMISSIONS: &[PermissionType] = &[
+    PermissionType::RunCommands,
+    PermissionType::ChangeApplicationState,
+    PermissionType::ReadApplicationState,
+    PermissionType::MessageAndLaunchOtherPlugins,
+    PermissionType::OpenTerminalsOrPlugins,
+    PermissionType::ReadCliPipes,
+    PermissionType::WriteToStdin,
+];
 
 const PIPE_CLAUDE_STATUS: &str = "claude-status";
 const PIPE_LINCE_STATUS: &str = "lince-status";
@@ -31,8 +45,29 @@ use crate::types::{
 struct State {
     own_id: u32,
     passive_bar: bool,
-    popup: bool,
-    popup_visible: bool,
+    attention_tick: u8,
+    passive_dialog: bool,
+    dialog_id: Option<u32>,
+    dialog_size: (usize, usize),
+    dialog_frame: Option<String>,
+    dialog_dirty: bool,
+    dialog_open: bool,
+    managed_ui: bool,
+    sidebar_visible: bool,
+    statusbar_mode: StatusBarMode,
+    chrome_restoring: bool,
+    restored_viewport: Option<pane_manager::Viewport>,
+    pending_view: Option<SavedView>,
+    hidden_poll_pending: bool,
+    ui_generation: u64,
+    pending_focus_agent: Option<String>,
+    sidebar_initialized: bool,
+    sidebar_aux: Vec<PaneId>,
+    sidebar_restore_focus: Option<PaneId>,
+    pending_agent_geometry: Option<u32>,
+    viewport_id: Option<u32>,
+    menu_open: bool,
+    wizard_quick_start: bool,
     compact_default: bool,
     layout_override: Option<config::AgentLayout>,
     controller_id: Option<u32>,
@@ -48,6 +83,7 @@ struct State {
     selected_index: usize,
     focused_agent: Option<String>,
     show_detail: bool,
+    info_scroll: usize,
     show_help: bool,
     status_message: Option<String>,
     next_agent_id: u32,
@@ -87,8 +123,29 @@ impl Default for State {
         Self {
             own_id: 0,
             passive_bar: false,
-            popup: false,
-            popup_visible: false,
+            attention_tick: 0,
+            passive_dialog: false,
+            dialog_id: None,
+            dialog_size: (24, 80),
+            dialog_frame: None,
+            dialog_dirty: true,
+            dialog_open: false,
+            managed_ui: false,
+            sidebar_visible: true,
+            statusbar_mode: StatusBarMode::Full,
+            chrome_restoring: false,
+            restored_viewport: None,
+            pending_view: None,
+            hidden_poll_pending: false,
+            ui_generation: 0,
+            pending_focus_agent: None,
+            sidebar_initialized: false,
+            sidebar_aux: Vec::new(),
+            sidebar_restore_focus: None,
+            pending_agent_geometry: None,
+            viewport_id: None,
+            menu_open: false,
+            wizard_quick_start: false,
             compact_default: false,
             layout_override: None,
             controller_id: None,
@@ -104,6 +161,7 @@ impl Default for State {
             selected_index: 0,
             focused_agent: None,
             show_detail: false,
+            info_scroll: 0,
             show_help: false,
             status_message: None,
             next_agent_id: 0,
@@ -179,12 +237,13 @@ impl ZellijPlugin for State {
             _ => None,
         };
         if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
-        self.popup = configuration.get("presentation").map(String::as_str) == Some("popup");
-        if self.passive_bar {
-            subscribe(&[EventType::PaneUpdate, EventType::ModeUpdate, EventType::Key,
+        self.managed_ui = configuration.get("presentation").map(String::as_str) == Some("managed");
+        self.sidebar_visible = configuration.get("sidebar_visible").map(String::as_str) != Some("false");
+        self.passive_dialog = configuration.get("role").map(String::as_str) == Some("dialog");
+        if self.passive_bar || self.passive_dialog {
+            subscribe(&[EventType::CustomMessage, EventType::PaneUpdate, EventType::ModeUpdate, EventType::Key,
                 EventType::PermissionRequestResult, EventType::Timer]);
-            request_permission(&[PermissionType::ReadApplicationState,
-                PermissionType::MessageAndLaunchOtherPlugins]);
+            request_permission(UI_PERMISSIONS);
             set_timeout(1.0);
             return;
         }
@@ -195,6 +254,7 @@ impl ZellijPlugin for State {
             // Direct std::fs calls fail in WASI sandbox.
         }
         subscribe(&[
+            EventType::CustomMessage,
             EventType::Key,
             EventType::Timer,
             EventType::PaneUpdate,
@@ -202,15 +262,7 @@ impl ZellijPlugin for State {
             EventType::RunCommandResult,
             EventType::PermissionRequestResult,
         ]);
-        request_permission(&[
-            PermissionType::RunCommands,
-            PermissionType::ChangeApplicationState,
-            PermissionType::ReadApplicationState,
-            PermissionType::MessageAndLaunchOtherPlugins,
-            PermissionType::OpenTerminalsOrPlugins,
-            PermissionType::ReadCliPipes,
-            PermissionType::WriteToStdin,
-        ]);
+        request_permission(UI_PERMISSIONS);
 
         // Eagerly try to init right away — Zellij >= 0.44 auto-grants
         // permissions for local file plugins, so run_command may already work.
@@ -231,7 +283,12 @@ impl ZellijPlugin for State {
     }
 
     fn update(&mut self, event: Event) -> bool {
-        if self.passive_bar { return self.update_bar(event); }
+        if matches!(&event, Event::CustomMessage(name, _) if name == "lince-ui-flush") {
+            self.publish_ui(false);
+            self.sync_dialog();
+            return false;
+        }
+        if self.passive_bar || self.passive_dialog { return self.update_bar(event); }
         let changed = (|| {
         match event {
             Event::PermissionRequestResult(PermissionStatus::Granted) => {
@@ -251,33 +308,89 @@ impl ZellijPlugin for State {
             }
             Event::Key(key) => self.handle_key(key),
             Event::PaneUpdate(manifest) => {
-                if self.popup && !self.popup_visible && manifest.panes.values().flatten()
-                    .any(|p| p.is_plugin && p.id == self.own_id && !p.is_suppressed) {
-                    hide_self();
+                let restoring_chrome = self.chrome_restoring || self.sidebar_restore_focus.is_some();
+                if let Some(panes) = manifest.panes.values().find(|ps| ps.iter().any(|p| p.is_plugin && p.id == self.own_id)) {
+                    self.dialog_id = panes.iter().find(|p| p.is_plugin && p.title == "lince-dialog").map(|p| p.id);
+                    self.viewport_id = panes.iter().find(|p| !p.is_plugin && p.title == "lince-viewport").map(|p| p.id);
+                    self.sidebar_aux = panes.iter().filter(|p| p.title == "lince-sidebar-aux")
+                        .map(|p| if p.is_plugin { PaneId::Plugin(p.id) } else { PaneId::Terminal(p.id) }).collect();
+                    if self.managed_ui && !self.sidebar_initialized && self.dialog_id.is_some() && self.viewport_id.is_some() {
+                        self.sidebar_initialized = true;
+                        if !self.sidebar_visible { self.set_sidebar_visible(false); }
+                    }
                 }
                 let bars: Vec<u32> = manifest.panes.values().flatten()
                     .filter(|p| p.is_plugin && p.title == "lince-attention"
                         && attention::controller_for(&manifest, p.id) == Some(self.own_id))
                     .map(|p| p.id).collect();
                 if bars != self.bar_ids { self.bar_ids = bars; self.last_snapshot = None; }
+                self.restore_saved_view();
                 let viewport = pane_manager::find_viewport(&manifest, self.own_id);
-                if viewport != self.config.viewport {
+                if self.config.viewport != viewport {
                     self.config.viewport = viewport;
-                    if self.config.agent_layout.is_tiled() {
-                        if let Some(rect) = viewport {
-                            let panes = self.agents.iter().filter_map(|a| a.pane_id)
-                                .map(|pid| (PaneId::Terminal(pid), rect.coordinates())).collect();
-                            change_floating_panes_coordinates(panes);
+                    self.pending_agent_geometry = self.focused_agent.as_ref()
+                        .and_then(|id| self.agents.iter().find(|a| &a.id == id))
+                        .and_then(|a| a.pane_id);
+                }
+                if self.pending_agent_geometry.is_some() { self.refresh_agent_geometry(); }
+                if let Some(rect) = viewport {
+                    let panes: Vec<_> = manifest.panes.values().flatten().collect();
+                    let base_ready = panes.iter().any(|p| p.is_plugin && p.id == self.own_id
+                        && !p.is_suppressed && p.pane_y == rect.y && p.pane_x + p.pane_columns == rect.x)
+                        && panes.iter().any(|p| p.is_plugin && self.bar_ids.contains(&p.id)
+                            && !p.is_suppressed && p.pane_rows == 2 && p.pane_y == rect.y + rect.height);
+                    if self.chrome_restoring && base_ready {
+                        self.chrome_restoring = false;
+                        self.restored_viewport = Some(rect);
+                        if !self.statusbar_mode.visible() {
+                            for &id in &self.bar_ids { hide_pane_with_id(PaneId::Plugin(id)); }
+                        }
+                        if !self.sidebar_visible {
+                            for &id in &self.sidebar_aux { hide_pane_with_id(id); }
+                            hide_self();
+                        }
+                        set_selectable(true);
+                    }
+                    if !self.chrome_restoring {
+                        if let Some(mut target) = self.restored_viewport {
+                            if !self.sidebar_visible { target.width += target.x; target.x = 0; }
+                            if !self.statusbar_mode.visible() { target.height += 2; }
+                            if target == rect {
+                                match self.sidebar_restore_focus.take() {
+                                    Some(PaneId::Terminal(id)) => focus_terminal_pane(id, true, true),
+                                    Some(PaneId::Plugin(id)) => focus_plugin_pane(id, true, false),
+                                    None => {},
+                                }
+                            }
                         }
                     }
                 }
-                let changed = agent::reconcile_panes(&mut self.agents, &manifest, &self.config.agent_layout, &self.config.agent_types);
+                let mut changed = agent::reconcile_panes(&mut self.agents, &manifest, &self.config.agent_layout, &self.config.agent_types);
+                if let Some(index) = self.pending_focus_agent.as_ref().and_then(|id|
+                    self.agents.iter().position(|a| &a.id == id && a.pane_id.is_some())) {
+                    self.pending_focus_agent = None;
+                    self.selected_index = index;
+                    self.focus_selected();
+                    changed = true;
+                }
+                // Mouse/native Zellij focus changes must update sandbox identity too.
+                if let Some((id, pid)) = manifest.panes.values().flatten()
+                    .filter(|_| !restoring_chrome && !changed && self.pending_agent_geometry.is_none())
+                    .filter(|p| !p.is_plugin && p.is_floating && p.is_focused && !p.is_suppressed)
+                    .find_map(|p| self.agents.iter().find(|a| a.pane_id == Some(p.id)).map(|a| (a.id.clone(), p.id))) {
+                    if self.focused_agent.as_ref() != Some(&id)
+                        && get_focused_pane_info().map_or(false, |(_, live)| live == PaneId::Terminal(pid)) {
+                        self.focused_agent = Some(id);
+                        changed = true;
+                    }
+                }
                 if changed {
                     self.sort_agents_by_dir();
                 }
                 changed
             }
             Event::Timer(_elapsed) => {
+                self.poll_hidden_panes();
                 let mut needs_render = false;
 
                 // Fallback: if PermissionRequestResult never fired (Zellij >= 0.44
@@ -335,6 +448,30 @@ impl ZellijPlugin for State {
             Event::RunCommandResult(exit_code, stdout, stderr, context) => {
                 let cmd_type = context.get(config::CMD_TYPE_KEY).map(|s| s.as_str());
                 match cmd_type {
+                    Some("poll_hidden_panes") => {
+                        self.hidden_poll_pending = false;
+                        if !self.sidebar_visible && !self.statusbar_mode.visible() && exit_code == Some(0)
+                            && context.get("generation").and_then(|v| v.parse::<u64>().ok()) == Some(self.ui_generation) {
+                            if let Ok(items) = serde_json::from_slice::<Vec<serde_json::Value>>(&stdout) {
+                                let mut manifest = PaneManifest::default();
+                                for item in items {
+                                    let tab = item.get("tab_position").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    if let Ok(pane) = serde_json::from_value::<PaneInfo>(item) {
+                                        manifest.panes.entry(tab).or_default().push(pane);
+                                    }
+                                }
+                                if !manifest.panes.is_empty() {
+                                    // Retry only the current agent: pane commands and layout
+                                    // bounds can settle after the previous update was consumed.
+                                    self.pending_agent_geometry = self.focused_agent.as_ref()
+                                        .and_then(|id| self.agents.iter().find(|a| &a.id == id))
+                                        .and_then(|a| a.pane_id);
+                                    return self.update(Event::PaneUpdate(manifest));
+                                }
+                            }
+                        }
+                        false
+                    }
                     Some(CMD_LOAD_CONFIG) => {
                         if exit_code == Some(0) && !stdout.is_empty() {
                             let content = String::from_utf8_lossy(&stdout);
@@ -381,6 +518,8 @@ impl ZellijPlugin for State {
                                 Ok(saved) => {
                                     self.next_agent_id = saved.next_agent_id;
                                     self.session_defaults = saved.session_defaults;
+                                    self.pending_view = saved.view;
+                                    self.restore_saved_view();
                                     if self.agent_types_loaded {
                                         // Agent types already available — restore immediately.
                                         self.restore_agents(saved.agents);
@@ -665,61 +804,62 @@ impl ZellijPlugin for State {
             _ => false,
         }
         })();
-        self.publish_ui(false);
+        post_message_to_plugin(PluginMessage::new_to_plugin("lince-ui-flush", ""));
         changed
     }
 
     fn render(&mut self, rows: usize, cols: usize) {
         if self.passive_bar {
             theme::set(&self.snapshot.theme, self.inherited_style);
-            if rows > 0 { self.snapshot.render(cols); }
+            if rows > 0 { self.snapshot.render(rows, cols, self.attention_tick % 2 == 1); }
             return;
         }
-        theme::set(&self.config.theme, self.inherited_style);
-        // If help overlay is active, render it and return
-        if self.show_help {
-            dashboard::render_help_overlay(rows, cols);
+        if self.passive_dialog {
+            if self.dialog_size != (rows, cols) {
+                self.dialog_size = (rows, cols);
+                post_message_to_plugin(PluginMessage::new_to_plugin("lince-dialog-size", ""));
+            }
+            print!("{}", self.dialog_frame.as_deref().unwrap_or(""));
             return;
         }
-
-        // If wizard is active, render the wizard overlay instead of the dashboard
-        if let Some(ref wizard) = self.wizard {
-            dashboard::render_wizard(
-                wizard,
-                rows,
-                cols,
-                &self.config.agent_types,
-                &self.config.sandbox_colors,
-            );
-            return;
-        }
-
-        let config_warning = self.config_error.as_deref();
-        let effective_status = self.status_message.as_deref().or(config_warning);
-
-        let detail_id = if self.show_detail {
-            self.agents.get(self.selected_index).map(|a| a.id.as_str())
+        if self.dialog_id.is_some() && self.has_dialog() {
+            theme::set(&self.config.theme, self.inherited_style);
+            dashboard::render_dashboard(&self.agents, self.selected_index,
+                self.focused_agent.as_deref(), None, rows, cols, self.config_error.as_deref(),
+                None, None, &self.config.agent_types, &self.config.sandbox_colors, self.managed_ui || self.config.compact, self.info_scroll);
         } else {
-            None
-        };
-
-        dashboard::render_dashboard(
-            &self.agents,
-            self.selected_index,
-            self.focused_agent.as_deref(),
-            detail_id,
-            rows,
-            cols,
-            effective_status,
-            self.name_prompt.as_ref(),
-            self.relay_state.as_ref().map(|r| &r.phase),
-            &self.config.agent_types,
-            &self.config.sandbox_colors,
-            self.config.compact,
-        );
+            self.render_controller(rows, cols);
+        }
     }
 
     fn pipe(&mut self, pipe_message: PipeMessage) -> bool {
+        // CLI pipes are identified by their source ID, not their message name.
+        if let PipeSource::Cli(id) = &pipe_message.source {
+            unblock_cli_pipe_input(id);
+            cli_pipe_output(id, "");
+        }
+        if self.passive_dialog {
+            if pipe_message.name == "lince-dialog-frame" {
+                if let (PipeSource::Plugin(id), Some(payload)) = (&pipe_message.source, &pipe_message.payload) {
+                    if Some(*id) == self.controller_id {
+                        if let Ok(frame) = serde_json::from_str::<Option<String>>(payload) {
+                            if frame.is_some() && !self.dialog_open {
+                                show_self(true);
+                                let mut coords = FloatingPaneCoordinates::default().with_x_percent(10)
+                                    .with_y_percent(3).with_width_percent(80).with_height_percent(90);
+                                coords.borderless = Some(true);
+                                change_floating_panes_coordinates(vec![(PaneId::Plugin(self.own_id), coords)]);
+                            }
+                            if frame.is_none() && self.dialog_open { hide_self(); }
+                            self.dialog_open = frame.is_some();
+                            self.dialog_frame = frame;
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
         if self.passive_bar {
             if pipe_message.name == attention::SNAPSHOT {
                 if let (PipeSource::Plugin(id), Some(payload)) = (&pipe_message.source, &pipe_message.payload) {
@@ -734,29 +874,52 @@ impl ZellijPlugin for State {
             return false;
         }
         let changed = (|| {
-        // Close the CLI pipe so `zellij pipe` command can return
-        if matches!(pipe_message.source, PipeSource::Cli(_)) {
-            unblock_cli_pipe_input(&pipe_message.name);
-            cli_pipe_output(&pipe_message.name, "");
-        }
-
         match pipe_message.name.as_str() {
-            attention::REFRESH => { self.publish_ui(true); false }
+            "lince-pane-manifest" => {
+                if let PipeSource::Plugin(id) = pipe_message.source {
+                    if self.bar_ids.contains(&id) && (self.sidebar_visible || self.statusbar_mode.visible()) {
+                        if let Some(payload) = pipe_message.payload {
+                            if let Ok(manifest) = serde_json::from_str::<PaneManifest>(&payload) {
+                                return self.update(Event::PaneUpdate(manifest));
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            "lince-dialog-size" | "lince-dialog-key" => {
+                if let PipeSource::Plugin(id) = pipe_message.source {
+                    if Some(id) == self.dialog_id {
+                        if let Some(payload) = pipe_message.payload {
+                            if pipe_message.name == "lince-dialog-size" {
+                                if let Ok((rows, cols)) = serde_json::from_str::<(usize, usize)>(&payload) {
+                                    self.dialog_size = (rows.min(200), cols.min(400));
+                                }
+                            } else if let Ok(key) = serde_json::from_str::<KeyWithModifier>(&payload) {
+                                return self.handle_key(key);
+                            }
+                        }
+                    }
+                }
+                true
+            }
+            attention::REFRESH => { self.last_snapshot = None; self.dialog_dirty = true; false }
             attention::OPEN => {
-                self.popup_visible = true;
-                show_self(self.popup);
-                if self.popup {
-                    let mut coords = FloatingPaneCoordinates::default().with_x_percent(10)
-                        .with_y_percent(5).with_width_percent(80).with_height_percent(85);
-                    coords.borderless = Some(true);
-                    change_floating_panes_coordinates(vec![(PaneId::Plugin(self.own_id), coords)]);
-                }
-                match pipe_message.payload.as_deref() {
-                    Some("i") => self.show_detail = true,
-                    Some("n") => { self.handle_key(KeyWithModifier::new(BareKey::Char('n'))); }
-                    Some("N") => { self.handle_key(KeyWithModifier::new(BareKey::Char('N'))); }
-                    _ => {}
-                }
+                self.open_ui(pipe_message.payload.as_deref().unwrap_or("menu"));
+                true
+            }
+            "lince-save-quit" => {
+                self.open_ui("menu");
+                self.save_and_quit();
+                true
+            }
+            "lince-poll-hidden" => { self.refresh_agent_geometry(); self.poll_hidden_panes(); false }
+            "lince-statusbar-toggle" => {
+                if self.managed_ui { self.set_statusbar_mode(self.statusbar_mode.next()); }
+                true
+            }
+            "lince-sidebar-toggle" => {
+                if self.managed_ui { self.set_sidebar_visible(!self.sidebar_visible); }
                 true
             }
             PIPE_FOCUS_AGENT => {
@@ -811,7 +974,7 @@ impl ZellijPlugin for State {
             _ => false,
         }
         })();
-        self.publish_ui(false);
+        post_message_to_plugin(PluginMessage::new_to_plugin("lince-ui-flush", ""));
         changed
     }
 
@@ -876,8 +1039,12 @@ impl State {
         }
 
         match bare {
-            BareKey::Char('d') => {
-                self.config.compact = !self.config.compact;
+            BareKey::PageDown if self.show_detail => {
+                self.info_scroll = self.info_scroll.saturating_add(8);
+                true
+            }
+            BareKey::PageUp if self.show_detail => {
+                self.info_scroll = self.info_scroll.saturating_sub(8);
                 true
             }
             BareKey::Char('n') => {
@@ -1046,6 +1213,7 @@ impl State {
                 };
                 state.step = state.active_steps().into_iter().next().unwrap_or(WizardStep::Name);
                 self.wizard = Some(state);
+                self.wizard_quick_start = true;
                 true
             }
             BareKey::Char('x') => {
@@ -1079,9 +1247,8 @@ impl State {
                     self.show_help = false;
                 } else if self.show_detail {
                     self.show_detail = false;
-                } else if self.popup {
-                    self.popup_visible = false;
-                    hide_self();
+                } else if self.menu_open {
+                    self.menu_open = false;
                     self.focus_selected();
                 } else {
                     self.unfocus_current();
@@ -1092,11 +1259,16 @@ impl State {
             BareKey::Char('i') => {
                 // Toggle auto-detail panel (show/hide for selected agent)
                 self.show_detail = !self.show_detail;
+                self.info_scroll = 0;
                 true
             }
             BareKey::Char('?') => {
                 self.show_help = !self.show_help;
                 true
+            }
+            BareKey::Char('q') if self.menu_open && !self.show_detail && !self.show_help => {
+                quit_zellij();
+                false
             }
             BareKey::Char('Q') => {
                 self.save_and_quit();
@@ -1223,6 +1395,12 @@ impl State {
             return false;
         }
 
+        let quick_start = std::mem::take(&mut self.wizard_quick_start);
+        if bare == BareKey::Char('n') && (quick_start || self.wizard.as_ref().is_some_and(|w|
+            !matches!(w.step, WizardStep::Name | WizardStep::ProjectDir))) {
+            self.wizard = None;
+            return self.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+        }
         let wizard = match self.wizard.as_mut() {
             Some(w) => w,
             None => return false,
@@ -1728,12 +1906,17 @@ impl State {
 
     /// Focus the currently selected agent's pane.
     fn focus_selected(&mut self) {
+        self.sidebar_restore_focus = None;
+        self.ui_generation = self.ui_generation.wrapping_add(1);
         if let Some(agent) = self.agents.get(self.selected_index) {
             if pane_manager::focus_agent(
                 agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
             ) {
-                if self.popup { self.popup_visible = false; hide_self(); }
+                self.menu_open = false;
+                self.show_detail = false;
+                self.show_help = false;
                 self.focused_agent = Some(agent.id.clone());
+                self.pending_agent_geometry = agent.pane_id;
                 self.status_message = Some(format!("Focused {}", agent.name));
             }
         }
@@ -1749,17 +1932,28 @@ impl State {
         // Unfocus current agent if any.
         self.unfocus_current();
         self.selected_index = idx;
-        self.focus_selected();
+        if self.agents[idx].pane_id.is_none() {
+            // Agent terminals can appear before their first manifest reaches us,
+            // especially when restoring a session with both bars suppressed.
+            self.pending_focus_agent = Some(self.agents[idx].id.clone());
+        } else {
+            self.focus_selected();
+        }
     }
 
     /// Hide all agent floating panes (used after spawn to prevent unwanted pane visibility).
     fn hide_all_agent_panes(&mut self) {
         pane_manager::hide_agent_panes(&self.agents, None, &self.config.agent_layout);
         self.focused_agent = None;
+        self.pending_agent_geometry = None;
     }
 
     /// Unfocus the currently focused agent (hide its pane).
     fn unfocus_current(&mut self) {
+        self.sidebar_restore_focus = None;
+        self.pending_focus_agent = None;
+        self.ui_generation = self.ui_generation.wrapping_add(1);
+        self.pending_agent_geometry = None;
         if let Some(focused_id) = self.focused_agent.take() {
             if let Some(agent) = self.agents.iter().find(|a| a.id == focused_id) {
                 pane_manager::unfocus_agent(agent, &self.config.focus_mode, &self.config.agent_layout);
@@ -2152,7 +2346,8 @@ impl State {
             .map(SavedAgentInfo::from)
             .collect();
 
-        match state_file::save_state_async(dir, saved, self.next_agent_id, self.session_defaults.clone()) {
+        match state_file::save_state_async(dir, saved, self.next_agent_id, self.session_defaults.clone(),
+            self.managed_ui.then(|| SavedView { sidebar_visible: self.sidebar_visible, statusbar_mode: self.statusbar_mode })) {
             Ok(()) => {
                 self.status_message = Some("Saving state...".to_string());
             }
@@ -2205,8 +2400,9 @@ impl State {
 impl State {
     fn publish_ui(&mut self, force: bool) {
         if self.bar_ids.is_empty() { return; }
-        let snapshot = attention::Snapshot::from_agents(&self.agents,
+        let mut snapshot = attention::Snapshot::from_agents(&self.agents,
             self.focused_agent.as_deref(), &self.config, self.config_error.as_deref());
+        snapshot.summary_only = self.statusbar_mode == StatusBarMode::Summary;
         if !force && self.last_snapshot.as_ref() == Some(&snapshot) { return; }
         if let Ok(payload) = serde_json::to_string(&snapshot) {
             for &id in &self.bar_ids { attention::send(id, attention::SNAPSHOT, &payload); }
@@ -2216,9 +2412,29 @@ impl State {
 
     fn update_bar(&mut self, event: Event) -> bool {
         match event {
+            Event::CustomMessage(name, _) if name == "lince-dialog-size" => {
+                if let Some(id) = self.controller_id {
+                    attention::send(id, "lince-dialog-size", &serde_json::to_string(&self.dialog_size).unwrap());
+                }
+                false
+            }
             Event::ModeUpdate(info) => { self.inherited_style = Some(info.style); true }
             Event::PaneUpdate(manifest) => {
+                if self.passive_dialog && !self.dialog_open && manifest.panes.values().flatten()
+                    .any(|p| p.is_plugin && p.id == self.own_id && !p.is_suppressed) { hide_self(); }
                 let id = attention::controller_for(&manifest, self.own_id);
+                // Zellij stops delivering pane updates to suppressed plugins.
+                // The always-visible status line keeps its hidden controller in sync.
+                if self.passive_bar {
+                    if let Some(controller) = id {
+                        if manifest.panes.values().flatten().any(|p|
+                            p.is_plugin && p.id == controller && p.is_suppressed) {
+                            if let Ok(payload) = serde_json::to_string(&manifest) {
+                                attention::send(controller, "lince-pane-manifest", &payload);
+                            }
+                        }
+                    }
+                }
                 if self.controller_id != id {
                     self.controller_id = id;
                     self.snapshot = attention::Snapshot::default();
@@ -2226,10 +2442,26 @@ impl State {
                 }
                 true
             }
-            Event::Timer(_) | Event::PermissionRequestResult(PermissionStatus::Granted) => {
+            Event::Timer(_) => {
+                if self.passive_bar {
+                    if let Some(id) = self.controller_id { attention::send(id, "lince-poll-hidden", ""); }
+                }
+                self.attention_tick = (self.attention_tick + 1) % 8;
+                if !self.passive_bar || self.attention_tick == 0 {
+                    if let Some(id) = self.controller_id { attention::send(id, attention::REFRESH, ""); }
+                }
+                set_timeout(if self.passive_bar { 0.75 } else { 5.0 });
+                self.passive_bar && self.snapshot.agents.iter().any(|a| a.status == 'R' || a.attention)
+            }
+            Event::PermissionRequestResult(PermissionStatus::Granted) => {
                 if let Some(id) = self.controller_id { attention::send(id, attention::REFRESH, ""); }
-                set_timeout(5.0);
                 false
+            }
+            Event::Key(key) if self.passive_dialog => {
+                if let Some(id) = self.controller_id {
+                    if let Ok(payload) = serde_json::to_string(&key) { attention::send(id, "lince-dialog-key", &payload); }
+                }
+                true
             }
             Event::Key(key) if key.key_modifiers.is_empty() => {
                 if let Some(id) = self.controller_id {
@@ -2238,7 +2470,8 @@ impl State {
                         BareKey::Left => attention::send(id, PIPE_CYCLE_AGENT, "prev"),
                         BareKey::Right => attention::send(id, PIPE_CYCLE_AGENT, "next"),
                         BareKey::Char(c @ ('i' | 'n' | 'N')) => attention::send(id, attention::OPEN, &c.to_string()),
-                        BareKey::Enter | BareKey::Char('d') | BareKey::Char('?') => attention::send(id, attention::OPEN, ""),
+                        BareKey::Char('?') => attention::send(id, attention::OPEN, "help"),
+                        BareKey::Enter => attention::send(id, attention::OPEN, "menu"),
                         _ => {}
                     }
                 }
@@ -2246,5 +2479,248 @@ impl State {
             }
             _ => false,
         }
+    }
+}
+
+impl State {
+    fn render_controller(&mut self, rows: usize, cols: usize) {
+        theme::set(&self.config.theme, self.inherited_style);
+        // If help overlay is active, render it and return
+        if self.show_help {
+            dashboard::render_help_overlay(rows, cols);
+            return;
+        }
+
+        // If wizard is active, render the wizard overlay instead of the dashboard
+        if let Some(ref wizard) = self.wizard {
+            dashboard::render_wizard(
+                wizard,
+                rows,
+                cols,
+                &self.config.agent_types,
+                &self.config.sandbox_colors,
+                self.wizard_quick_start,
+            );
+            return;
+        }
+
+        let config_warning = self.config_error.as_deref();
+        let effective_status = self.status_message.as_deref().or(config_warning);
+
+        let detail_id = if self.show_detail {
+            self.agents.get(self.selected_index).map(|a| a.id.as_str())
+        } else {
+            None
+        };
+
+        dashboard::render_dashboard(
+            &self.agents,
+            self.selected_index,
+            self.focused_agent.as_deref(),
+            detail_id,
+            rows,
+            cols,
+            effective_status,
+            self.name_prompt.as_ref(),
+            self.relay_state.as_ref().map(|r| &r.phase),
+            &self.config.agent_types,
+            &self.config.sandbox_colors,
+            if self.has_dialog() { false } else { self.managed_ui || self.config.compact },
+            self.info_scroll,
+        );
+    }
+}
+
+impl State {
+    fn has_dialog(&self) -> bool {
+        self.menu_open || self.show_detail || self.show_help || self.wizard.is_some()
+            || self.name_prompt.is_some() || self.relay_state.is_some()
+    }
+    fn sync_dialog(&mut self) {
+        let Some(id) = self.dialog_id else { return; };
+        let frame = if self.has_dialog() {
+            let title = if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
+                else if self.wizard.is_some() || self.name_prompt.is_some() { "LINCE — New agent" } else { "LINCE — Agents" };
+            Some(render_output::bordered(self.dialog_size.0, self.dialog_size.1, title,
+                |rows, cols| self.render_controller(rows, cols)))
+        } else { None };
+        // A refresh must resend even a closed dialog. Clearing the cached frame
+        // would lose the close message when refresh races with Escape.
+        if self.dialog_dirty || frame != self.dialog_frame {
+            attention::send(id, "lince-dialog-frame", &serde_json::to_string(&frame).unwrap());
+            self.dialog_frame = frame;
+            self.dialog_dirty = false;
+        }
+    }
+}
+
+impl State {
+    fn open_ui(&mut self, action: &str) {
+        if self.dialog_frame.is_some() {
+            if let Some(id) = self.dialog_id { focus_plugin_pane(id, true, false); }
+        }
+        self.menu_open = false;
+        self.show_help = false;
+        self.show_detail = false;
+        self.wizard = None;
+        self.name_prompt = None;
+        self.rename_target = None;
+        self.relay_state = None;
+        if matches!(action, "i" | "info") {
+            if let Some(index) = self.agents.iter().position(|a| Some(&a.id) == self.focused_agent.as_ref()) {
+                self.selected_index = index;
+            }
+            self.show_detail = true;
+            self.info_scroll = 0;
+        } else if matches!(action, "help" | "?") {
+            self.show_help = true;
+        } else if matches!(action, "wizard" | "N") {
+            self.handle_key(KeyWithModifier::new(BareKey::Char('N')));
+        } else if action == "n" {
+            self.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+        } else {
+            self.menu_open = true;
+        }
+        // Direct KDL users may not have a passive popup installed.
+        if self.dialog_id.is_none() { show_self(false); }
+    }
+
+    fn restore_saved_view(&mut self) {
+        if !self.managed_ui || !self.sidebar_initialized || self.bar_ids.is_empty() { return; }
+        if let Some(view) = self.pending_view.take() {
+            self.sidebar_visible = view.sidebar_visible;
+            self.statusbar_mode = view.statusbar_mode;
+            self.restore_chrome_layout();
+        }
+    }
+
+    fn refresh_agent_geometry(&mut self) {
+        if !self.config.agent_layout.is_tiled() { return; }
+        let Some(viewport_id) = self.viewport_id else { return; };
+        let Some(viewport) = get_pane_info(PaneId::Terminal(viewport_id)) else { return; };
+        if viewport.is_suppressed || viewport.is_floating { return; }
+        let rect = pane_manager::Viewport { x: viewport.pane_x, y: viewport.pane_y,
+            width: viewport.pane_columns, height: viewport.pane_rows };
+        self.config.viewport = Some(rect);
+        let Some(pid) = self.focused_agent.as_ref()
+            .and_then(|id| self.agents.iter().find(|a| &a.id == id)).and_then(|a| a.pane_id) else { return; };
+        let Some(pane) = get_pane_info(PaneId::Terminal(pid)) else { return; };
+        // Never trust a queued manifest to reveal or resize an old selection.
+        // GetPaneInfo intentionally has no client focus context in Zellij.
+        // Query the focused ID separately instead of using its is_focused flag.
+        if !pane.is_floating || pane.is_suppressed
+            || get_focused_pane_info().map_or(true, |(_, id)| id != PaneId::Terminal(pid)) { return; }
+        self.pending_agent_geometry = None;
+        if pane.pane_x != rect.x || pane.pane_y != rect.y
+            || pane.pane_columns != rect.width || pane.pane_rows != rect.height {
+            // Suppressing fixed chrome leaves Zellij's floating viewport stale.
+            // Recompute bounds after the layout has settled, before resizing.
+            set_selectable(true);
+            change_floating_panes_coordinates(vec![(PaneId::Terminal(pid), rect.coordinates())]);
+        }
+    }
+
+    fn poll_hidden_panes(&mut self) {
+        if !self.managed_ui || self.sidebar_visible || self.statusbar_mode.visible() || self.hidden_poll_pending { return; }
+        // Suppressed plugins receive timers but no PaneUpdate. The CLI queries
+        // the live screen, including newly spawned agents not yet known to us.
+        self.hidden_poll_pending = true;
+        config::run_typed_command_with(&["sh", "-c",
+            "zellij -s \"$ZELLIJ_SESSION_NAME\" action list-panes --json"], "poll_hidden_panes",
+            &[("generation", &self.ui_generation.to_string())]);
+    }
+
+    fn restore_chrome_layout(&mut self) {
+        self.chrome_restoring = true;
+        self.restored_viewport = None;
+        self.sidebar_restore_focus = if self.has_dialog() {
+            self.dialog_id.map(PaneId::Plugin)
+        } else {
+            self.focused_agent.as_ref()
+                .and_then(|id| self.agents.iter().find(|a| &a.id == id))
+                .and_then(|agent| agent.pane_id).map(PaneId::Terminal)
+        };
+        // The swap template contains both bars. Restore it with all its panes,
+        // then suppress whichever surface the user wants hidden.
+        show_pane_with_id(PaneId::Plugin(self.own_id), false, false);
+        for &id in &self.sidebar_aux { show_pane_with_id(id, false, false); }
+        for &id in &self.bar_ids { show_pane_with_id(PaneId::Plugin(id), false, false); }
+        focus_plugin_pane(self.own_id, false, false);
+        next_swap_layout();
+    }
+
+    fn set_statusbar_mode(&mut self, mode: StatusBarMode) {
+        self.ui_generation = self.ui_generation.wrapping_add(1);
+        let was_visible = self.statusbar_mode.visible();
+        self.statusbar_mode = mode;
+        if mode.visible() && !was_visible {
+            self.restore_chrome_layout();
+        } else if !mode.visible() {
+            for &id in &self.bar_ids { hide_pane_with_id(PaneId::Plugin(id)); }
+            // Suppressing a fixed UI pane does not refresh Zellij's floating
+            // viewport. Reasserting selectability recomputes its usable bounds.
+            set_selectable(true);
+            self.poll_hidden_panes();
+        }
+    }
+
+    fn set_sidebar_visible(&mut self, visible: bool) {
+        self.ui_generation = self.ui_generation.wrapping_add(1);
+        self.sidebar_visible = visible;
+        if visible {
+            self.restore_chrome_layout();
+        } else {
+            for &id in &self.sidebar_aux { hide_pane_with_id(id); }
+            hide_self();
+            // Suppressing a fixed UI pane does not refresh Zellij's floating
+            // viewport. Reasserting selectability recomputes its usable bounds.
+            set_selectable(true);
+            self.poll_hidden_panes();
+        }
+    }
+
+}
+
+#[cfg(test)]
+mod managed_ui_tests {
+    use super::*;
+    fn controller() -> State {
+        let mut state = State::default();
+        state.managed_ui = true;
+        state.dialog_id = Some(99);
+        state.config.agent_types = config::embedded_agent_types().clone();
+        state.config.compact = true;
+        state.agents = vec![dashboard::preview_agent("first-agent", types::AgentStatus::Running),
+            dashboard::preview_agent("second-agent", types::AgentStatus::WaitingForInput)];
+        state
+    }
+    #[test]
+    fn global_list_is_full_and_info_targets_the_focused_agent() {
+        let mut state = controller();
+        state.open_ui("menu");
+        let frame = render_output::capture(|| state.render_controller(20, 100));
+        assert!(frame.contains("first-agent"));
+        assert!(!state.handle_key(KeyWithModifier::new(BareKey::Char('d'))));
+        assert!(state.config.compact);
+        state.focused_agent = Some("second-agent".into());
+        state.open_ui("info");
+        assert_eq!(state.selected_index, 1);
+        assert!(state.show_detail && !state.menu_open);
+        state.open_ui("help");
+        assert!(state.show_help && !state.show_detail);
+    }
+    #[test]
+    fn wizard_defaults_shortcut_does_not_consume_name_input() {
+        let mut state = controller();
+        state.open_ui("wizard");
+        assert!(state.wizard.is_some());
+        state.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+        assert!(state.wizard.is_none() && state.name_prompt.is_some());
+        state.open_ui("wizard");
+        state.wizard.as_mut().unwrap().step = WizardStep::Name;
+        state.wizard_quick_start = false;
+        state.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+        assert_eq!(state.wizard.as_ref().unwrap().name, "n");
+        assert!(state.name_prompt.is_none());
     }
 }

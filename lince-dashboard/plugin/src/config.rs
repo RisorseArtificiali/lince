@@ -981,6 +981,7 @@ impl DashboardConfig {
     /// 4. Remove the file entirely — plugin should start with defaults.
     /// Parse config from TOML string content. Used by async config loading
     /// (run_command cat) since std::fs is unavailable in WASI sandbox.
+    #[cfg(test)]
     pub fn parse_toml(content: &str) -> (Self, Option<String>) {
         Self::parse_toml_for_view(content, false)
     }
@@ -1590,5 +1591,16 @@ sandboxed = true
         );
         let resolved = cfg.event_map_for("claude").expect("config map");
         assert_eq!(resolved.get("PreToolUse").map(String::as_str), Some("stopped"));
+    }
+}
+
+#[cfg(test)]
+mod view_defaults_tests {
+    use super::*;
+    #[test]
+    fn preset_density_is_only_a_default() {
+        assert!(DashboardConfig::parse_toml_for_view("[dashboard]", true).0.compact);
+        assert!(!DashboardConfig::parse_toml_for_view("[dashboard]\ncompact=false", true).0.compact);
+        assert!(DashboardConfig::parse_toml_for_view("[dashboard]\ncompact=true", false).0.compact);
     }
 }

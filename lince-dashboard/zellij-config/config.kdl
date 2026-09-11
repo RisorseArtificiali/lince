@@ -5,6 +5,13 @@ keybinds clear-defaults=true {
         bind "Shift Enter" { Write 10; }
     }
     locked {
+        bind "Alt d" { MessagePlugin { name "lince-ui-open"; }; }
+        bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
+        bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
+        bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
+        bind "Alt n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
         bind "Ctrl l" { SwitchToMode "normal"; }
     }
     pane {
@@ -222,12 +229,14 @@ keybinds clear-defaults=true {
             }
         }
         bind "Ctrl l" { SwitchToMode "locked"; }
-        bind "Alt h" { MoveFocusOrTab "left"; }
-        bind "Alt i" { MoveTab "left"; }
+        bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
         bind "Alt j" { MoveFocus "down"; }
         bind "Alt k" { MoveFocus "up"; }
-        bind "Alt l" { MoveFocusOrTab "right"; }
-        bind "Alt n" { NewPane; }
+        bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
+        bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
+        bind "Alt n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
         bind "Alt o" { MoveTab "right"; }
         bind "Alt p" { TogglePaneInGroup; }
         bind "Alt Shift p" { ToggleGroupMarking; }
@@ -619,3 +628,7 @@ copy_on_select true
 
 // Scrollback buffer
 scroll_buffer_size 10000
+
+// LINCE supplies its own onboarding/help through Alt+d and ?.
+show_startup_tips false
+show_release_notes false

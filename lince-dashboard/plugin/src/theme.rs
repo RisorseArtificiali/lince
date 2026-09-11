@@ -62,6 +62,19 @@ pub fn selection() -> String {
         format!("{}{}", ansi(p.colors[0], false), ansi(p.colors[6], true))
     })
 }
+/// The count is a navigation summary, not another agent status. Prefer the
+/// palette accent, but keep it distinct with monochrome or custom Zellij styles.
+pub fn attention_count() -> String {
+    CURRENT.with(|p| {
+        let p = p.borrow();
+        let statuses = [p.colors[1], p.colors[2], p.colors[3], p.colors[8]];
+        let candidates = [p.colors[6], p.colors[5], p.colors[4],
+            PaletteColor::Rgb((0, 255, 255)), PaletteColor::Rgb((255, 0, 255)),
+            PaletteColor::Rgb((128, 128, 255)), PaletteColor::Rgb((255, 128, 0)),
+            PaletteColor::Rgb((255, 255, 255))];
+        ansi(candidates.into_iter().find(|c| !statuses.contains(c)).unwrap(), false)
+    })
+}
 pub fn group(i: usize) -> String {
     color(["blue", "magenta", "cyan", "green", "yellow", "red"][i % 6])
 }

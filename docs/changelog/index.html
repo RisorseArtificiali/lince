@@ -87,6 +87,29 @@
   <!-- Entries -->
   <section class="max-w-5xl mx-auto px-6 pb-20">
 
+    <article id="dashboard-views" class="entry rounded-lg p-8 mb-8">
+      <header class="mb-6 pb-6 border-b border-border">
+        <div class="flex items-baseline gap-4 mb-2 flex-wrap">
+          <span class="font-mono text-sm text-muted">Unreleased</span>
+          <span class="tag tag-dashboard">dashboard</span>
+          <span class="tag tag-docs">docs</span>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">Compact views, themes and persistent attention</h2>
+        <p class="text-muted leading-relaxed">A minimal sidebar for new installations, a statusline view
+          with the same sidebar hidden initially, and a classic preset that preserves the familiar table and bars.</p>
+      </header>
+      <ul class="list-disc pl-5 space-y-3 text-sm text-muted">
+        <li>Numbered agent types, colored project headings, one-letter statuses and scrollable details; readable dialogs without resizing the viewport.</li>
+        <li>A two-row attention bar shows all slots and colored states, with a distinct input/permission count. Short names use registry labels and five real-name characters; names and unselected numbers use sandbox colors; the selected *number is white and entries never reorder. The left summary sits on the second row: only R bounces vertically; I/P stay on the second row with a v above alternating yellow/red. Numbers and names stay stationary.</li>
+        <li>Independent default, minimal-mono, Dracula and Gruvbox palettes; default inherits Zellij colors.</li>
+        <li>Alt+d/i/h open bordered list/info/help popups; Alt+s toggles the 15% sidebar, Alt+b cycles the status bar: hidden → left summary → full and Alt+n opens the wizard, with n for defaults/name only. Alt+q saves agents and bar visibility for the next launch, then quits; Alt+d then q exits without saving.</li>
+        <li>Repeated sidebar toggles restore the same pane arrangement; agents fill the available viewport when the sidebar is hidden and remain visible when it returns, preserving the selected agent after agent switches.</li>
+        <li>Configurable sidebar width and frame overrides. Existing configs without a preset retain classic on update;
+          LINCE's session configuration is separate from the global Zellij config.</li>
+      </ul>
+      <p class="text-sm mt-5"><a href="/documentation/#/dashboard/views-and-themes" class="text-accent hover:underline">Views and Themes guide &rarr;</a></p>
+    </article>
+
     <!-- 2026-08-23 -->
     <article id="2026-08-23" class="entry rounded-lg p-8 mb-8">
       <header class="mb-6 pb-6 border-b border-border">

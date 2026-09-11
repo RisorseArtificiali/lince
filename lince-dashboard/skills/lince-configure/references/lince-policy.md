@@ -80,9 +80,10 @@ Key reference for `~/.config/lince/lince.toml` (and the project overlay `<projec
 | `sandbox_colors` | table | — | — |
 | `project_search_roots` | list[string] | — | — |
 | `project_search_max_depth` | int | — | — |
-| `preset` | `"classic"` \| `"minimal"` \| `"statusline"` | `"classic"` | Presentation preset at launch; independent of theme |
-| `compact` | bool | `false` | Two-column agent list; d toggles density in the current session |
-| `sidebar_width` | int | `30` | Sidebar width percentage at launch (18-60) |
+| `pane_frames` | bool | — | Override the preset frame choice at launch |
+| `preset` | `"classic"` \| `"minimal"` \| `"statusline"` | `"minimal"` | Presentation preset at launch; independent of theme (legacy configs retain classic) |
+| `compact` | bool | `false` | Classic inline density; managed sidebar is always compact and popups are always full |
+| `sidebar_width` | int | `15` | Sidebar width percentage at launch (10-60) |
 | `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | — |
 
