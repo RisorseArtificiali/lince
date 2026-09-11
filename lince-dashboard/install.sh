@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=scripts/check-zellij.sh
 source "$SCRIPT_DIR/../scripts/check-zellij.sh"
+source "$SCRIPT_DIR/../scripts/dashboard-preset.sh"
 
 # Sandbox isolation levels (paranoid/normal/permissive) are no longer chosen at
 # install time. Under Config v2 they are a dimension of each agent, offered by
@@ -23,6 +24,8 @@ for arg in "$@"; do
             echo "Usage: $0"
             echo ""
             echo "  Installs the lince-dashboard Zellij plugin and its config."
+            echo "  Choose a dashboard preset interactively (default: minimal)."
+            echo "  Set LINCE_DASHBOARD_PRESET=minimal|statusline|classic to skip that prompt."
             echo "  Sandbox isolation levels are offered per agent at spawn time"
             echo "  by the dashboard wizard — no install-time selection needed."
             exit 0 ;;
@@ -96,6 +99,8 @@ setup_clipboard_backend() {
     rm -f "${config}.bak"
     echo -e "${GREEN}  ✓ copy_command set for $backend${NC}"
 }
+
+select_dashboard_preset
 
 # ── Step 1: Prerequisites ─────────────────────────────────────────────
 echo -e "${GREEN}[1/14] Checking prerequisites...${NC}"
@@ -260,7 +265,7 @@ if [ -f "$CONFIG_DST" ]; then
     cp "$CONFIG_DST" "$BACKUP"
     echo -e "${YELLOW}  Existing config backed up → $(basename "$BACKUP")${NC}"
 fi
-cp "$SCRIPT_DIR/config.toml" "$CONFIG_DST"
+write_dashboard_preset_config "$SCRIPT_DIR/config.toml" "$CONFIG_DST"
 echo -e "${GREEN}  ✓ Installed: $CONFIG_DST${NC}"
 echo ""
 
@@ -419,9 +424,12 @@ echo ""
 # ── Step 13: Shell aliases ────────────────────────────────────────────
 echo -e "${GREEN}[13/14] Setting up shell aliases...${NC}"
 
-ALIAS_LINES='alias lince="zellij --layout dashboard-tiled"
-alias lince-floating="zellij --layout dashboard"
-alias zd="zellij --layout dashboard-tiled"
+ALIAS_LINES='alias lince-classic="lince-dashboard-launch --preset classic"
+alias lince-minimal="lince-dashboard-launch --preset minimal"
+alias lince-statusline="lince-dashboard-launch --preset statusline"
+alias lince="lince-dashboard-launch"
+alias lince-floating="lince-dashboard-launch --layout dashboard"
+alias zd="lince-dashboard-launch"
 alias z="zellij"
 alias zn="zellij attach -c"'
 ALIAS_COMMENT="# LINCE aliases"
@@ -439,6 +447,9 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
             "${_sed_inplace[@]}" '/# LINCE aliases/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince=/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince-floating=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-classic=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-minimal=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-statusline=/d' "$rc"
             "${_sed_inplace[@]}" '/alias zd=/d' "$rc"
             "${_sed_inplace[@]}" '/alias z="zellij"/d' "$rc"
             "${_sed_inplace[@]}" '/alias zn=/d' "$rc"
