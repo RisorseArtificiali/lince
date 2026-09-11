@@ -80,6 +80,7 @@ Key reference for `~/.config/lince/lince.toml` (and the project overlay `<projec
 | `sandbox_colors` | table | — | — |
 | `project_search_roots` | list[string] | — | — |
 | `project_search_max_depth` | int | — | — |
+| `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | — |
 
 ## `[experimental]`

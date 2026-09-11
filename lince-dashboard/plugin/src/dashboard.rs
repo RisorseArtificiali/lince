@@ -5,62 +5,14 @@ use crate::types::{
     AgentInfo, AgentStatus, NamePromptState, ProjectDirMode, RelayPhase, WizardState, WizardStep,
 };
 
-/// Map a color name from config to an ANSI escape code.
-fn color_name_to_ansi(name: &str) -> &'static str {
-    match name {
-        "red" => "\x1b[31m",
-        "green" => "\x1b[32m",
-        "yellow" => "\x1b[33m",
-        "blue" => "\x1b[34m",
-        "magenta" => "\x1b[35m",
-        "cyan" => "\x1b[36m",
-        "white" => "\x1b[37m",
-        _ => "\x1b[37m",  // default to white
-    }
-}
+use crate::theme;
 
-/// ANSI background sequence for the wizard's selection block.
-///
-/// Forces a black foreground for light backgrounds (yellow/cyan/white) so
-/// the highlighted text stays readable. Dark backgrounds keep the default
-/// foreground.
-fn selection_bg_for_color(name: &str) -> &'static str {
-    match name {
-        "red" => "\x1b[41m",
-        "green" => "\x1b[42m",
-        "yellow" => "\x1b[30;43m",
-        "blue" => "\x1b[44m",
-        "magenta" => "\x1b[45m",
-        "cyan" => "\x1b[30;46m",
-        "white" => "\x1b[30;47m",
-        _ => "\x1b[30;47m",
-    }
-}
+fn color_name_to_ansi(name: &str) -> String { theme::color(name) }
+fn selection_bg_for_color(_name: &str) -> String { theme::selection() }
 
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
-const REVERSE: &str = "\x1b[7m";
-const BOLD_REVERSE: &str = "\x1b[1;7m";
 const DIM: &str = "\x1b[2m";
-const CYAN: &str = "\x1b[36m";
-const KEY_COLOR: &str = "\x1b[1;36m"; // bold cyan for key hints
-const BLUE_BOLD: &str = "\x1b[1;34m"; // blue bold for swimlane headers
-
-/// Hard-coded color palette cycled across unique workdir swimlane headers,
-/// in order of first appearance, so multi-project sessions are easy to tell
-/// apart at a glance. The first entry is `BLUE_BOLD`, so single-workdir setups
-/// keep their legacy appearance exactly. Intentionally not configurable —
-/// grouping by color helps everyone and another config knob would just add
-/// noise (see issue #161).
-const WORKDIR_HEADER_PALETTE: [&str; 6] = [
-    BLUE_BOLD,       // blue   (legacy)
-    "\x1b[1;35m",    // magenta
-    "\x1b[1;36m",    // cyan
-    "\x1b[1;32m",    // green
-    "\x1b[1;33m",    // yellow
-    "\x1b[1;31m",    // red
-];
-
 /// Truncate a string to fit within `max_width` *visible* characters, appending
 /// "..." if truncated. ANSI CSI sequences (e.g. `\x1b[1;31m`) are copied verbatim
 /// and never count toward width — without this, a cut landing inside a CSI
@@ -350,7 +302,7 @@ fn render_header(agent_count: usize, cols: usize) {
 
     print!(
         "{}{:>left$}{}{:>right$}{}",
-        BOLD_REVERSE, "", title, "", RESET,
+        theme::selection(), "", title, "", RESET,
         left = padding_left, right = padding_right,
     );
     println!();
@@ -364,7 +316,7 @@ fn render_empty_state(table_rows: usize, cols: usize) {
         if r == mid {
             let msg_display = truncate(msg, cols);
             let pad = if cols > msg_display.len() { (cols - msg_display.len()) / 2 } else { 0 };
-            print!("{:>width$}\x1b[33m{}{}", "", msg_display, RESET, width = pad);
+            print!("{:>width$}{}{}{}", "", theme::color("yellow"), msg_display, RESET, width = pad);
             println!();
         } else {
             println!();
@@ -470,7 +422,7 @@ fn render_agent_table(
                 // first appearance (palette wraps modulo its length).
                 let dir = &header_dirs[vrow];
                 let idx = dir_color_idx.get(dir.as_str()).copied().unwrap_or(0);
-                let header_color = WORKDIR_HEADER_PALETTE[idx % WORKDIR_HEADER_PALETTE.len()];
+                let header_color = theme::group(idx);
                 let short = collapse_tilde(dir);
                 let fill_len = cols.saturating_sub(short.len() + 5);
                 println!(
@@ -487,7 +439,7 @@ fn render_agent_table(
                 let prefix = if is_focused { ">" } else { " " };
                 let idx_str = format!("{}", agent_idx + 1);
                 let status_label = agent.status_display();
-                let status_color = agent.status.color();
+                let status_color = theme::status(&agent.status);
                 let needs_attention = matches!(
                     agent.status,
                     AgentStatus::WaitingForInput | AgentStatus::PermissionRequired
@@ -498,7 +450,7 @@ fn render_agent_table(
                 // mapped through sandbox_colors; falls back to the per-type config color.
                 let type_col = if let Some(cfg) = agent_types.get(&agent.agent_type) {
                     if !cfg.sandboxed {
-                        format!(" \x1b[1;31m{}!{}", pad_left(&cfg.short_label, col_type.saturating_sub(2)), RESET)
+                        format!(" {}{}!{}", theme::color("red"), pad_left(&cfg.short_label, col_type.saturating_sub(2)), RESET)
                     } else {
                         let color_name = if let Some(ref level) = agent.sandbox_level {
                             sandbox_colors.for_level(level)
@@ -597,13 +549,13 @@ fn render_agent_table(
                     // doesn't render in status_color too.
                     print!(
                         "{}{} {}{}{}\x1b[39;22m{}{}",
-                        REVERSE, main_part,
+                        theme::selection(), main_part,
                         status_color, if needs_attention { BOLD } else { "" },
                         status_str,
                         trailing, RESET,
                     );
                     if fill > 0 {
-                        print!("{}{:>fill$}{}", REVERSE, "", RESET, fill = fill);
+                        print!("{}{:>fill$}{}", theme::selection(), "", RESET, fill = fill);
                     }
                     println!();
                 } else {
@@ -625,7 +577,7 @@ fn render_agent_table(
                     let sandbox_col = if show_sandbox {
                         if let Some(cfg) = agent_types.get(&agent.agent_type) {
                             if !cfg.sandboxed {
-                                format!("\x1b[1;31m{}{} ", sandbox_plain, RESET)
+                                format!("{}{}{} ", theme::color("red"), sandbox_plain, RESET)
                             } else {
                                 format!("\x1b[2m{}{} ", sandbox_plain, RESET)
                             }
@@ -673,7 +625,7 @@ fn render_detail_panel(agent: &AgentInfo, cols: usize, max_rows: usize, agent_ty
         let (type_display, type_color, sandbox_info) =
             if let Some(cfg) = agent_types.get(&agent.agent_type) {
                 let sandbox_str = if !cfg.sandboxed {
-                    " \x1b[1;31m[UNSANDBOXED]\x1b[0m".to_string()
+                    format!(" {}[UNSANDBOXED]{}", theme::color("red"), RESET)
                 } else {
                     let backend = agent.sandbox_backend.as_ref().unwrap_or(&cfg.sandbox_backend);
                     format!(" \x1b[2m[{}]\x1b[0m", backend.display_name())
@@ -684,14 +636,14 @@ fn render_detail_panel(agent: &AgentInfo, cols: usize, max_rows: usize, agent_ty
                     sandbox_str,
                 )
             } else {
-                (agent.agent_type.as_str(), RESET, String::new())
+                (agent.agent_type.as_str(), RESET.to_string(), String::new())
             };
         let detail_status = agent.status_display();
         println!(
             " {}Agent:{} {}  {}{}{}{} {}{}{}",
-            CYAN, RESET, agent.name,
+            theme::color("cyan"), RESET, agent.name,
             type_color, type_display, RESET, sandbox_info,
-            agent.status.color(), detail_status, RESET,
+            theme::status(&agent.status), detail_status, RESET,
         );
         row += 1;
     }
@@ -701,14 +653,14 @@ fn render_detail_panel(agent: &AgentInfo, cols: usize, max_rows: usize, agent_ty
     // (gh#81). Either may be `(default)` independently.
     if row < max_rows {
         let profile = agent.sandbox_level.as_deref().unwrap_or("(default)");
-        println!(" {}Profile:{} {}", CYAN, RESET, profile);
+        println!(" {}Profile:{} {}", theme::color("cyan"), RESET, profile);
         row += 1;
     }
     // Effective-policy badge (#221): the boundary the kernel actually
     // enforced for THIS run (requested view = `lince config resolve`).
     if row < max_rows {
         if let Some(ref p) = agent.enforced {
-            let color = if p.fully_enforced() { "\x1b[32m" } else { "\x1b[1;33m" };
+            let color = theme::color(if p.fully_enforced() { "green" } else { "yellow" });
             let mut extra = String::new();
             if let Some(ref lim) = p.net_limitation {
                 if lim != "unavailable" {
@@ -716,17 +668,17 @@ fn render_detail_panel(agent: &AgentInfo, cols: usize, max_rows: usize, agent_ty
                 }
             }
             if let Some(ref reason) = p.degraded_reason {
-                extra.push_str(&format!(" \x1b[1;33m{}\x1b[0m", reason));
+                extra.push_str(&format!(" {}{}{}", theme::color("yellow"), reason, RESET));
             }
             if !p.experimental.is_empty() {
                 extra.push_str(&format!(
-                    " \x1b[1;33moverride: {}\x1b[0m",
-                    p.experimental.join(", ")
+                    " {}override: {}{}",
+                    theme::color("yellow"), p.experimental.join(", "), RESET
                 ));
             }
             let line = format!(
                 " {}Enforced:{} {}{}{} [{}]{}",
-                CYAN, RESET, color, p.badge(), RESET, p.backend, extra,
+                theme::color("cyan"), RESET, color, p.badge(), RESET, p.backend, extra,
             );
             println!("{}", truncate(&line, cols));
             row += 1;
@@ -734,21 +686,21 @@ fn render_detail_panel(agent: &AgentInfo, cols: usize, max_rows: usize, agent_ty
     }
     if row < max_rows {
         let provider = agent.provider.as_deref().unwrap_or("(default)");
-        println!(" {}Provider:{} {}", CYAN, RESET, provider);
+        println!(" {}Provider:{} {}", theme::color("cyan"), RESET, provider);
         row += 1;
     }
     if row < max_rows {
-        println!(" {}Dir:{} {}", CYAN, RESET, agent.project_dir);
+        println!(" {}Dir:{} {}", theme::color("cyan"), RESET, agent.project_dir);
         row += 1;
     }
     if row < max_rows {
         let started = agent.started_at.map_or("-".to_string(), format_elapsed);
-        println!(" {}Started:{} {}", CYAN, RESET, started);
+        println!(" {}Started:{} {}", theme::color("cyan"), RESET, started);
         row += 1;
     }
     if row < max_rows {
         if let Some(ref err) = agent.last_error {
-            println!(" {}Error:{} \x1b[31m{}{}", CYAN, RESET, truncate(err, cols.saturating_sub(10)), RESET);
+            println!(" {}Error:{} {}{}{}", theme::color("cyan"), RESET, theme::color("red"), truncate(err, cols.saturating_sub(10)), RESET);
             row += 1;
         }
     }
@@ -774,13 +726,13 @@ fn render_name_prompt_bar(prompt: &NamePromptState, cols: usize) {
 
     let text = format!(
         " {}{}:{} {}{}  {}[Enter]{} OK  {}[Esc]{} Cancel",
-        CYAN, prompt.label, RESET, input_part, hint,
-        KEY_COLOR, RESET, KEY_COLOR, RESET,
+        theme::color("cyan"), prompt.label, RESET, input_part, hint,
+        theme::color("cyan"), RESET, theme::color("cyan"), RESET,
     );
 
     let visible_len = strip_ansi_len(&text);
     let padding = cols.saturating_sub(visible_len + 1);
-    print!("\x1b[44m {}{:>pad$}{}", text, "", RESET, pad = padding);
+    print!("{} {}{:>pad$}{}", theme::selection(), text, "", RESET, pad = padding);
     println!();
 }
 
@@ -796,13 +748,13 @@ fn render_relay_message_prompt(input: &str, cols: usize) {
 
     let text = format!(
         " {}Relay:{} Messages (1-9): {}  {}[Enter]{} OK  {}[Esc]{} Cancel",
-        CYAN, RESET, input_part,
-        KEY_COLOR, RESET, KEY_COLOR, RESET,
+        theme::color("cyan"), RESET, input_part,
+        theme::color("cyan"), RESET, theme::color("cyan"), RESET,
     );
 
     let visible_len = strip_ansi_len(&text);
     let padding = cols.saturating_sub(visible_len + 1);
-    print!("\x1b[44m {}{:>pad$}{}", text, "", RESET, pad = padding);
+    print!("{} {}{:>pad$}{}", theme::selection(), text, "", RESET, pad = padding);
     println!();
 }
 
@@ -813,7 +765,7 @@ type KeyHint = (&'static str, &'static str);
 fn format_key_hints(hints: &[KeyHint]) -> String {
     hints
         .iter()
-        .map(|(key, label)| format!("{}[{}]{} {}", KEY_COLOR, key, RESET, label))
+        .map(|(key, label)| format!("{}[{}]{} {}", theme::color("cyan"), key, RESET, label))
         .collect::<Vec<_>>()
         .join("  ")
 }
@@ -898,7 +850,7 @@ fn print_status_line(text: &str, hints: &[KeyHint], cols: usize) {
 
     let display_visible = strip_ansi_len(&display);
     let padding = cols.saturating_sub(display_visible + 1);
-    print!("{} {}{:>pad$}{}", REVERSE, display, "", RESET, pad = padding);
+    print!("{} {}{:>pad$}{}", theme::selection(), display, "", RESET, pad = padding);
     println!();
 }
 
@@ -906,7 +858,7 @@ fn print_status_line(text: &str, hints: &[KeyHint], cols: usize) {
 /// (e.g. the name prompt) so the bottom bar always occupies 2 rows.
 fn print_status_pad_line(cols: usize) {
     let padding = cols.saturating_sub(1);
-    print!("{} {:>pad$}{}", REVERSE, "", RESET, pad = padding);
+    print!("{} {:>pad$}{}", theme::selection(), "", RESET, pad = padding);
     println!();
 }
 
@@ -979,16 +931,16 @@ pub fn render_wizard(
                 let label = backend.display_name();
                 if is_selected {
                     let bg = if matches!(backend, crate::sandbox_backend::SandboxBackend::None) {
-                        "\x1b[41m"
+                        theme::selection()
                     } else {
-                        REVERSE
+                        theme::selection()
                     };
                     push_box_line(&mut lines, &format!("  {}> {}{}", bg, label, RESET), box_width);
                 } else {
                     let prefix = if matches!(backend, crate::sandbox_backend::SandboxBackend::None) {
-                        "\x1b[31m"
+                        theme::color("red")
                     } else {
-                        ""
+                        String::new()
                     };
                     push_box_line(&mut lines, &format!("    {}{}{}", prefix, label, RESET), box_width);
                 }
@@ -1157,7 +1109,7 @@ pub fn render_wizard(
                     push_box_line(&mut lines, "", box_width);
                     push_box_line(
                         &mut lines,
-                        &format!("  \x1b[1;31m✗ {}\x1b[0m", err),
+                        &format!("  {}✗ {}{}", theme::color("red"), err, RESET),
                         box_width,
                     );
                 }
@@ -1202,37 +1154,37 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
     push_box_line(&mut lines, "", box_width);
 
     push_box_line(&mut lines, &format!("  {}Navigation{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}j / Down{}   Move selection down", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}k / Up{}     Move selection up", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}1-9{}        Select & focus agent #", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Alt+1-9{}    Global: switch to agent #", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Alt+PgDn/Up{} Cycle to next/prev agent", KEY_COLOR, RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}j / Down{}   Move selection down", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}k / Up{}     Move selection up", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}1-9{}        Select & focus agent #", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}Alt+1-9{}    Global: switch to agent #", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}Alt+PgDn/Up{} Cycle to next/prev agent", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, "", box_width);
 
     push_box_line(&mut lines, &format!("  {}Actions{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Enter / f{}  Focus agent pane", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}i{}          Toggle info panel", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}r{}          Rename selected agent", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}x{}          Kill agent", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}h / Esc{}    Unfocus / close / back", KEY_COLOR, RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}Enter / f{}  Focus agent pane", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}i{}          Toggle info panel", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}r{}          Rename selected agent", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}x{}          Kill agent", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}h / Esc{}    Unfocus / close / back", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, "", box_width);
 
     push_box_line(&mut lines, &format!("  {}Create{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}n{}          New agent (name prompt)", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}N{}          New agent wizard", KEY_COLOR, RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}n{}          New agent (name prompt)", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}N{}          New agent wizard", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, "", box_width);
 
     push_box_line(&mut lines, &format!("  {}Relay{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}s{}          Relay last message to agent", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}S{}          Relay N messages (prompt)", KEY_COLOR, RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}s{}          Relay last message to agent", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}S{}          Relay N messages (prompt)", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, "", box_width);
 
     push_box_line(&mut lines, &format!("  {}Other{}", BOLD, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}Q{}          Save state & quit Zellij", KEY_COLOR, RESET), box_width);
-    push_box_line(&mut lines, &format!("  {}?{}          Toggle this help", KEY_COLOR, RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}Q{}          Save state & quit Zellij", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, &format!("  {}?{}          Toggle this help", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, "", box_width);
 
-    let help = format!("  Press {}?{} or {}Esc{} to close", KEY_COLOR, RESET, KEY_COLOR, RESET);
+    let help = format!("  Press {}?{} or {}Esc{} to close", theme::color("cyan"), RESET, theme::color("cyan"), RESET);
     lines.push(format!("\u{2502}{}\u{2502}", pad_to_width(&help, box_width.saturating_sub(2))));
     push_bottom_border(&mut lines, box_width);
 
@@ -1295,5 +1247,36 @@ mod tests {
     #[test]
     fn strip_ansi_len_matches_truncate_loop_contract() {
         assert_eq!(strip_ansi_len("\x1b[1;31mhi\x1b[0m"), 2);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn preview_agent(name: &str, status: AgentStatus) -> AgentInfo {
+    AgentInfo {
+        id: name.into(), name: name.into(), agent_type: "claude".into(),
+        provider: None, project_dir: "/work/lince".into(), status, pane_id: None,
+        started_at: None, last_error: None, exit_code: None, group: None,
+        last_polled_event: None, sandbox_level: Some("normal".into()),
+        sandbox_backend: None, transcript_path: None, icon: String::new(), enforced: None,
+    }
+}
+
+#[cfg(test)]
+mod previews {
+    use super::*;
+    /// Real renderer output used by tests/render-theme-previews.py.
+    #[test]
+    #[ignore]
+    fn theme_previews() {
+        let agents = vec![preview_agent("lince-1", AgentStatus::Running),
+            preview_agent("review", AgentStatus::WaitingForInput),
+            preview_agent("fix-auth", AgentStatus::PermissionRequired)];
+        for name in ["default", "minimal-mono", "dracula", "gruvbox"] {
+            println!("PREVIEW:{name}");
+            theme::set(name, None);
+            render_dashboard(&agents, 0, Some("lince-1"), None, 14, 76,
+                None, None, None, &crate::config::embedded_agent_types(), &SandboxColors::default());
+            println!("\nENDPREVIEW");
+        }
     }
 }

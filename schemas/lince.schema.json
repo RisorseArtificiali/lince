@@ -384,6 +384,11 @@
         "project_search_max_depth": {
           "type": "integer"
         },
+        "theme": {
+          "type": "string",
+          "description": "Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox",
+          "default": "default"
+        },
         "instance_icons": {
           "type": "array",
           "items": {

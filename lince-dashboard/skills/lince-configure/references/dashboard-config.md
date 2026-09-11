@@ -29,6 +29,7 @@ Dashboard behavior and defaults.
 | `sandbox_colors` | table | — | Color per sandbox level (paranoid/normal/permissive/default) |
 | `project_search_roots` | list[string] | — | Roots scanned recursively by the wizard's Tab completion |
 | `project_search_max_depth` | int | `3` | find -maxdepth for project_search_roots |
+| `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | Pool of per-instance marker glyphs (#166); empty disables markers |
 
 ## `[agents.<name>]`

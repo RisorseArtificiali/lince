@@ -6,6 +6,7 @@ mod recents;
 mod sandbox_backend;
 mod state_file;
 mod types;
+mod theme;
 
 use std::collections::BTreeMap;
 use zellij_tile::prelude::*;
@@ -28,6 +29,7 @@ use crate::types::{
 
 struct State {
     own_id: u32,
+    inherited_style: Option<Style>,
     config: DashboardConfig,
     config_error: Option<String>,
     config_path: Option<String>,
@@ -74,6 +76,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             own_id: 0,
+            inherited_style: None,
             config: DashboardConfig::default(),
             config_error: None,
             config_path: None,
@@ -201,6 +204,10 @@ impl ZellijPlugin for State {
                 // Detect available sandbox backends (agent-sandbox, nono).
                 sandbox_backend::detect_backend_async();
                 self.init_kicked = true;
+                true
+            }
+            Event::ModeUpdate(info) => {
+                self.inherited_style = Some(info.style);
                 true
             }
             Event::Key(key) => self.handle_key(key),
@@ -611,6 +618,7 @@ impl ZellijPlugin for State {
     }
 
     fn render(&mut self, rows: usize, cols: usize) {
+        theme::set(&self.config.theme, self.inherited_style);
         // If help overlay is active, render it and return
         if self.show_help {
             dashboard::render_help_overlay(rows, cols);

@@ -231,3 +231,31 @@ This means you can safely update `agents-defaults.toml` (via `update.sh`) withou
 - [Sandbox CLI Reference](sandbox/cli-reference.md) -- the `agent-sandbox` command
 - [lince-config CLI](https://github.com/RisorseArtificiali/lince/blob/main/lince-config/README.md) -- structured CLI for reading and editing LINCE configuration
 - [Multi-Agent Guide](https://github.com/RisorseArtificiali/lince/blob/main/lince-dashboard/MULTI-AGENT-GUIDE.md) -- migration guide for multi-agent support
+
+### Dashboard palettes
+
+Set `[dashboard] theme = "dracula"` in `~/.config/lince-dashboard/config.toml`
+(or use `lince-config set dashboard.theme dracula --target dashboard`). Changes
+are picked up by the existing config reload. Unknown names display a warning
+and fall back to `default`. An omitted theme inherits Zellij's active **colors**
+through `ModeUpdate`; the plugin does not need or infer the Zellij theme name.
+
+| Role | Palette entry |
+|---|---|
+| Running / input / permission | Green / yellow / red |
+| Unknown / stopped | Muted gray; labels remain distinct |
+| Headings / project groups | Blue, cycling accent colors |
+| Keys / labels | Cyan accent |
+| Selection / prompts | Accent background, contrasting foreground |
+
+`minimal-mono` uses neutral colors; status labels and selection still identify
+meaning without color. Sandbox color names map through the selected palette.
+The theme affects LINCE UI, not the agent terminal's own colors.
+
+The following terminal captures are generated from the actual Rust renderer
+with deterministic sample agents, using `tests/render-theme-previews.py`:
+
+![Default palette](../../assets/dashboard-theme-default.svg)
+![Minimal mono palette](../../assets/dashboard-theme-minimal-mono.svg)
+![Dracula palette](../../assets/dashboard-theme-dracula.svg)
+![Gruvbox palette](../../assets/dashboard-theme-gruvbox.svg)
