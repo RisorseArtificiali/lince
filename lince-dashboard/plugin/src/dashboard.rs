@@ -1170,6 +1170,7 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
 
     push_box_line(&mut lines, &format!("  {}Actions{}", BOLD, RESET), box_width);
     push_box_line(&mut lines, &format!("  {}Enter / f{}  Focus agent pane", theme::color("cyan"), RESET), box_width);
+    push_box_line(&mut lines, "  Alt+d      Open dashboard from any pane", box_width);
     push_box_line(&mut lines, "  d          Toggle compact/full table", box_width);
     push_box_line(&mut lines, &format!("  {}i{}          Toggle info panel", theme::color("cyan"), RESET), box_width);
     push_box_line(&mut lines, &format!("  {}r{}          Rename selected agent", theme::color("cyan"), RESET), box_width);

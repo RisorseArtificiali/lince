@@ -272,3 +272,27 @@ Option 2 — Via GUI: **Terminator → Preferences → Keybindings → copy_clip
 - [Sandbox CLI Reference](sandbox/cli-reference.md) -- the `agent-sandbox` command
 - [lince-config CLI](https://github.com/RisorseArtificiali/lince/blob/main/lince-config/README.md) -- structured CLI for reading and editing LINCE configuration
 - [Multi-Agent Guide](https://github.com/RisorseArtificiali/lince/blob/main/lince-dashboard/MULTI-AGENT-GUIDE.md) -- migration guide for multi-agent support
+
+### One-line agent navigation
+
+The `dashboard-statusline` layout has one persistent LINCE row and no sidebar.
+`Alt+d` opens the controller; `Esc` closes it, or first dismisses its help/info.
+Use `n`/`N` to create agents, `i` for details, `r` to rename, and `s`/`S` to relay
+messages. Selecting an agent hides the controller and returns to its terminal.
+The existing `Alt+1`–`Alt+9` and `Alt+PageUp/PageDown` work while typing in agents.
+If the bar itself has focus, digits switch agents, arrows cycle, and Enter
+opens the controller. Bare letters in agent terminals are never intercepted.
+
+The leading `!N` counts INPUT and PERMISSION agents. `2I 3P` identifies waiting
+agent slots even when color is unavailable. The active entry is marked `*` and
+includes its sandbox level (`NOSB` means unsandboxed). Unknown/stopped agents
+are not counted. The bar reserves attention before ordinary navigation labels
+when space is tight. #116's existing five-state model remains authoritative.
+
+There is one controller per dashboard. The bar is a passive instance of the
+same WASM: it receives snapshots and forwards actions, with no hook polling,
+agent creation, or state restore. It stays visible while the popup, wizard or
+help is open. Ordinary additional tabs connect to the single session controller;
+with multiple controllers, bars prefer the controller in their own tab.
+Native Zellij fullscreen or manually hiding the bar can suppress it; leave
+fullscreen to restore the managed view. A terminal bell is not enabled.

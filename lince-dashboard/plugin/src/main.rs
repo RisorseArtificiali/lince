@@ -7,6 +7,7 @@ mod sandbox_backend;
 mod state_file;
 mod types;
 mod theme;
+mod attention;
 
 use std::collections::BTreeMap;
 use zellij_tile::prelude::*;
@@ -29,6 +30,13 @@ use crate::types::{
 
 struct State {
     own_id: u32,
+    passive_bar: bool,
+    popup: bool,
+    popup_visible: bool,
+    controller_id: Option<u32>,
+    bar_ids: Vec<u32>,
+    snapshot: attention::Snapshot,
+    last_snapshot: Option<attention::Snapshot>,
     inherited_style: Option<Style>,
     config: DashboardConfig,
     config_error: Option<String>,
@@ -76,6 +84,13 @@ impl Default for State {
     fn default() -> Self {
         Self {
             own_id: 0,
+            passive_bar: false,
+            popup: false,
+            popup_visible: false,
+            controller_id: None,
+            bar_ids: Vec::new(),
+            snapshot: attention::Snapshot::default(),
+            last_snapshot: None,
             inherited_style: None,
             config: DashboardConfig::default(),
             config_error: None,
@@ -151,6 +166,16 @@ register_plugin!(State);
 impl ZellijPlugin for State {
     fn load(&mut self, configuration: BTreeMap<String, String>) {
         self.own_id = get_plugin_ids().plugin_id;
+        self.passive_bar = configuration.get("role").map(String::as_str) == Some("statusline");
+        self.popup = configuration.get("presentation").map(String::as_str) == Some("popup");
+        if self.passive_bar {
+            subscribe(&[EventType::PaneUpdate, EventType::ModeUpdate, EventType::Key,
+                EventType::PermissionRequestResult, EventType::Timer]);
+            request_permission(&[PermissionType::ReadApplicationState,
+                PermissionType::MessageAndLaunchOtherPlugins]);
+            set_timeout(1.0);
+            return;
+        }
         if let Some(raw_path) = configuration.get("config_path") {
             let path = config::expand_tilde(raw_path);
             self.config_path = Some(path);
@@ -194,6 +219,8 @@ impl ZellijPlugin for State {
     }
 
     fn update(&mut self, event: Event) -> bool {
+        if self.passive_bar { return self.update_bar(event); }
+        let changed = (|| {
         match event {
             Event::PermissionRequestResult(PermissionStatus::Granted) => {
                 let _ = std::fs::OpenOptions::new()
@@ -212,6 +239,15 @@ impl ZellijPlugin for State {
             }
             Event::Key(key) => self.handle_key(key),
             Event::PaneUpdate(manifest) => {
+                if self.popup && !self.popup_visible && manifest.panes.values().flatten()
+                    .any(|p| p.is_plugin && p.id == self.own_id && !p.is_suppressed) {
+                    hide_self();
+                }
+                let bars: Vec<u32> = manifest.panes.values().flatten()
+                    .filter(|p| p.is_plugin && p.title == "lince-attention"
+                        && attention::controller_for(&manifest, p.id) == Some(self.own_id))
+                    .map(|p| p.id).collect();
+                if bars != self.bar_ids { self.bar_ids = bars; self.last_snapshot = None; }
                 let viewport = pane_manager::find_viewport(&manifest, self.own_id);
                 if viewport != self.config.viewport {
                     self.config.viewport = viewport;
@@ -615,9 +651,17 @@ impl ZellijPlugin for State {
             }
             _ => false,
         }
+        })();
+        self.publish_ui(false);
+        changed
     }
 
     fn render(&mut self, rows: usize, cols: usize) {
+        if self.passive_bar {
+            theme::set(&self.snapshot.theme, self.inherited_style);
+            if rows > 0 { self.snapshot.render(cols); }
+            return;
+        }
         theme::set(&self.config.theme, self.inherited_style);
         // If help overlay is active, render it and return
         if self.show_help {
@@ -663,11 +707,45 @@ impl ZellijPlugin for State {
     }
 
     fn pipe(&mut self, pipe_message: PipeMessage) -> bool {
+        if self.passive_bar {
+            if pipe_message.name == attention::SNAPSHOT {
+                if let (PipeSource::Plugin(id), Some(payload)) = (&pipe_message.source, &pipe_message.payload) {
+                    if Some(*id) == self.controller_id {
+                        if let Ok(snapshot) = serde_json::from_str(payload) {
+                            self.snapshot = snapshot;
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        let changed = (|| {
         // Close the CLI pipe so `zellij pipe` command can return
-        unblock_cli_pipe_input(&pipe_message.name);
-        cli_pipe_output(&pipe_message.name, "");
+        if matches!(pipe_message.source, PipeSource::Cli(_)) {
+            unblock_cli_pipe_input(&pipe_message.name);
+            cli_pipe_output(&pipe_message.name, "");
+        }
 
         match pipe_message.name.as_str() {
+            attention::REFRESH => { self.publish_ui(true); false }
+            attention::OPEN => {
+                self.popup_visible = true;
+                show_self(self.popup);
+                if self.popup {
+                    let mut coords = FloatingPaneCoordinates::default().with_x_percent(10)
+                        .with_y_percent(5).with_width_percent(80).with_height_percent(85);
+                    coords.borderless = Some(true);
+                    change_floating_panes_coordinates(vec![(PaneId::Plugin(self.own_id), coords)]);
+                }
+                match pipe_message.payload.as_deref() {
+                    Some("i") => self.show_detail = true,
+                    Some("n") => { self.handle_key(KeyWithModifier::new(BareKey::Char('n'))); }
+                    Some("N") => { self.handle_key(KeyWithModifier::new(BareKey::Char('N'))); }
+                    _ => {}
+                }
+                true
+            }
             PIPE_FOCUS_AGENT => {
                 if let Some(payload) = &pipe_message.payload {
                     if let Ok(idx) = payload.parse::<usize>() {
@@ -719,7 +797,11 @@ impl ZellijPlugin for State {
             }
             _ => false,
         }
+        })();
+        self.publish_ui(false);
+        changed
     }
+
 }
 
 /// Group/sort key for agent workdirs. Strips a trailing `/` so paths that
@@ -982,6 +1064,12 @@ impl State {
                 // Layered dismissal: help > unfocus (detail is toggled only by 'i')
                 if self.show_help {
                     self.show_help = false;
+                } else if self.show_detail {
+                    self.show_detail = false;
+                } else if self.popup {
+                    self.popup_visible = false;
+                    hide_self();
+                    self.focus_selected();
                 } else {
                     self.unfocus_current();
                 }
@@ -1631,6 +1719,7 @@ impl State {
             if pane_manager::focus_agent(
                 agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
             ) {
+                if self.popup { self.popup_visible = false; hide_self(); }
                 self.focused_agent = Some(agent.id.clone());
                 self.status_message = Some(format!("Focused {}", agent.name));
             }
@@ -2096,6 +2185,53 @@ impl State {
             self.focus_selected();
             self.status_message = Some(format!("Restored {} agents", spawned));
             set_timeout(3.0);
+        }
+    }
+}
+
+impl State {
+    fn publish_ui(&mut self, force: bool) {
+        if self.bar_ids.is_empty() { return; }
+        let snapshot = attention::Snapshot::from_agents(&self.agents,
+            self.focused_agent.as_deref(), &self.config, self.config_error.as_deref());
+        if !force && self.last_snapshot.as_ref() == Some(&snapshot) { return; }
+        if let Ok(payload) = serde_json::to_string(&snapshot) {
+            for &id in &self.bar_ids { attention::send(id, attention::SNAPSHOT, &payload); }
+            self.last_snapshot = Some(snapshot);
+        }
+    }
+
+    fn update_bar(&mut self, event: Event) -> bool {
+        match event {
+            Event::ModeUpdate(info) => { self.inherited_style = Some(info.style); true }
+            Event::PaneUpdate(manifest) => {
+                let id = attention::controller_for(&manifest, self.own_id);
+                if self.controller_id != id {
+                    self.controller_id = id;
+                    self.snapshot = attention::Snapshot::default();
+                    if let Some(id) = id { attention::send(id, attention::REFRESH, ""); }
+                }
+                true
+            }
+            Event::Timer(_) | Event::PermissionRequestResult(PermissionStatus::Granted) => {
+                if let Some(id) = self.controller_id { attention::send(id, attention::REFRESH, ""); }
+                set_timeout(5.0);
+                false
+            }
+            Event::Key(key) if key.key_modifiers.is_empty() => {
+                if let Some(id) = self.controller_id {
+                    match key.bare_key {
+                        BareKey::Char(c @ '1'..='9') => attention::send(id, PIPE_FOCUS_AGENT, &c.to_string()),
+                        BareKey::Left => attention::send(id, PIPE_CYCLE_AGENT, "prev"),
+                        BareKey::Right => attention::send(id, PIPE_CYCLE_AGENT, "next"),
+                        BareKey::Char(c @ ('i' | 'n' | 'N')) => attention::send(id, attention::OPEN, &c.to_string()),
+                        BareKey::Enter | BareKey::Char('d') | BareKey::Char('?') => attention::send(id, attention::OPEN, ""),
+                        _ => {}
+                    }
+                }
+                false
+            }
+            _ => false,
         }
     }
 }

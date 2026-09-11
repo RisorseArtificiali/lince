@@ -42,7 +42,7 @@ layout {
             // Left column — 40%, split horizontally into A + C
             pane size="30%" split_direction="horizontal" {
                 // A — Dashboard plugin (70% of left column)
-                pane size="70%" focus=true {
+                pane size="70%" focus=true name="lince-controller" {
                     plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
                         config_path "~/.config/lince-dashboard/config.toml"
                     }

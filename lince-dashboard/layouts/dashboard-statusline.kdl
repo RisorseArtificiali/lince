@@ -1,0 +1,28 @@
+// One persistent row; the sole agent controller opens on demand with Alt+d.
+layout {
+    default_tab_template {
+        children
+        pane size=1 borderless=true name="lince-attention" {
+            plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
+                role "statusline"
+            }
+        }
+    }
+    tab name="dashboard" {
+        pane name="lince-viewport" borderless=true focus=true {
+            command "lince-viewport-placeholder"
+        }
+        floating_panes {
+            pane name="lince-controller" {
+                x "10%"
+                y "5%"
+                width "80%"
+                height "85%"
+                plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
+                    config_path "~/.config/lince-dashboard/config.toml"
+                    presentation "popup"
+                }
+            }
+        }
+    }
+}

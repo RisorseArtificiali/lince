@@ -158,6 +158,9 @@ keybinds clear-defaults=true {
                 payload "prev"
             }
         }
+        bind "Alt d" {
+            MessagePlugin { name "lince-ui-open"; }
+        }
         bind "Alt f" { ToggleFloatingPanes; }
         // Alt+1-9: broadcast focus-agent pipe to all running plugins.
         // No plugin path specified to avoid launching a duplicate dashboard
