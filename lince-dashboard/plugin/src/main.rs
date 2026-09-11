@@ -33,6 +33,8 @@ struct State {
     passive_bar: bool,
     popup: bool,
     popup_visible: bool,
+    compact_default: bool,
+    layout_override: Option<config::AgentLayout>,
     controller_id: Option<u32>,
     bar_ids: Vec<u32>,
     snapshot: attention::Snapshot,
@@ -87,6 +89,8 @@ impl Default for State {
             passive_bar: false,
             popup: false,
             popup_visible: false,
+            compact_default: false,
+            layout_override: None,
             controller_id: None,
             bar_ids: Vec::new(),
             snapshot: attention::Snapshot::default(),
@@ -167,6 +171,14 @@ impl ZellijPlugin for State {
     fn load(&mut self, configuration: BTreeMap<String, String>) {
         self.own_id = get_plugin_ids().plugin_id;
         self.passive_bar = configuration.get("role").map(String::as_str) == Some("statusline");
+        self.compact_default = configuration.get("compact").map(String::as_str) == Some("true");
+        self.config.compact = self.compact_default;
+        self.layout_override = match configuration.get("agent_layout").map(String::as_str) {
+            Some("tiled") => Some(config::AgentLayout::Tiled),
+            Some("floating") => Some(config::AgentLayout::Floating),
+            _ => None,
+        };
+        if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
         self.popup = configuration.get("presentation").map(String::as_str) == Some("popup");
         if self.passive_bar {
             subscribe(&[EventType::PaneUpdate, EventType::ModeUpdate, EventType::Key,
@@ -326,7 +338,7 @@ impl ZellijPlugin for State {
                     Some(CMD_LOAD_CONFIG) => {
                         if exit_code == Some(0) && !stdout.is_empty() {
                             let content = String::from_utf8_lossy(&stdout);
-                            let (cfg, err) = DashboardConfig::parse_toml(&content);
+                            let (cfg, err) = DashboardConfig::parse_toml_for_view(&content, self.compact_default);
                             // Preserve async-loaded fields that config.toml doesn't contain.
                             let prev_agent_types = std::mem::take(&mut self.config.agent_types);
                             let prev_providers = std::mem::take(&mut self.config.providers_by_agent);
@@ -334,6 +346,7 @@ impl ZellijPlugin for State {
                             let viewport = self.config.viewport;
                             self.config = cfg;
                             self.config.viewport = viewport;
+                            if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
                             self.config_error = err;
                             if self.config.agent_types.is_empty() {
                                 self.config.agent_types = prev_agent_types;

@@ -275,3 +275,20 @@ Provider information is in `i`, as requested in #293's refined two-column design
 startup (18–60). `--sidebar-width 25` overrides it for one launch. Changing the
 width does not move agent overlays out of alignment: their rectangle follows
 the named viewport, including when panes are resized interactively.
+
+### Presentation presets and Zellij chrome
+
+`lince-dashboard-launch --preset minimal` replaces Zellij's top tab bar and
+bottom keybinding strip with the single LINCE attention row. `--preset statusline`
+also removes the sidebar. `--preset classic` restores the standard bars at the
+next launch; `Alt+d`, then `?`, provides help without permanently showing them.
+Use `[dashboard] preset = "minimal"` to persist the launch choice.
+
+The launcher uses `~/.config/lince-dashboard/zellij.kdl`, independently of your
+global Zellij configuration. Edit that file for LINCE-specific bindings. Install
+and update preserve it, providing new shipped settings in `zellij.kdl.dist`.
+`--zellij-config /path/to/config.kdl` explicitly selects another configuration;
+include LINCE's `lince-ui-open`, `focus-agent`, and `cycle-agent` bindings when
+using a custom file. All layout variants are installed and updated together.
+Presentation changes take effect when starting a new session, not by attaching
+to an existing one.

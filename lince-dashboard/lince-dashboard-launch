@@ -2,9 +2,9 @@
 """Launch a dashboard layout with the configured sidebar width."""
 from __future__ import annotations
 import argparse
-import os
 from pathlib import Path
 import subprocess
+import re
 import tempfile
 import tomllib
 
@@ -14,34 +14,61 @@ def sidebar_layout(text: str, width: int) -> str:
         raise ValueError("sidebar_width must be between 18 and 60 percent")
     # Only the two named root columns change; nested shell/voice panes keep
     # their vertical proportions. Geometry inside Rust comes from PaneUpdate.
-    import re
     text = re.sub(r'pane size="\d+%" split_direction="horizontal"',
                   f'pane size="{width}%" split_direction="horizontal"', text, count=1)
     return re.sub(r'pane size="\d+%" name="lince-viewport"',
                   f'pane size="{100 - width}%" name="lince-viewport"', text, count=1)
 
 
+ATTENTION_TEMPLATE = '    default_tab_template {\n        children\n        pane size=1 borderless=true name="lince-attention" {\n            plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {\n                role "statusline"\n            }\n        }\n    }\n'
+
+def presentation_layout(text: str, preset: str, compact: bool, tiled: bool) -> str:
+    if preset != "classic":
+        text = re.sub(r"    default_tab_template \{.*?\n    \}\n",
+                      lambda _: ATTENTION_TEMPLATE, text, count=1, flags=re.S)
+    # Plugin configuration is a view default, not an override of config.toml.
+    text = text.replace('config_path "~/.config/lince-dashboard/config.toml"',
+        'config_path "~/.config/lince-dashboard/config.toml"\n'
+        f'                    compact "{str(compact).lower()}"\n'
+        f'                    agent_layout "{"tiled" if tiled else "floating"}"')
+    return text
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--layout", default="dashboard-tiled")
+    parser.add_argument("--layout", choices=["dashboard", "dashboard-vox", "dashboard-tiled", "dashboard-tiled-vox", "dashboard-statusline"], default="dashboard-tiled")
+    parser.add_argument("--preset", choices=["classic", "minimal", "statusline"])
     parser.add_argument("--sidebar-width", type=int)
+    parser.add_argument("--config", "--zellij-config", dest="zellij_config", type=Path)
     parser.add_argument("--print-layout", action="store_true")
     args, zellij_args = parser.parse_known_args()
     config_path = Path.home() / ".config/lince-dashboard/config.toml"
     config = tomllib.loads(config_path.read_text()).get("dashboard", {}) if config_path.exists() else {}
-    width = args.sidebar_width if args.sidebar_width is not None else config.get("sidebar_width", 30)
+    preset = args.preset or config.get("preset", "classic")
+    if preset not in ("classic", "minimal", "statusline"):
+        raise ValueError(f"unknown dashboard preset: {preset}")
+    layout_name = "dashboard-statusline" if preset == "statusline" else args.layout
+    if layout_name == "dashboard-statusline":
+        preset = "statusline"
+    width = args.sidebar_width if args.sidebar_width is not None else config.get("sidebar_width", 40 if preset == "classic" else 30)
     layouts = Path.home() / ".config/zellij/layouts"
-    source = layouts / f"{args.layout}.kdl"
+    source = layouts / f"{layout_name}.kdl"
     if not source.exists():
-        source = Path(__file__).resolve().parent / "layouts" / f"{args.layout}.kdl"
+        source = Path(__file__).resolve().parent / "layouts" / f"{layout_name}.kdl"
     text = sidebar_layout(source.read_text(), width)
+    text = presentation_layout(text, preset, config.get("compact", preset != "classic"),
+                               "tiled" in layout_name or preset == "statusline")
     if args.print_layout:
         print(text)
         return 0
+    managed_config = Path.home() / ".config/lince-dashboard/zellij.kdl"
+    if not managed_config.exists():
+        managed_config = Path(__file__).resolve().parent / "zellij-config/config.kdl"
     with tempfile.TemporaryDirectory(prefix="lince-layout-") as directory:
         layout = Path(directory) / "dashboard.kdl"
         layout.write_text(text)
-        return subprocess.call(["zellij", "--layout", str(layout), *zellij_args])
+        return subprocess.call(["zellij", "--config", str(args.zellij_config or managed_config),
+                                "--layout", str(layout), *zellij_args])
 
 
 if __name__ == "__main__":

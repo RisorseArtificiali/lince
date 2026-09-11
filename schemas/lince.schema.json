@@ -384,6 +384,16 @@
         "project_search_max_depth": {
           "type": "integer"
         },
+        "preset": {
+          "type": "string",
+          "enum": [
+            "classic",
+            "minimal",
+            "statusline"
+          ],
+          "description": "Presentation preset at launch; independent of theme",
+          "default": "classic"
+        },
         "compact": {
           "type": "boolean",
           "description": "Two-column agent list; d toggles density in the current session",

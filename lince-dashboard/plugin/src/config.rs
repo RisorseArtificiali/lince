@@ -982,8 +982,15 @@ impl DashboardConfig {
     /// Parse config from TOML string content. Used by async config loading
     /// (run_command cat) since std::fs is unavailable in WASI sandbox.
     pub fn parse_toml(content: &str) -> (Self, Option<String>) {
+        Self::parse_toml_for_view(content, false)
+    }
+
+    pub fn parse_toml_for_view(content: &str, compact_default: bool) -> (Self, Option<String>) {
         match toml::from_str::<DashboardConfigFile>(content.trim()) {
             Ok(mut file) => {
+                let explicit = toml::from_str::<toml::Value>(content).ok()
+                    .and_then(|v| v.get("dashboard").and_then(|d| d.get("compact")).cloned()).is_some();
+                if !explicit { file.dashboard.compact = compact_default; }
                 let warning = if crate::theme::known(&file.dashboard.theme) { None } else {
                     let name = std::mem::replace(&mut file.dashboard.theme, default_theme());
                     Some(format!("Unknown theme '{name}'; using default"))

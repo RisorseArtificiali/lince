@@ -34,7 +34,7 @@ echo ""
 
 # ── Layouts ────────────────────────────────────────────────────────────
 LAYOUT_DIR="$HOME/.config/zellij/layouts"
-LAYOUTS=("dashboard.kdl" "agent-single.kdl" "agent-multi.kdl")
+LAYOUTS=("dashboard.kdl" "dashboard-vox.kdl" "dashboard-tiled.kdl" "dashboard-tiled-vox.kdl" "dashboard-statusline.kdl" "agent-single.kdl" "agent-multi.kdl")
 FOUND_LAYOUTS=()
 for l in "${LAYOUTS[@]}"; do
     [ -f "$LAYOUT_DIR/$l" ] && FOUND_LAYOUTS+=("$l")
@@ -92,6 +92,11 @@ fi
 echo ""
 
 # ── Agent wrapper ─────────────────────────────────────────────────────
+if [ -f "$HOME/.local/bin/lince-dashboard-launch" ]; then
+    if confirm "  Remove LINCE presentation launcher?"; then
+        rm -f "$HOME/.local/bin/lince-dashboard-launch"
+    fi
+fi
 WRAPPER="$HOME/.local/bin/lince-agent-wrapper"
 if [ -f "$WRAPPER" ]; then
     echo -e "${YELLOW}Found: $WRAPPER${NC}"
