@@ -4,19 +4,23 @@ Multi-agent TUI dashboard for managing AI coding agents in [Zellij](https://zell
 
 ## Overview
 
+New installs use a compact sidebar and a two-row attention bar, with pane frames
+and standard Zellij bars hidden. Choose the presentation independently of colors:
+
+```bash
+lince-dashboard-launch --preset minimal     # compact sidebar
+lince-dashboard-launch --preset statusline  # two rows; Alt+d opens the controller
+lince-dashboard-launch --preset classic     # full table and standard bars
 ```
-┌───────────────────────────────────────────────────────┐
-│ LINCE Dashboard  (3 agents)                           │
-├───┬────────────┬──────────┬────────┬────────┬─────────┤
-│ # │ Name       │ Status   │ Tokens │Profile │ Project │
-├───┼────────────┼──────────┼────────┼────────┼─────────┤
-│ 1 │ agent-1    │ Running  │ 1.2k/5k│ vertex │ backend │
-│>2 │ agent-2    │ INPUT    │    -   │        │ frontend│
-│ 3 │ agent-3    │ Running 2⚙│ 3k/12k│ zai   │ tests   │
-├───┴────────────┴──────────┴────────┴────────┴─────────┤
-│ [n] New [N] Wizard [f] Focus [Q] Save+Quit            │
-└───────────────────────────────────────────────────────┘
-```
+
+Existing configurations without a preset retain `classic` on update. `Alt+d` opens
+the expanded list, `Alt+i` opens details, and `Alt+h` opens help in bordered popups.
+`Alt+s` toggles the 15% sidebar; `Alt+b` cycles the status bar: hidden → left summary → full; `Alt+n` opens the wizard (then `n` for defaults/name only). The bottom
+bar identifies waiting agents and sandbox levels by color even without frames.
+`Alt+q` saves agents, sidebar visibility and status bar mode for the next launch
+in the same project; `Alt+d`, then `q`, leaves the previous saved state unchanged.
+See [Views and Themes](https://lince.sh/documentation/#/dashboard/views-and-themes)
+for palettes, width, frame overrides and session configuration.
 
 Sandboxed agents run inside [agent-sandbox](../sandbox/) (bubblewrap, Linux) or [nono](https://github.com/always-further/nono) (Landlock/Seatbelt, Linux + macOS) — the dashboard manages pane lifecycle and status, not isolation. The sandbox backend is auto-detected or configurable per-agent.
 
@@ -70,11 +74,18 @@ Press `n` to spawn an agent (quick name prompt), or `N` for the full wizard (typ
 | `f` / `Enter` | Focus agent pane |
 | `h` / `Esc` | Hide agent pane |
 | `j` / `k` | Navigate agent list |
-| `i` | Toggle detail panel |
+| `i` | Toggle details; PageUp/PageDown scroll |
+| `Alt+d` | Expanded list popup from any pane |
+| `Alt+i` / `Alt+h` | Information / help popup |
+| `Alt+s` | Toggle sidebar (minimal/statusline) |
+| `Alt+b` | Cycle status bar: hidden → left summary → full (minimal/statusline) |
+| `Alt+n` | Creation wizard |
+| `Alt+1`–`Alt+9` | Focus agent from any pane |
 | `s` | Relay last message to another agent |
 | `S` | Relay N messages (prompt for count) |
 | `x` | Kill agent |
-| `Q` | Save state & quit |
+| `Alt+q` / `Q` | Save state & quit (`Alt+q` from any pane) |
+| `Alt+d`, then `q` | Quit without saving |
 | `?` | Help overlay |
 
 ## Documentation
@@ -102,6 +113,9 @@ lince-dashboard/
 │       ├── types.rs            # AgentInfo, AgentStatus, StatusMessage, WizardState
 │       ├── dashboard.rs        # TUI rendering (ANSI), overlays (wizard, help)
 │       ├── agent.rs            # Agent spawn/stop/tracking (multi-type)
+│       ├── theme.rs            # Independent UI palettes
+│       ├── attention.rs        # Passive attention/navigation snapshots
+│       ├── render_output.rs    # Shared rendering for dialog popups
 │       ├── pane_manager.rs     # Pane focus/hide/show
 │       └── state_file.rs       # Save/restore agent state (.lince-dashboard)
 ├── hooks/
@@ -112,7 +126,9 @@ lince-dashboard/
 │   └── install-hooks.sh        # Hook installer
 ├── layouts/
 │   ├── dashboard.kdl           # Main layout (plugin + voxcode + shell)
-│   └── dashboard-tiled.kdl     # Tiled layout (agents left, dashboard right)
+│   ├── dashboard-tiled.kdl     # Controller left, agent viewport right
+│   └── dashboard-statusline.kdl # Attention row and on-demand controller
+├── lince-dashboard-launch      # Presets and session-scoped Zellij config
 ├── agents-defaults.toml        # Default agent type definitions
 ├── config.toml                 # Default dashboard configuration
 ├── install.sh                  # Interactive installer
@@ -137,7 +153,7 @@ lince-dashboard/
 ### Plugin won't load
 - Check the WASM file exists: `ls ~/.config/zellij/plugins/lince-dashboard.wasm`
 - Verify Zellij version: `zellij --version` (need >= 0.45.1)
-- Check layout path: `zellij --layout ~/.config/zellij/layouts/dashboard.kdl`
+- Check layout generation: `lince-dashboard-launch --preset minimal --print-layout`
 - Grant permissions when Zellij prompts
 
 ### Status not updating

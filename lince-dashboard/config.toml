@@ -1,6 +1,16 @@
 # Lince Dashboard Configuration
 
 [dashboard]
+# Fresh installs use a compact sidebar and a two-row LINCE attention bar.
+preset = "minimal"
+# Plugin colors: default (inherit Zellij), minimal-mono, dracula, gruvbox
+# theme = "default"
+# Classic inline density; managed sidebar stays compact, popup list stays full
+# compact = true
+# Used by lince-dashboard-launch; restart to change the layout
+# sidebar_width = 15
+# Override preset frame choice (otherwise minimal/statusline=false, classic=true)
+# pane_frames = false
 # Default sandbox profile for new agents (empty = no -P flag)
 # default_profile = ""
 

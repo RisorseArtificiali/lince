@@ -155,6 +155,11 @@ Dashboard behavior and defaults.
 | `sandbox_colors` | table | — | Color per sandbox level (paranoid/normal/permissive/default) |
 | `project_search_roots` | list[string] | — | Roots scanned recursively by the wizard's Tab completion |
 | `project_search_max_depth` | int | `3` | find -maxdepth for project_search_roots |
+| `pane_frames` | bool | — | Override the preset frame choice at launch |
+| `preset` | `"classic"` \| `"minimal"` \| `"statusline"` | `"minimal"` | Presentation preset at launch; independent of theme (legacy configs retain classic) |
+| `compact` | bool | `false` | Classic inline density; managed sidebar is always compact and popups are always full |
+| `sidebar_width` | int | `15` | Sidebar width percentage at launch (10-60) |
+| `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | Pool of per-instance marker glyphs (#166); empty disables markers |
 
 ### `[agents.<name>]`
@@ -261,6 +266,11 @@ User intent, versioned, default-deny — design config-v2 §2. Project overlays 
 | `sandbox_colors` | table | — | — |
 | `project_search_roots` | list[string] | — | — |
 | `project_search_max_depth` | int | — | — |
+| `pane_frames` | bool | — | Override the preset frame choice at launch |
+| `preset` | `"classic"` \| `"minimal"` \| `"statusline"` | `"minimal"` | Presentation preset at launch; independent of theme (legacy configs retain classic) |
+| `compact` | bool | `false` | Classic inline density; managed sidebar is always compact and popups are always full |
+| `sidebar_width` | int | `15` | Sidebar width percentage at launch (10-60) |
+| `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | — |
 
 ### `[experimental]`

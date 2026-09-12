@@ -12,26 +12,11 @@ A toolkit that turns your terminal into a multi-agent engineering workstation �
 
 ## The Dashboard
 
-The primary way to use LINCE is the **TUI Dashboard** — a Zellij WASM plugin that acts as a command center for multiple Claude Code agents.
+The primary way to use LINCE is the **TUI Dashboard** — a Zellij WASM plugin that acts as a command center for multiple AI coding agents.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  LINCE Dashboard                                        │
-│ ┌───┬────────────┬──────────┬────────┬───────┐          │
-│ │ # │ Name       │ Status   │Profile │Project│          │
-│ ├───┼────────────┼──────────┼────────┼───────┤          │
-│ │ 1 │ backend    │ Running  │ vertex │ api/  │          │
-│ │>2 │ frontend   │ INPUT    │        │ web/  │          │
-│ │ 3 │ tester     │   -      │ zai    │ tests/│          │
-│ └───┴────────────┴──────────┴────────┴───────┘          │
-├───────────────────────┬─────────────────────────────────┤
-│                       │                                 │
-│   VoxCode             │   Shell                         │
-│   Voice input →       │                                 │
-│   relayed to agents   │                                 │
-│                       │                                 │
-└───────────────────────┴─────────────────────────────────┘
-```
+New installations use a compact sidebar and a two-row attention bar. Choose a
+statusline-only view or restore the full table with a preset; colors are independent.
+See [Views and Themes](https://lince.sh/documentation/#/dashboard/views-and-themes).
 
 What the dashboard gives you:
 
@@ -157,3 +142,14 @@ An [agentskills.io](https://agentskills.io)-compliant skill for natural-language
 ## License
 
 MIT
+
+### Dashboard presentation
+
+New installs use a minimal dashboard: compact sidebar, no frames, and a
+two-row status bar. `lince-dashboard-launch --preset classic` restores the full
+presentation; `--preset statusline` uses an on-demand menu with no sidebar.
+`--frames` restores pane frames. `Alt+d` opens the expanded list, `Alt+i` information, `Alt+h` help, and `Alt+n`
+the wizard. `Alt+s` toggles the 15% sidebar and `Alt+b` cycles the status bar: hidden → left summary → full in either managed preset. `Alt+q` saves
+agents, sidebar visibility and the status bar mode for the next launch, then quits; `Alt+d`, then `q`, quits without saving.
+See the [presentation settings](docs/documentation/dashboard/config-reference.md)
+and [epic #312 smoke tests](docs/design/dashboard-312-smoke-tests.md).

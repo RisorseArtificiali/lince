@@ -384,6 +384,37 @@
         "project_search_max_depth": {
           "type": "integer"
         },
+        "pane_frames": {
+          "type": "boolean",
+          "description": "Override the preset frame choice at launch"
+        },
+        "preset": {
+          "type": "string",
+          "enum": [
+            "classic",
+            "minimal",
+            "statusline"
+          ],
+          "description": "Presentation preset at launch; independent of theme (legacy configs retain classic)",
+          "default": "minimal"
+        },
+        "compact": {
+          "type": "boolean",
+          "description": "Classic inline density; managed sidebar is always compact and popups are always full",
+          "default": false
+        },
+        "sidebar_width": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 60,
+          "description": "Sidebar width percentage at launch (10-60)",
+          "default": 15
+        },
+        "theme": {
+          "type": "string",
+          "description": "Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox",
+          "default": "default"
+        },
         "instance_icons": {
           "type": "array",
           "items": {

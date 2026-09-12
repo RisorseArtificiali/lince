@@ -1,0 +1,37 @@
+// Compatibility source template. The launcher maps the statusline preset to
+// the shared tiled layout with sidebar_visible=false; Alt+l restores it.
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        children
+        pane size=2 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
+
+    tab name="dashboard" {
+        pane split_direction="vertical" {
+            // Left column — 40%, split horizontally into A + C
+            pane size="30%" split_direction="horizontal" {
+                // A — Dashboard plugin (70% of left column)
+                pane size="70%" focus=true name="lince-controller" {
+                    plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
+                        config_path "~/.config/lince-dashboard/config.toml"
+                    }
+                }
+                // C — Shell viewport (30% of left column)
+                // Shows ASCII art placeholder; agent floating overlay covers this on focus.
+                pane size="30%" name="lince-sidebar-aux" {
+
+                }
+            }
+            // Right column — 60%, full height (B)
+            pane size="70%" name="lince-viewport" {
+                // B — Agent (full height)
+                command "lince-viewport-placeholder"
+            }
+        }
+    }
+}

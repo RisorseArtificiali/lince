@@ -95,19 +95,18 @@
   <!-- What's new -->
   <section class="border-t border-border">
     <div class="max-w-5xl mx-auto px-6 py-12">
-      <a href="/changelog/#2026-05-05" class="feature-card rounded-lg p-6 block group">
+      <a href="/changelog/#dashboard-views" class="feature-card rounded-lg p-6 block group">
         <div class="flex items-baseline gap-3 mb-2 flex-wrap">
           <span class="text-accent font-mono text-xs tracking-wider uppercase">What's new</span>
-          <time class="font-mono text-xs text-muted" datetime="2026-05-05">2026-05-05</time>
+          <span class="font-mono text-xs text-muted">Preview</span>
         </div>
         <h3 class="text-lg font-semibold mb-2 group-hover:text-accent transition-colors">
-          Three-level sandbox model across all agents
+          Compact views, themes and persistent attention
         </h3>
         <p class="text-sm text-muted leading-relaxed">
-          Every supported agent &mdash; Claude, Codex, Gemini, OpenCode, Pi &mdash; now runs at three
-          discrete sandbox levels (<span class="font-mono">paranoid</span> /
-          <span class="font-mono">normal</span> / <span class="font-mono">permissive</span>),
-          with ephemeral scratch homes for paranoid and an install-time picker for which variants you want.
+          Choose a compact sidebar, a single status line or the classic view. Keep waiting agents
+          in sight, open details on demand, and select a palette independently of the layout.
+          Existing configurations keep their presentation on upgrade.
         </p>
         <p class="text-sm text-accent mt-3 group-hover:underline">Read the changelog &rarr;</p>
       </a>
@@ -127,7 +126,7 @@
         <div class="feature-card rounded-lg p-6">
           <div class="text-2xl mb-3">&#x1f3af;</div>
           <h3 class="font-semibold mb-2">Orchestrate, don't babysit</h3>
-          <p class="text-sm text-muted leading-relaxed">Run multiple agents in parallel across different projects. The TUI dashboard shows real-time status, token usage, and active tools. Spawn, focus, hide, kill agents with single keystrokes.</p>
+          <p class="text-sm text-muted leading-relaxed">Run multiple agents in parallel across different projects. The TUI dashboard shows running agents and who needs input or permission, with a compact sidebar or a two-row attention bar. Spawn, focus, hide, kill agents with single keystrokes.</p>
         </div>
         <div class="feature-card rounded-lg p-6">
           <div class="text-2xl mb-3">&#x1f399;</div>
@@ -149,10 +148,46 @@
       <h2 class="text-2xl font-bold mb-4">The Dashboard</h2>
       <p class="text-muted mb-8 max-w-2xl">A Zellij WASM plugin that acts as your command center. Config-driven &mdash; add new agent types with TOML, no code changes.</p>
 
-      <!-- Dashboard screenshot with hover detail -->
-      <div class="rounded-lg mb-8 overflow-hidden border border-border relative group">
-        <img src="assets/dashboard.png" alt="LINCE Dashboard - showing multiple agents running in parallel with status, sandbox, and profile columns" class="w-full rounded-lg transition-opacity duration-300 group-hover:opacity-0" loading="lazy">
-        <img src="assets/dashboard-detail.png" alt="LINCE Dashboard - detailed view showing agent info panel and Claude Code interaction" class="w-full rounded-lg absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" loading="lazy">
+      <div class="grid sm:grid-cols-3 gap-4 text-sm mb-8">
+        <div class="feature-card rounded-lg p-4">
+          <h3 class="font-semibold mb-2">Minimal</h3>
+          <p class="text-muted mb-3">The default for new installs: a 15%-wide numbered sidebar with colored project headings, a two-row attention bar, no frames or standard Zellij bars. Alt+s toggles the sidebar; Alt+b cycles the status bar: hidden → left summary → full. Open full details when you need them.</p>
+          <code class="text-accent">--preset minimal</code>
+        </div>
+        <div class="feature-card rounded-lg p-4">
+          <h3 class="font-semibold mb-2">Statusline</h3>
+          <p class="text-muted mb-3">Give your agent the screen. One row shows agents and sandbox identity. The sidebar starts hidden; Alt+s restores it. Alt+d opens the expanded list.</p>
+          <code class="text-accent">--preset statusline</code>
+        </div>
+        <div class="feature-card rounded-lg p-4">
+          <h3 class="font-semibold mb-2">Classic</h3>
+          <p class="text-muted mb-3">The full agent table with standard Zellij bars and frames. Upgrades preserve this view for existing configurations without a preset.</p>
+          <code class="text-accent">--preset classic</code>
+        </div>
+      </div>
+      <div class="rounded-lg border border-border bg-surface p-4 mb-8">
+        <p class="font-mono text-sm mb-3 overflow-x-auto"><span class="text-accent">$</span> lince-dashboard-launch --preset minimal</p>
+        <p class="text-sm text-muted">Switch agents with Alt+1&ndash;9. Alt+d opens the full list, Alt+i information, Alt+h help, and Alt+n the wizard in bordered popups. Alt+s toggles the sidebar. Alt+q saves agents and bar visibility for the next launch, then quits; Alt+d then q leaves without saving. A compact overview shows every agent’s colored state; a separate count tracks input and permission requests. <a href="documentation/#/dashboard/views-and-themes" class="text-accent hover:underline">Choose a view, adjust density, or restore frames &rarr;</a></p>
+      </div>
+      <h3 class="text-xl font-semibold mb-3">Your view, your colors</h3>
+      <p class="text-muted text-sm mb-5">Inherit Zellij colors or choose minimal-mono, Dracula or Gruvbox independently of the layout. Previews below come from the full-table renderer with sample agents.</p>
+      <div class="grid sm:grid-cols-2 gap-4 mb-8">
+        <figure class="rounded-lg border border-border overflow-hidden">
+          <img src="assets/dashboard-theme-default.svg" alt="Full agent table using the inherited default palette" class="w-full" loading="lazy">
+          <figcaption class="p-3 text-sm">Default &mdash; inherits Zellij</figcaption>
+        </figure>
+        <figure class="rounded-lg border border-border overflow-hidden">
+          <img src="assets/dashboard-theme-minimal-mono.svg" alt="Full agent table using the minimal monochrome palette" class="w-full" loading="lazy">
+          <figcaption class="p-3 text-sm">Minimal mono</figcaption>
+        </figure>
+        <figure class="rounded-lg border border-border overflow-hidden">
+          <img src="assets/dashboard-theme-dracula.svg" alt="Full agent table using the Dracula palette" class="w-full" loading="lazy">
+          <figcaption class="p-3 text-sm">Dracula</figcaption>
+        </figure>
+        <figure class="rounded-lg border border-border overflow-hidden">
+          <img src="assets/dashboard-theme-gruvbox.svg" alt="Full agent table using the Gruvbox palette" class="w-full" loading="lazy">
+          <figcaption class="p-3 text-sm">Gruvbox</figcaption>
+        </figure>
       </div>
 
       <div class="grid sm:grid-cols-3 gap-4 text-sm">

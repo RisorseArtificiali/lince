@@ -259,6 +259,13 @@ pub struct ProviderDetails {
 /// Main dashboard configuration, deserialized from the `[dashboard]` TOML table.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DashboardConfig {
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    #[serde(default)]
+    pub compact: bool,
+    /// Runtime geometry of the named viewport in our own tab.
+    #[serde(skip)]
+    pub viewport: Option<crate::pane_manager::Viewport>,
     /// Default provider (env-var bundle) name. Was `default_profile` pre-#81;
     /// the legacy spelling is still accepted as a serde alias.
     #[serde(default, alias = "default_profile")]
@@ -346,9 +353,14 @@ pub struct DashboardConfig {
     pub discovered_sandbox_levels: HashMap<String, Vec<String>>,
 }
 
+fn default_theme() -> String { "default".into() }
+
 impl Default for DashboardConfig {
     fn default() -> Self {
         DashboardConfig {
+            theme: default_theme(),
+            compact: false,
+            viewport: None,
             default_provider: None,
             providers_by_agent: HashMap::new(),
             provider_details_by_agent: HashMap::new(),
@@ -969,9 +981,23 @@ impl DashboardConfig {
     /// 4. Remove the file entirely — plugin should start with defaults.
     /// Parse config from TOML string content. Used by async config loading
     /// (run_command cat) since std::fs is unavailable in WASI sandbox.
+    #[cfg(test)]
     pub fn parse_toml(content: &str) -> (Self, Option<String>) {
+        Self::parse_toml_for_view(content, false)
+    }
+
+    pub fn parse_toml_for_view(content: &str, compact_default: bool) -> (Self, Option<String>) {
         match toml::from_str::<DashboardConfigFile>(content.trim()) {
-            Ok(file) => (file.dashboard, None),
+            Ok(mut file) => {
+                let explicit = toml::from_str::<toml::Value>(content).ok()
+                    .and_then(|v| v.get("dashboard").and_then(|d| d.get("compact")).cloned()).is_some();
+                if !explicit { file.dashboard.compact = compact_default; }
+                let warning = if crate::theme::known(&file.dashboard.theme) { None } else {
+                    let name = std::mem::replace(&mut file.dashboard.theme, default_theme());
+                    Some(format!("Unknown theme '{name}'; using default"))
+                };
+                (file.dashboard, warning)
+            },
             Err(e) => (
                 DashboardConfig::default(),
                 Some(format!("Config parse error: {}", e)),
@@ -1410,6 +1436,13 @@ mod tests {
     /// `default_agent_type` (gh#62) round-trips through TOML so the `n`
     /// shortcut + `N` wizard can pick it up from the user's config.
     #[test]
+    fn unknown_theme_falls_back_with_visible_warning() {
+        let (cfg, warning) = DashboardConfig::parse_toml("[dashboard]\ntheme = \"typo\"\n");
+        assert_eq!(cfg.theme, "default");
+        assert!(warning.unwrap().contains("typo"));
+    }
+
+    #[test]
     fn dashboard_config_parses_default_agent_type() {
         let toml_text = r#"
             [dashboard]
@@ -1558,5 +1591,16 @@ sandboxed = true
         );
         let resolved = cfg.event_map_for("claude").expect("config map");
         assert_eq!(resolved.get("PreToolUse").map(String::as_str), Some("stopped"));
+    }
+}
+
+#[cfg(test)]
+mod view_defaults_tests {
+    use super::*;
+    #[test]
+    fn preset_density_is_only_a_default() {
+        assert!(DashboardConfig::parse_toml_for_view("[dashboard]", true).0.compact);
+        assert!(!DashboardConfig::parse_toml_for_view("[dashboard]\ncompact=false", true).0.compact);
+        assert!(DashboardConfig::parse_toml_for_view("[dashboard]\ncompact=true", false).0.compact);
     }
 }

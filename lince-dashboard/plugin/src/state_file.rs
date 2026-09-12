@@ -1,5 +1,5 @@
 use crate::config::{run_typed_command, shell_escape};
-use crate::types::{SavedAgentInfo, SavedState, SessionDefaults};
+use crate::types::{SavedAgentInfo, SavedState, SavedView, SessionDefaults};
 
 const STATE_FILE_NAME: &str = ".lince-dashboard";
 const STATE_VERSION: u32 = 3;
@@ -22,11 +22,13 @@ pub fn save_state_async(
     agents: Vec<SavedAgentInfo>,
     next_agent_id: u32,
     session_defaults: Option<SessionDefaults>,
+    view: Option<SavedView>,
 ) -> Result<(), String> {
     let path = state_file_path(launch_dir);
 
     let state = SavedState {
         version: STATE_VERSION,
+        view,
         agents,
         next_agent_id,
         session_defaults,
@@ -78,6 +80,21 @@ pub fn parse_loaded_state(stdout: &[u8]) -> Result<SavedState, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn saved_view_round_trips_all_presentations() {
+        use crate::types::StatusBarMode;
+        for sidebar in [false, true] {
+            for mode in [StatusBarMode::Hidden, StatusBarMode::Summary, StatusBarMode::Full] {
+                let state = SavedState { version: 3, agents: vec![], next_agent_id: 0,
+                    session_defaults: None, view: Some(SavedView { sidebar_visible: sidebar, statusbar_mode: mode }) };
+                let restored = parse_loaded_state(&serde_json::to_vec(&state).unwrap()).unwrap().view.unwrap();
+                assert_eq!(restored.sidebar_visible, sidebar);
+                assert_eq!(restored.statusbar_mode, mode);
+                assert_eq!(mode.next().next().next(), mode);
+            }
+        }
+    }
+
     /// Pre-#81 state files spelled the env-bundle field as `profile`. The
     /// rename added `#[serde(alias = "profile")]` on `SavedAgentInfo.provider`
     /// so old `.lince-dashboard` files keep loading transparently.
@@ -111,6 +128,7 @@ mod tests {
         }"#;
         let state = parse_loaded_state(json).expect("v2 state must load");
         assert!(state.session_defaults.is_none());
+        assert!(state.view.is_none());
     }
 
     /// gh#62: v3 state file with `session_defaults` round-trips through

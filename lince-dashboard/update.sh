@@ -56,13 +56,8 @@ echo ""
 echo -e "${GREEN}[3/8] Updating layouts...${NC}"
 LAYOUT_DIR="$HOME/.config/zellij/layouts"
 mkdir -p "$LAYOUT_DIR"
-for layout in dashboard.kdl agent-single.kdl agent-multi.kdl; do
-    SRC="$SCRIPT_DIR/layouts/$layout"
-    if [ -f "$SRC" ]; then
-        cp "$SRC" "$LAYOUT_DIR/$layout"
-        echo -e "${GREEN}  ✓ $layout${NC}"
-    fi
-done
+bash "$SCRIPT_DIR/install-ui.sh"
+echo -e "${GREEN}  ✓ All layout variants and launcher updated${NC}"
 echo ""
 
 # ── Config ─────────────────────────────────────────────────────────────
@@ -85,8 +80,13 @@ else
     # new upstream keys added, orphans preserved). Backs up as .bak.<ts>.
     MERGER="$SCRIPT_DIR/../scripts/config_merge.py"
     set +e
-    python3 "$MERGER" "$CONFIG_DST" "$SCRIPT_DIR/config.toml"
+    # Existing installations without a preset retain the previous presentation.
+    # User-selected presets still win in config_merge; fresh installs use minimal.
+    UI_MERGE_DEFAULTS="$(mktemp)"
+    sed 's/^preset = "minimal"$/preset = "classic"/' "$SCRIPT_DIR/config.toml" > "$UI_MERGE_DEFAULTS"
+    python3 "$MERGER" "$CONFIG_DST" "$UI_MERGE_DEFAULTS"
     MERGE_RC=$?
+    rm -f "$UI_MERGE_DEFAULTS"
     set -e
     if [ "$MERGE_RC" -eq 0 ]; then
         echo -e "${GREEN}  ✓ Config merged (user values preserved, new defaults added)${NC}"

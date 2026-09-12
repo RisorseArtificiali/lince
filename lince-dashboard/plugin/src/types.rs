@@ -9,7 +9,8 @@ pub enum AgentStatus {
 }
 
 impl AgentStatus {
-    /// Returns ANSI color code for this status
+    /// Legacy default color contract; renderers use theme::status.
+    #[cfg(test)]
     pub fn color(&self) -> &str {
         match self {
             AgentStatus::Unknown => "\x1b[90m",              // dim gray
@@ -537,9 +538,32 @@ pub struct SessionDefaults {
     pub sandbox_backend: Option<crate::sandbox_backend::SandboxBackend>,
 }
 
+/// Persisted presentation, independent of the initial CLI preset.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatusBarMode {
+    Hidden,
+    Summary,
+    #[default]
+    Full,
+}
+impl StatusBarMode {
+    pub fn next(self) -> Self {
+        match self { Self::Hidden => Self::Summary, Self::Summary => Self::Full, Self::Full => Self::Hidden }
+    }
+    pub fn visible(self) -> bool { self != Self::Hidden }
+}
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedView {
+    pub sidebar_visible: bool,
+    pub statusbar_mode: StatusBarMode,
+}
+
 /// Top-level saved state written to `.lince-dashboard`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SavedState {
+    #[serde(default)]
+    pub view: Option<SavedView>,
     pub version: u32,
     pub agents: Vec<SavedAgentInfo>,
     pub next_agent_id: u32,
