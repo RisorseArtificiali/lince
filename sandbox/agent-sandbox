@@ -86,6 +86,11 @@ auto_expose_path = true
 # exposes the GPU when its own fragment sets expose_gpu = true.
 # expose_gpu = true
 
+# Expose the local X11 display for image paste (also on Xwayland).
+# Disabled when security.unshare_net is true. X11 access includes desktop
+# access beyond the clipboard; set false to omit this automatic exposure.
+# expose_x11 = true
+
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
 # don't use is harmless.
@@ -178,8 +183,7 @@ passthrough = [
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
     # Lets Chromium-based browsers use their native Wayland backend (#284).
-    # The host's Chrome typically runs on Xwayland, and the sandbox has no
-    # X11 socket, so without this it dies with "Missing X server or $DISPLAY".
+    # Also works when X11 exposure is disabled or no X11 display is available.
     "XDG_SESSION_TYPE",
 ]
 
@@ -2991,6 +2995,35 @@ def prepare_seatbelt_git_blocking(config: dict) -> dict[str, str]:
 # bwrap command builder
 # ---------------------------------------------------------------------------
 
+def x11_bwrap_args(config: dict) -> list[str]:
+    """Expose only the active local X11 socket and its authentication file.
+
+    Call after filesystem overlays and --clearenv. Network-isolated sandboxes
+    must not gain a new connection to the host desktop through a Unix socket.
+    Remote/SSH displays are deliberately not auto-exposed.
+    """
+    if (not config.get("sandbox", {}).get("expose_x11", True)
+            or config.get("security", {}).get("unshare_net", False)):
+        return []
+    display = os.environ.get("DISPLAY", "")
+    match = re.fullmatch(r"(?:unix/|unix)?:([0-9]+)(?:\.[0-9]+)?", display)
+    if not match:
+        return []
+    socket = Path(f"/tmp/.X11-unix/X{int(match.group(1))}")
+    if not socket.is_socket():
+        return []
+    args = ["--ro-bind", str(socket), str(socket),
+            "--setenv", "DISPLAY", display]
+    authority = Path(os.environ.get("XAUTHORITY") or (Path.home() / ".Xauthority"))
+    if authority.is_file():
+        # A stable tmpfs destination also handles symlinks and files beneath
+        # hidden runtime/home directories without exposing their parent dirs.
+        target = "/tmp/.lince-xauthority"
+        args += ["--ro-bind", str(authority.resolve()), target,
+                 "--setenv", "XAUTHORITY", target]
+    return args
+
+
 def build_bwrap_cmd(config: dict, project_dir: Path,
                     agent_extra_args: list[str],
                     log_file: Path | None = None,
@@ -3310,6 +3343,8 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     # Users can override via [env.extra] GIT_SSH_COMMAND = "..." if needed.
     if "GIT_SSH_COMMAND" not in env_conf.get("extra", {}):
         cmd += ["--setenv", "GIT_SSH_COMMAND", "ssh -F /dev/null"]
+
+    cmd += x11_bwrap_args(config)
 
     # --- Wayland env vars (clipboard access for wl-paste) --------------------
     for wl_var in ("WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"):
@@ -7278,6 +7313,8 @@ def build_learn_bwrap_cmd(
     cmd += ["--setenv", "GOMODCACHE", f"{home}/.go/pkg/mod"]
     cmd += ["--setenv", "UV_CACHE_DIR", f"{home}/.uv-cache"]
     cmd += ["--setenv", "UV_TOOL_DIR", f"{home}/.uv-tools"]
+
+    cmd += x11_bwrap_args(config)
 
     # Wayland env vars
     for wl_var in ("WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"):

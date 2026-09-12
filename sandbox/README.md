@@ -22,7 +22,6 @@ Claude Code's `--dangerously-skip-permissions` flag removes all confirmation pro
 | **Process killing/inspection** | Host processes invisible | `--unshare-pid` (PID namespace) |
 | **System modification** | Cannot write to `/usr`, `/etc`, `/var` | Read-only root filesystem |
 | **DBus/desktop access** | Session bus socket hidden | `--tmpfs /run` |
-| **X11/Wayland keylogging** | Display sockets hidden | `--tmpfs /tmp` |
 | **Cron/systemd persistence** | Cannot create services or cron jobs | Read-only `/etc`, tmpfs `/run` |
 
 ### What it allows
@@ -37,14 +36,23 @@ Claude Code's `--dangerously-skip-permissions` flag removes all confirmation pro
 | **Package caches** | `cargo build` can download crates, npm can cache | Persistent writable dirs for registry/cache subdirectories |
 | **Filesystem snapshots** | Undo agent damage to project or config dirs | rsync hardlink-based snapshots with interactive restore |
 
+Local display access supports clipboard image paste. On Linux, the active
+Wayland socket is re-exposed; X11/Xwayland clients also receive the socket selected
+by `DISPLAY` and a read-only authentication file from `XAUTHORITY` (or
+`~/.Xauthority`). This works in normal/default, permissive, and learn mode.
+X11 access grants desktop access beyond the clipboard. Set
+`[sandbox] expose_x11 = false` to omit automatic X11 exposure; it is always
+omitted when `[security] unshare_net = true`, including the standard paranoid
+profiles. Remote/SSH X11 displays are not automatically exposed.
+
 ## How it works
 
 agent-sandbox builds a [bubblewrap](https://github.com/containers/bubblewrap) command that sets up a Linux mount namespace. In plain terms, it creates a "view" of the filesystem where:
 
 ```
 /                           read-only   (entire OS visible but unmodifiable)
-├── /tmp                    fresh tmpfs (empty, writable, isolated)
-├── /run                    fresh tmpfs (hides DBus, Wayland sockets)
+├── /tmp                    fresh tmpfs (selected sockets/files re-exposed)
+├── /run/user/$UID          fresh tmpfs (selected sockets re-exposed; DBus hidden)
 ├── /dev                    minimal     (null, zero, random only)
 ├── /proc                   namespaced  (only sandbox processes visible)
 └── /home/you               tmpfs       (entire home hidden)
