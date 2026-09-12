@@ -26,6 +26,11 @@ auto_expose_path = true
 # exposes the GPU when its own fragment sets expose_gpu = true.
 # expose_gpu = true
 
+# Expose the local X11 display for image paste (also on Xwayland).
+# Disabled when security.unshare_net is true. X11 access includes desktop
+# access beyond the clipboard; set false to omit this automatic exposure.
+# expose_x11 = true
+
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
 # don't use is harmless.
@@ -118,8 +123,7 @@ passthrough = [
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
     # Lets Chromium-based browsers use their native Wayland backend (#284).
-    # The host's Chrome typically runs on Xwayland, and the sandbox has no
-    # X11 socket, so without this it dies with "Missing X server or $DISPLAY".
+    # Also works when X11 exposure is disabled or no X11 display is available.
     "XDG_SESSION_TYPE",
 ]
 
