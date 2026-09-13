@@ -42,6 +42,8 @@ def check(zellij, wasm, preset):
             "dashboard": {"pane_title_pattern": "sleep", "has_native_hooks": True}}}}
         (work / "lince-config").write_text("#!/bin/sh\ncat <<'FIXTURE'\n" + json.dumps(fixture) + "\nFIXTURE\n")
         (work / "lince-config").chmod(0o755)
+        shutil.copyfile(ROOT / "tests/voice-fixture.py", work / "lince-voice")
+        (work / "lince-voice").chmod(0o755)
         (work / ".lince-dashboard").write_text(json.dumps({"version": 3, "next_agent_id": 0,
             "agents": [{"name": f"fixture{i}", "agent_type": "fixture", "project_dir": str(work)}
                        for i in (1, 2, 3)]}))
@@ -64,14 +66,21 @@ def check(zellij, wasm, preset):
              "options", "--session-name", session], cwd=work, env=env,
             stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
         os.close(slave)
-        output = bytearray()
 
         def pump():
-            if select.select([master], [], [], 0.1)[0]:
+            # Drain the PTY: one read per CLI query can back-pressure Zellij's
+            # renderer and delay keyboard events when the voice meter updates.
+            ready = select.select([master], [], [], 0.01)[0]
+            drained = 0
+            while ready and drained < 1024 * 1024:
                 try:
-                    output.extend(os.read(master, 100000))
+                    chunk = os.read(master, 100000)
+                    if not chunk:
+                        break
+                    drained += len(chunk)
                 except OSError:
-                    pass
+                    break
+                ready = select.select([master], [], [], 0)[0]
 
         def cli(arguments):
             command = subprocess.Popen([zellij, *arguments], stdout=subprocess.PIPE,
@@ -80,7 +89,7 @@ def check(zellij, wasm, preset):
             while True:
                 pump()
                 try:
-                    stdout, stderr = command.communicate(timeout=0.1)
+                    stdout, stderr = command.communicate(timeout=0.01)
                     return command.returncode, stdout, stderr
                 except subprocess.TimeoutExpired:
                     if time.monotonic() > deadline:
@@ -89,7 +98,7 @@ def check(zellij, wasm, preset):
                         raise AssertionError(f"Zellij command timed out: {arguments}")
 
         def panes():
-            status, stdout, _ = cli(["-s", session, "action", "list-panes", "--json"])
+            status, stdout, _ = cli(["-s", session, "action", "list-panes", "--json", "--all"])
             # Zellij can acknowledge startup queries before returning a manifest.
             if status != 0 or not stdout.strip():
                 return []
@@ -111,15 +120,32 @@ def check(zellij, wasm, preset):
                     return current
                 if process.poll() is not None:
                     break
+                next_poll = time.monotonic() + 0.1
+                while time.monotonic() < next_poll:
+                    pump()
             fields = ("title", "is_suppressed", "is_focused", "pane_x", "pane_y", "pane_columns", "pane_rows", "terminal_command")
             summary = [{k: p[k] for k in fields} for p in panes()]
             raise AssertionError(f"{preset}: UI condition timed out; panes={summary}")
 
+        def floating_visible():
+            status, stdout, _ = cli(["-s", session, "action", "list-tabs", "--json", "--state"])
+            return status == 0 and any(tab["are_floating_panes_visible"] for tab in json.loads(stdout))
+
+        def client_focus(pane_id):
+            status, stdout, _ = cli(["-s", session, "action", "list-clients"])
+            return status == 0 and any(len(row.split()) > 1 and row.split()[1] == pane_id for row in stdout.splitlines()[1:])
+
         def visible(name, expected):
             return lambda ps: (name in ps and (not ps[name]["is_suppressed"]) == expected
-                and (name != "lince-dialog" or not expected or ps[name]["is_focused"]))
+                and (name != "lince-dialog" or not expected
+                     or (ps[name]["is_focused"] and floating_visible() and client_focus(f"plugin_{ps[name]['id']}"))))
 
         def key(data):
+            # Encode complete key events as a terminal with CSI-u support does.
+            if data.startswith(b"\x1b") and len(data) == 2:
+                data = f"\x1b[{data[1]};3u".encode()
+            elif len(data) == 1:
+                data = (f"\x1b[108;5u" if data == b"\x0c" else f"\x1b[{data[0]}u").encode()
             os.write(master, data)
 
         try:
@@ -135,7 +161,7 @@ def check(zellij, wasm, preset):
             if preset == "statusline":
                 assert viewport["pane_columns"] == 100, viewport
             # Global list/info/help/wizard all open one bordered passive popup.
-            for shortcut in (b"\x1bd", b"\x1bi", b"\x1bh", b"\x1bn"):
+            for shortcut in (b"\x1bd", b"\x1bi", b"\x1bh", b"\x1bn", b"\x1bv"):
                 key(shortcut)
                 shown = wait_for(visible("lince-dialog", True))
                 assert shown["lince-viewport"]["pane_columns"] == viewport["pane_columns"]
@@ -143,8 +169,64 @@ def check(zellij, wasm, preset):
                 assert shown["lince-dialog"]["pane_y"] + shown["lince-dialog"]["pane_rows"] <= 30
                 key(b"\x1b")
                 wait_for(visible("lince-dialog", False))
-            # Shortcuts are available in locked mode too.
+            # Configure once, then global PTT inserts into the visible shell.
+            def voice_state(expected):
+                return lambda ps: (work / "lince-voice.json").exists() and json.loads(
+                    (work / "lince-voice.json").read_text())["status"] == expected
+
+            # Focus the placeholder shell before opening the configuration popup.
+            assert cli(["-s", session, "action", "hide-floating-panes"])[0] == 0
+            focus_result = cli(["-s", session, "action", "focus-pane-id", f'terminal_{viewport["id"]}'])
+            assert focus_result[0] == 0 or "already focused" in focus_result[2], focus_result
+            wait_for(lambda ps: ps["lince-viewport"]["is_focused"])
+            key(b"\x1bv")
+            wait_for(visible("lince-dialog", True))
+            key(b"s")
+            wait_for(lambda ps: (work / "lince-voice.json").exists() and json.loads((work / "lince-voice.json").read_text())["settings"]["configured"])
+            key(b"a")
+            wait_for(voice_state("listening"))
+            key(b"p")
+            wait_for(voice_state("paused"))
+            key(b"\x1b")
+            wait_for(visible("lince-dialog", False))
+            key(b"\x1bv")
+            wait_for(visible("lince-dialog", True))
+            key(b"p")
+            wait_for(voice_state("listening"))
+            key(b"\x1b")
+            wait_for(visible("lince-dialog", False))
+            # Legacy Ctrl+Space (NUL) starts; Alt+x stops the same recording.
+            os.write(master, b"\x00")
+            wait_for(voice_state("recording"))
+            key(b"\x1bx")
+            wait_for(voice_state("listening"))
+            wait_for(lambda ps: not json.loads((work / "lince-voice.json").read_text())["events"])
+            wait_for(lambda ps: "VOICE_FIXTURE_TEXT" in cli(["-s", session, "action", "dump-screen", "--pane-id", str(viewport["id"])])[1])
+            key(b"\x1bv")
+            wait_for(visible("lince-dialog", True))
+            key(b"x")
+            wait_for(voice_state("stopped"))
+            key(b"\x1b")
+            wait_for(visible("lince-dialog", False))
+            # Voice shortcuts are available in locked mode too.
             key(b"\x0c")
+            key(b"\x1bv")
+            wait_for(visible("lince-dialog", True))
+            key(b"a")
+            wait_for(voice_state("listening"))
+            key(b"\x1b")
+            wait_for(visible("lince-dialog", False))
+            key(b"\x1bx")
+            wait_for(voice_state("recording"))
+            # Enhanced-keyboard Ctrl+Space also works in locked mode.
+            key(b"\x1b[32;5u")
+            wait_for(voice_state("listening"))
+            key(b"\x1bv")
+            wait_for(visible("lince-dialog", True))
+            key(b"x")
+            wait_for(voice_state("stopped"))
+            key(b"\x1b")
+            wait_for(visible("lince-dialog", False))
             key(b"\x1bh")
             wait_for(visible("lince-dialog", True))
             key(b"\x1b")
@@ -166,10 +248,23 @@ def check(zellij, wasm, preset):
                        if "fixture" in name and active_fixture not in name):
                     return False
                 # Unsuppressed floating panes can still be hidden as a layer.
-                status, stdout, _ = cli(["-s", session, "action", "list-tabs", "--json"])
+                status, stdout, _ = cli(["-s", session, "action", "list-tabs", "--json", "--state"])
                 return status == 0 and any(tab["are_floating_panes_visible"] for tab in json.loads(stdout))
 
             key(b"\x1b1")
+            agent_panes = wait_for(agent_fills_viewport)
+            agent_id = focused_fixture(agent_panes)["id"]
+            key(b"\x1bx")
+            wait_for(voice_state("recording"))
+            key(b"\x1bx")
+            wait_for(voice_state("listening"))
+            wait_for(lambda ps: "VOICE_FIXTURE_TEXT" in cli(["-s", session, "action", "dump-screen", "--pane-id", str(agent_id)])[1])
+            key(b"\x1bv")
+            wait_for(visible("lince-dialog", True))
+            key(b"x")
+            wait_for(voice_state("stopped"))
+            key(b"\x1b")
+            wait_for(visible("lince-dialog", False))
             wait_for(agent_fills_viewport)
             # Toggle both ways; the controller and auxiliary pane must disappear.
             for turn, expected in enumerate((preset != "minimal", preset == "minimal") * 3):
@@ -298,7 +393,7 @@ def check(zellij, wasm, preset):
                         "sidebar_visible": False, "statusbar_mode": "agents" if expected_sidebar else "hidden"}
             else:
                 assert state_path.read_text() == original, "Quit without save modified previous state"
-            print(f"{preset}: global popups, sidebar/status-bar combinations, agent geometry and {'save/quit' if preset == 'statusline' else 'quit without save'} OK")
+            print(f"{preset}: voice controls and shell delivery, global popups, sidebar/status-bar combinations, agent geometry and {'save/quit' if preset == 'statusline' else 'quit without save'} OK")
         finally:
             try:
                 cli(["kill-session", session])

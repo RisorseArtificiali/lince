@@ -14,6 +14,7 @@
 - **Dashboard (lince-dashboard)**
   - [Usage Guide](dashboard/usage-guide.md)
   - [Views and Themes](dashboard/views-and-themes.md)
+  - [Voice input](dashboard/voice-input.md)
   - [Configuration Reference](dashboard/config-reference.md)
   - [Agent Examples](dashboard/agent-examples.md)
   - [Sandbox Levels](dashboard/sandbox-levels.md)

@@ -462,26 +462,28 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
 done
 echo ""
 
-# ── Step 14: VoxCode layout selection ─────────────────────────────────
-echo -e "${GREEN}[14/14] VoxCode layout configuration...${NC}"
-
+# ── Step 14: Optional VoxCode integration ─────────────────────────────
+echo -e "${GREEN}[14/14] VoxCode integration...${NC}"
 if command -v voxcode >/dev/null 2>&1; then
-    echo -e "${GREEN}  ✓ voxcode detected${NC}"
-    echo "  Setting dashboard-vox.kdl as default layout (includes VoxCode pane)."
-    if [ -f "$LAYOUT_DIR/dashboard-vox.kdl" ]; then
-        cp "$LAYOUT_DIR/dashboard-vox.kdl" "$LAYOUT_DIR/dashboard.kdl"
-        echo -e "${GREEN}  ✓ Dashboard layout updated with VoxCode pane${NC}"
-    fi
-    # Also update tiled layout to VoxCode variant
-    if [ -f "$LAYOUT_DIR/dashboard-tiled-vox.kdl" ]; then
-        cp "$LAYOUT_DIR/dashboard-tiled-vox.kdl" "$LAYOUT_DIR/dashboard-tiled.kdl"
-        echo -e "${GREEN}  ✓ Tiled layout updated with VoxCode pane${NC}"
+    if [ -z "${LINCE_VOXCODE_ENABLED:-}" ]; then
+        echo "  Alt+v opens voice settings; Alt+x / Ctrl+Space toggles PTT. No permanent voice pane."
+        read -r -p "  Enable VoxCode integration? [Y/n]: " VOICE_REPLY || VOICE_REPLY=""
+        case "$VOICE_REPLY" in n|N|no|No) LINCE_VOXCODE_ENABLED=false ;; *) LINCE_VOXCODE_ENABLED=true ;; esac
     fi
 else
-    echo -e "${YELLOW}  VoxCode not found — using standard dashboard layout${NC}"
-    echo "  For voice input, install VoxCode separately:"
-    echo "    https://github.com/RisorseArtificiali/voxcode"
+    echo "  VoxCode not installed. Install it later: https://github.com/RisorseArtificiali/voxcode"
 fi
+case "${LINCE_VOXCODE_ENABLED:-true}" in
+    true|false) ;;
+    *) echo "LINCE_VOXCODE_ENABLED must be true or false" >&2; exit 1 ;;
+esac
+python3 - "$CONFIG_DST" "${LINCE_VOXCODE_ENABLED:-true}" <<'VOICEPY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+p.write_text(p.read_text().replace('voxcode_enabled = true', 'voxcode_enabled = ' + sys.argv[2]))
+VOICEPY
+echo "  Settings: Alt+v. Microphone stays off until you start VoxCode."
 echo ""
 
 # ── Sandbox backend check ─────────────────────────────────────────────

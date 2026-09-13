@@ -7,6 +7,9 @@ keybinds clear-defaults=true {
     locked {
         bind "Alt d" { MessagePlugin { name "lince-ui-open"; }; }
         bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
+        bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
+        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }
         bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
         bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
@@ -229,6 +232,9 @@ keybinds clear-defaults=true {
             }
         }
         bind "Ctrl l" { SwitchToMode "locked"; }
+        bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
+        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }
         bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
         bind "Alt j" { MoveFocus "down"; }

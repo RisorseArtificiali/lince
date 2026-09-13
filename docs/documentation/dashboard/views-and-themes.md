@@ -202,11 +202,10 @@ Nine agents with five-character ASCII names fit at 100 columns. Agent entries
 stay in slot order even when selected. Each reserves a marker position: the
 selected `*number` is white; other numbers share the sandbox color of their
 names. The sandbox level is conveyed by color, without a bracketed label.
-The left-hand count and agent numbers sit on the second row. Only `R` bounces
-vertically between the two rows. On the second row, yellow `I` alternates with a red `●`,
+The left-hand count and agent numbers sit on the second row. Green `R` alternates with white `/` in place; the first row is reserved for optional VoxCode status. On the second row, yellow `I` alternates with a red `●`,
 and red `P` with a yellow `●`. The same animation appears in right-hand agent entries
 and the compact sidebar. No arrow is drawn above them; numbers retain their colors. Stopped/unknown states stay on the second row. The reserved left column
 keeps names and wrapping stationary, even with nine agents. A legacy single-row
-pane keeps running states stationary while I/P continue alternating.
+pane keeps all state animations in place.
 
 `Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/statusline, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/statusline preset. Older saved sessions keep the preset defaults. `Alt+d`, then `q`, leaves the previous saved view unchanged.

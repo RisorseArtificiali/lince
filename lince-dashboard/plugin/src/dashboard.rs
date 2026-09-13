@@ -15,12 +15,16 @@ use crate::theme;
 use unicode_width::UnicodeWidthChar;
 
 thread_local! {
+    static ATTENTION_BLINK: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     static ATTENTION_DOT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
+pub fn set_attention_blink(enabled: bool) { ATTENTION_BLINK.with(|v| v.set(enabled)); }
 pub fn set_attention_phase(dot: bool) { ATTENTION_DOT.with(|phase| phase.set(dot)); }
 
 pub(crate) fn attention_symbol(status: char, dot: bool) -> Option<(char, String)> {
     match (status, dot) {
+        ('R', false) => Some(('R', theme::color("green"))),
+        ('R', true) => Some(('/', "\x1b[38;5;15m".into())),
         ('I', false) => Some(('I', theme::color("yellow"))),
         ('I', true) => Some(('●', theme::color("red"))),
         ('P', false) => Some(('P', theme::color("red"))),
@@ -1180,6 +1184,7 @@ pub fn render_wizard(
 pub fn render_help_overlay(rows: usize, cols: usize) {
     if rows == 0 || cols == 0 { return; }
     let hints = ["LINCE — Keybindings", "Alt+d        Expanded agent list",
+        "Alt+v        VoxCode settings / start / pause / stop", "Alt+x / Ctrl+Space  Toggle PTT recording",
         "Alt+i/h      Info / help", "Alt+s        Toggle sidebar",
         "Alt+b        Bar: hidden / left / full / right", "Alt+n        New agent wizard",
         "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
@@ -1366,7 +1371,7 @@ fn render_compact(
             let label = types.get(&agent.agent_type).map(|cfg| cfg.short_label.as_str()).unwrap_or("???");
             let name = clip_cells(&format!("{focus}{marker}{:>number_width$} {}", i + 1, clip_cells(label, 3)), cols.saturating_sub(2));
             let width: usize = name.chars().map(|c| c.width().unwrap_or(0)).sum();
-            let (symbol, color) = attention_symbol(status_letter(&agent.status), ATTENTION_DOT.with(|phase| phase.get()))
+            let (symbol, color) = attention_symbol(status_letter(&agent.status), ATTENTION_DOT.with(|phase| phase.get()) && (agent.status == AgentStatus::Running || ATTENTION_BLINK.with(|v| v.get())))
                 .unwrap_or_else(|| (status_letter(&agent.status), theme::status(&agent.status)));
             let text = if cols < 3 { format!("{color}{symbol}{RESET}") } else {
                 format!("{}{} {}{}{}", name, " ".repeat(cols.saturating_sub(width + 2)),

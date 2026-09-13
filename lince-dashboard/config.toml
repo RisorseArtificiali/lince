@@ -5,6 +5,8 @@
 preset = "minimal"
 # Alternate I/P with opposite-colored dots; false keeps the status letters steady
 attention_blink = true
+# Offer VoxCode if installed; microphone is never started automatically
+voxcode_enabled = true
 # Plugin colors: default (inherit Zellij), minimal-mono, dracula, gruvbox
 # theme = "default"
 # Classic inline density; managed sidebar stays compact, popup list stays full

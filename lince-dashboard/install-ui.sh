@@ -6,6 +6,8 @@ mkdir -p "$HOME/.config/zellij/layouts" "$HOME/.config/lince-dashboard" "$HOME/.
 for layout in "$UI_SOURCE"/layouts/*.kdl; do
     cp "$layout" "$HOME/.config/zellij/layouts/"
 done
+cp "$UI_SOURCE/lince-voice" "$HOME/.local/bin/lince-voice"
+chmod +x "$HOME/.local/bin/lince-voice"
 cp "$UI_SOURCE/lince-dashboard-launch" "$HOME/.local/bin/lince-dashboard-launch"
 chmod +x "$HOME/.local/bin/lince-dashboard-launch"
 # The active session config is user-owned; refreshed defaults remain reviewable.
@@ -62,6 +64,14 @@ if 'bind "Alt q"' not in updated:
 if 'bind "Alt b"' not in updated:
     updated = re.sub(r'(?m)^([ \t]*)(bind "Alt s" \{ MessagePlugin \{ name "lince-sidebar-toggle"; \}; \})$',
         lambda m: m.group(0) + '\n' + m.group(1) + 'bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }', updated)
+for key, binding in [
+    ('Alt v', 'bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }'),
+    ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+    ('Alt x', 'bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+]:
+    if f'bind "{key}"' not in updated:
+        updated = re.sub(r'(?m)^([ \t]*)(bind "Alt n" \{ MessagePlugin \{ name "lince-ui-open"; payload "wizard"; \}; \})$',
+            lambda m: m.group(0) + '\n' + m.group(1) + binding, updated)
 if updated != text:
     path.with_suffix('.kdl.bak-shortcuts').write_text(text)
     path.write_text(updated)

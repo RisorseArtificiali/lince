@@ -26,6 +26,7 @@ Created by `install.sh`. Holds dashboard-wide settings and optional agent type o
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `preset` | string | `"minimal"` | `minimal`, `statusline`, or `classic`; minimal when unspecified. Applied by the launcher. |
+| `voxcode_enabled` | boolean | `true` | Offer on-demand VoxCode when installed. `Alt+v` configures/starts it; no automatic microphone activation. See [Voice input](dashboard/voice-input.md). |
 | `attention_blink` | boolean | `true` | Alternate I/P with opposite-colored dots in both status bar sections and the compact sidebar; `false` keeps letters steady. |
 | `compact` | boolean | Preset-dependent | Classic inline density only; managed sidebar is compact and popup list is full. |
 | `sidebar_width` | integer | 15 (minimal), 40 (classic) | Sidebar percentage, 10–60; applied at launch. |
@@ -64,7 +65,7 @@ The plugin checks `config.toml` for changes every 5 seconds and applies them wit
 **Hot-reloadable** (applied immediately):
 
 - `focus_mode`, `status_method`, `max_agents`, `status_file_dir`
-- `theme`, `compact`, `default_provider`, `default_project_dir`, `default_agent_type`
+- `theme`, `compact`, `voxcode_enabled`, `default_provider`, `default_project_dir`, `default_agent_type`
 
 **New session required**:
 
