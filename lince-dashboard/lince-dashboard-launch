@@ -22,7 +22,14 @@ def sidebar_layout(text: str, width: int) -> str:
 
 ATTENTION_TEMPLATE = '    default_tab_template {\n        children\n        pane size=2 borderless=true name="lince-attention" {\n            plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {\n                role "statusline"\n            }\n        }\n    }\n'
 
-def presentation_layout(text: str, preset: str, compact: bool, tiled: bool) -> str:
+def presentation_layout(text: str, preset: str, compact: bool, tiled: bool, voxcode_enabled: bool = True) -> str:
+    if voxcode_enabled and 'name="lince-sidebar-aux"' in text:
+        # Integrated voice controls live in the popup/bar. Give the controller
+        # the entire left column, including the geometry used by swap layouts.
+        text = re.sub(r'^[ \t]*pane size="\d+%" name="lince-sidebar-aux" \{[^{}]*\}\n',
+                      '', text, flags=re.M)
+        text = re.sub(r'pane size="\d+%"( focus=true)? name="lince-controller"',
+                      lambda m: 'pane' + (m.group(1) or '') + ' name="lince-controller"', text)
     if preset != "classic":
         text = re.sub(r"    default_tab_template \{.*?\n    \}\n",
                       lambda _: ATTENTION_TEMPLATE, text, count=1, flags=re.S)
@@ -90,7 +97,7 @@ def main() -> int:
         source = Path(__file__).resolve().parent / "layouts" / f"{source_name}.kdl"
     text = sidebar_layout(source.read_text(), width)
     text = presentation_layout(text, preset, config.get("compact", preset != "classic"),
-                               "tiled" in layout_name or preset == "statusline")
+                               "tiled" in layout_name or preset == "statusline", config.get("voxcode_enabled", True))
     frames = args.frames if args.frames is not None else config.get("pane_frames", preset == "classic")
     if not isinstance(frames, bool):
         raise ValueError("pane_frames must be a boolean")

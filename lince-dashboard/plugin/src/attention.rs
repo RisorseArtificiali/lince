@@ -43,7 +43,7 @@ impl Snapshot {
             voice: None,
             theme: config.theme.clone(), warning: warning.map(str::to_owned),
             agents: agents.iter().enumerate().map(|(i, a)| Entry {
-                slot: i + 1, label: dashboard::compact_name(a, &config.agent_types),
+                slot: i + 1, label: dashboard::compact_name(a),
                 status: dashboard::status_letter(&a.status),
                 attention: dashboard::needs_attention(&a.status),
                 focused: focused == Some(a.id.as_str()),
@@ -211,7 +211,7 @@ mod tests {
     fn summary_only_keeps_animation_without_agent_names() {
         let mut snapshot = Snapshot::default();
         snapshot.summary_only = true;
-        snapshot.agents.push(Entry { slot: 1, label: "CDX-pippo".into(), status: 'I',
+        snapshot.agents.push(Entry { slot: 1, label: "pippo-long".into(), status: 'I',
             attention: true, focused: true, sandbox: "normal".into(), sandbox_color: "green".into() });
         for phase in [false, true] {
             let lines = snapshot.styled_lines(2, 100, phase);
@@ -275,7 +275,7 @@ mod tests {
         }
     }
     #[test]
-    fn labels_use_registry_abbreviations_and_sandbox_colors() {
+    fn labels_use_real_names_and_sandbox_colors() {
         let mut config = DashboardConfig::default();
         config.agent_types = crate::config::embedded_agent_types().clone();
         let mut agents: Vec<_> = ["normal", "permissive", "paranoid", "custom", "normal"].into_iter().map(|level| {
@@ -288,16 +288,16 @@ mod tests {
         let snapshot = Snapshot::from_agents(&agents, None, &config, None);
         assert_eq!(snapshot.agents.iter().map(|a| a.sandbox_color.as_str()).collect::<Vec<_>>(),
             ["green", "yellow", "white", "white", "red"]);
-        assert!(snapshot.agents.iter().all(|a| a.label == "CDX-pippo" && a.status == 'I'));
+        assert!(snapshot.agents.iter().all(|a| a.label == "pippo-long" && a.status == 'I'));
         theme::set("default", None);
         let line = snapshot.styled_line(200);
-        assert!(line.contains(&format!("{}CDX-pippo\x1b[0m\x1b[1m{} I\x1b[0m", theme::permission_name("green"), theme::color("yellow"))));
+        assert!(line.contains(&format!("{}pippo-long\x1b[0m\x1b[1m{} I\x1b[0m", theme::permission_name("green"), theme::color("yellow"))));
     }
     #[test]
     fn selection_keeps_order_width_and_sandbox_name_colors() {
         theme::set("default", None);
         let agents: Vec<_> = (1..=9).map(|i| {
-            let mut agent = dashboard::preview_agent(&format!("ag{i}xy"), AgentStatus::WaitingForInput);
+            let mut agent = dashboard::preview_agent(&format!("agent{i}name"), AgentStatus::WaitingForInput);
             agent.sandbox_level = Some("permissive".into());
             agent
         }).collect();
@@ -315,7 +315,7 @@ mod tests {
                 if i != index { assert_eq!(group[1].1, group[2].1); }
             }
             for phase in [false, true] {
-                let lines = selected.styled_lines(2, 100, phase);
+                let lines = selected.styled_lines(2, 110, phase);
                 assert_eq!(lines.len(), 2);
                 for entry in &selected.agents {
                     assert!(lines.iter().any(|line| line.contains(&entry.label)));
