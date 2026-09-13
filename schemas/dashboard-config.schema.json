@@ -114,6 +114,11 @@
           "description": "Presentation preset at launch; independent of theme (minimal when unspecified)",
           "default": "minimal"
         },
+        "voxcode_enabled": {
+          "type": "boolean",
+          "description": "Offer on-demand VoxCode integration when installed; never auto-start the microphone",
+          "default": true
+        },
         "attention_blink": {
           "type": "boolean",
           "description": "Alternate I/P with opposite-colored dots in the status bar and compact sidebar",

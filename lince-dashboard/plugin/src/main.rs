@@ -8,6 +8,7 @@ mod state_file;
 mod types;
 mod theme;
 mod attention;
+mod voice;
 mod render_output;
 
 use crate::types::{SavedView, StatusBarMode};
@@ -43,6 +44,7 @@ use crate::types::{
 };
 
 struct State {
+    voice: voice::Voice,
     own_id: u32,
     passive_bar: bool,
     attention_tick: u8,
@@ -121,6 +123,7 @@ struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            voice: voice::Voice::default(),
             own_id: 0,
             passive_bar: false,
             attention_tick: 0,
@@ -308,6 +311,7 @@ impl ZellijPlugin for State {
             }
             Event::Key(key) => self.handle_key(key),
             Event::PaneUpdate(manifest) => {
+                self.voice.tab = manifest.panes.iter().find(|(_, panes)| panes.iter().any(|p| p.is_plugin && p.id == self.own_id)).map(|(tab, _)| *tab);
                 let restoring_chrome = self.chrome_restoring || self.sidebar_restore_focus.is_some();
                 if let Some(panes) = manifest.panes.values().find(|ps| ps.iter().any(|p| p.is_plugin && p.id == self.own_id)) {
                     self.dialog_id = panes.iter().find(|p| p.is_plugin && p.title == "lince-dialog").map(|p| p.id);
@@ -389,7 +393,15 @@ impl ZellijPlugin for State {
                 }
                 changed
             }
+            Event::Timer(elapsed) if elapsed < 0.6 => {
+                self.voice.poll_armed = false;
+                if !self.voice.pending { self.voice_request(serde_json::json!({"action": "status"})); }
+                false
+            }
             Event::Timer(_elapsed) => {
+                if self.voice.snapshot.installed && self.config.voxcode_enabled && !self.voice.pending {
+                    self.voice_request(serde_json::json!({"action": "status"}));
+                }
                 self.poll_hidden_panes();
                 let mut needs_render = false;
 
@@ -448,6 +460,10 @@ impl ZellijPlugin for State {
             Event::RunCommandResult(exit_code, stdout, stderr, context) => {
                 let cmd_type = context.get(config::CMD_TYPE_KEY).map(|s| s.as_str());
                 match cmd_type {
+                    Some("voice") => {
+                        return self.voice_response(exit_code, &stdout, &stderr);
+                    }
+                    Some("voice_quit") => { quit_zellij(); return false; }
                     Some("poll_hidden_panes") => {
                         self.hidden_poll_pending = false;
                         if !self.sidebar_visible && !self.statusbar_mode.visible() && exit_code == Some(0)
@@ -482,6 +498,9 @@ impl ZellijPlugin for State {
                             let prev_details = std::mem::take(&mut self.config.provider_details_by_agent);
                             let viewport = self.config.viewport;
                             self.config = cfg;
+                            if !self.config.voxcode_enabled && self.voice.snapshot.active() {
+                                self.voice_request(serde_json::json!({"action": "stop"}));
+                            }
                             self.config.viewport = viewport;
                             if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
                             self.config_error = err;
@@ -499,7 +518,10 @@ impl ZellijPlugin for State {
                         self.config_mtime = 1;
                         true
                     }
-                    Some(CMD_GET_CWD) if exit_code == Some(0) => {
+                    Some(CMD_GET_CWD) if exit_code == Some(0) && self.launch_dir.is_none() => {
+                        // Eager initialization and the permission callback can both
+                        // return CWD. Restore agents and start voice discovery once.
+                        self.voice_request(serde_json::json!({"action": "status"}));
                         let dir = String::from_utf8_lossy(&stdout).trim().to_string();
                         if !dir.is_empty() {
                             // Kick off the single async resolution call (#202):
@@ -539,7 +561,7 @@ impl ZellijPlugin for State {
                     }
                     Some(state_file::CMD_SAVE_STATE) => {
                         if exit_code == Some(0) {
-                            quit_zellij();
+                            self.voice_quit();
                         } else {
                             let err = String::from_utf8_lossy(&stderr);
                             self.status_message = Some(format!("Save failed: {}", err.trim()));
@@ -809,7 +831,8 @@ impl ZellijPlugin for State {
     }
 
     fn render(&mut self, rows: usize, cols: usize) {
-        dashboard::set_attention_phase(self.config.attention_blink && self.attention_tick % 2 == 1);
+        dashboard::set_attention_phase(self.attention_tick % 2 == 1);
+        dashboard::set_attention_blink(self.config.attention_blink);
         if self.passive_bar {
             theme::set(&self.snapshot.theme, self.inherited_style);
             if rows > 0 { self.snapshot.render(rows, cols, self.attention_tick % 2 == 1); }
@@ -843,7 +866,7 @@ impl ZellijPlugin for State {
             if pipe_message.name == "lince-dialog-frame" {
                 if let (PipeSource::Plugin(id), Some(payload)) = (&pipe_message.source, &pipe_message.payload) {
                     if Some(*id) == self.controller_id {
-                        if let Ok(frame) = serde_json::from_str::<Option<String>>(payload) {
+                        if let Ok((frame, return_to)) = serde_json::from_str::<(Option<String>, Option<u32>)>(payload) {
                             if frame.is_some() && !self.dialog_open {
                                 show_self(true);
                                 let mut coords = FloatingPaneCoordinates::default().with_x_percent(10)
@@ -851,7 +874,15 @@ impl ZellijPlugin for State {
                                 coords.borderless = Some(true);
                                 change_floating_panes_coordinates(vec![(PaneId::Plugin(self.own_id), coords)]);
                             }
-                            if frame.is_none() && self.dialog_open { hide_self(); }
+                            if frame.is_none() && self.dialog_open {
+                                hide_self();
+                                if let Some(target) = return_to {
+                                    if let Some(pane) = get_pane_info(PaneId::Terminal(target)).filter(|p| !p.is_suppressed && !p.exited) {
+                                        if !pane.is_floating { let _ = hide_floating_panes(self.voice.tab); }
+                                        focus_terminal_pane(target, false, false);
+                                    }
+                                }
+                            }
                             self.dialog_open = frame.is_some();
                             self.dialog_frame = frame;
                             return true;
@@ -905,7 +936,17 @@ impl ZellijPlugin for State {
                 true
             }
             attention::REFRESH => { self.last_snapshot = None; self.dialog_dirty = true; false }
+            "lince-voice-ptt" => {
+                if !self.voice_current_tab() { return false; }
+                if !self.config.voxcode_enabled { self.status_message = Some("VoxCode disabled: set dashboard.voxcode_enabled=true".into()); return true; }
+                self.remember_voice_target();
+                if !self.voice.snapshot.settings.configured { self.open_ui("voice"); }
+                else { self.voice_request(serde_json::json!({"action": "ptt"})); }
+                true
+            }
             attention::OPEN => {
+                if pipe_message.payload.as_deref() == Some("voice") && !self.voice_current_tab() { return false; }
+                self.remember_voice_target();
                 self.open_ui(pipe_message.payload.as_deref().unwrap_or("menu"));
                 true
             }
@@ -914,13 +955,22 @@ impl ZellijPlugin for State {
                 self.save_and_quit();
                 true
             }
+            "lince-voice-wake" => {
+                if pipe_message.payload.as_deref() == Some(&self.own_id.to_string()) && !self.voice.pending {
+                    self.voice_request(serde_json::json!({"action": "status"}));
+                }
+                false
+            }
             "lince-poll-hidden" => {
+                if self.config.voxcode_enabled && (self.voice.snapshot.active() || self.voice.open) && !self.voice.pending {
+                    self.voice_request(serde_json::json!({"action": "status"}));
+                }
                 if let Some(tick) = pipe_message.payload.as_deref().and_then(|v| v.parse::<u8>().ok()) {
                     self.attention_tick = tick % 8;
                 }
                 self.refresh_agent_geometry();
                 self.poll_hidden_panes();
-                self.sidebar_visible && self.agents.iter().any(|a| dashboard::needs_attention(&a.status))
+                self.sidebar_visible && self.agents.iter().any(|a| dashboard::needs_attention(&a.status) || a.status == AgentStatus::Running)
             }
             "lince-statusbar-toggle" => {
                 if self.managed_ui { self.set_statusbar_mode(self.statusbar_mode.next()); }
@@ -1024,6 +1074,7 @@ impl State {
     }
 
     fn handle_key(&mut self, key: KeyWithModifier) -> bool {
+        if self.voice.open { return self.handle_voice_key(key); }
         // If wizard is active, route all keys there
         if self.wizard.is_some() {
             return self.handle_wizard_key(key);
@@ -1275,7 +1326,7 @@ impl State {
                 true
             }
             BareKey::Char('q') if self.menu_open && !self.show_detail && !self.show_help => {
-                quit_zellij();
+                self.voice_quit();
                 false
             }
             BareKey::Char('Q') => {
@@ -1914,6 +1965,8 @@ impl State {
 
     /// Focus the currently selected agent's pane.
     fn focus_selected(&mut self) {
+        self.voice.open = false;
+        self.voice.restore_target = None;
         self.sidebar_restore_focus = None;
         self.ui_generation = self.ui_generation.wrapping_add(1);
         if let Some(agent) = self.agents.get(self.selected_index) {
@@ -2410,6 +2463,9 @@ impl State {
         if self.bar_ids.is_empty() { return; }
         let mut snapshot = attention::Snapshot::from_agents(&self.agents,
             self.focused_agent.as_deref(), &self.config, self.config_error.as_deref());
+        if self.config.voxcode_enabled && self.voice.snapshot.installed {
+            snapshot.voice = Some(self.voice.snapshot.indicator());
+        }
         snapshot.summary_only = self.statusbar_mode == StatusBarMode::Summary;
         snapshot.agents_only = self.statusbar_mode == StatusBarMode::Agents;
         if !force && self.last_snapshot.as_ref() == Some(&snapshot) { return; }
@@ -2429,6 +2485,7 @@ impl State {
             }
             Event::ModeUpdate(info) => { self.inherited_style = Some(info.style); true }
             Event::PaneUpdate(manifest) => {
+                self.voice.tab = manifest.panes.iter().find(|(_, panes)| panes.iter().any(|p| p.is_plugin && p.id == self.own_id)).map(|(tab, _)| *tab);
                 if self.passive_dialog && !self.dialog_open && manifest.panes.values().flatten()
                     .any(|p| p.is_plugin && p.id == self.own_id && !p.is_suppressed) { hide_self(); }
                 let id = attention::controller_for(&manifest, self.own_id);
@@ -2494,6 +2551,7 @@ impl State {
 impl State {
     fn render_controller(&mut self, rows: usize, cols: usize) {
         theme::set(&self.config.theme, self.inherited_style);
+        if self.voice.open { self.voice.render(rows, cols, self.config.voxcode_enabled); return; }
         // If help overlay is active, render it and return
         if self.show_help {
             dashboard::render_help_overlay(rows, cols);
@@ -2542,13 +2600,13 @@ impl State {
 
 impl State {
     fn has_dialog(&self) -> bool {
-        self.menu_open || self.show_detail || self.show_help || self.wizard.is_some()
+        self.voice.open || self.menu_open || self.show_detail || self.show_help || self.wizard.is_some()
             || self.name_prompt.is_some() || self.relay_state.is_some()
     }
     fn sync_dialog(&mut self) {
         let Some(id) = self.dialog_id else { return; };
         let frame = if self.has_dialog() {
-            let title = if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
+            let title = if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
                 else if self.wizard.is_some() || self.name_prompt.is_some() { "LINCE — New agent" } else { "LINCE — Agents" };
             Some(render_output::bordered(self.dialog_size.0, self.dialog_size.1, title,
                 |rows, cols| self.render_controller(rows, cols)))
@@ -2556,7 +2614,8 @@ impl State {
         // A refresh must resend even a closed dialog. Clearing the cached frame
         // would lose the close message when refresh races with Escape.
         if self.dialog_dirty || frame != self.dialog_frame {
-            attention::send(id, "lince-dialog-frame", &serde_json::to_string(&frame).unwrap());
+            let return_to = if frame.is_none() { self.voice.restore_target.take() } else { None };
+            attention::send(id, "lince-dialog-frame", &serde_json::to_string(&(frame.clone(), return_to)).unwrap());
             self.dialog_frame = frame;
             self.dialog_dirty = false;
         }
@@ -2565,6 +2624,7 @@ impl State {
 
 impl State {
     fn open_ui(&mut self, action: &str) {
+        self.voice.open = false;
         if self.dialog_frame.is_some() {
             if let Some(id) = self.dialog_id { focus_plugin_pane(id, true, false); }
         }
@@ -2575,7 +2635,13 @@ impl State {
         self.name_prompt = None;
         self.rename_target = None;
         self.relay_state = None;
-        if matches!(action, "i" | "info") {
+        if action == "voice" {
+            self.voice.open = true;
+            self.voice.draft = self.voice.snapshot.settings.clone();
+            self.voice.dirty = false;
+            self.voice.editing = false;
+            self.voice_request(serde_json::json!({"action": "devices"}));
+        } else if matches!(action, "i" | "info") {
             if let Some(index) = self.agents.iter().position(|a| Some(&a.id) == self.focused_agent.as_ref()) {
                 self.selected_index = index;
             }
@@ -2635,7 +2701,7 @@ impl State {
         // the live screen, including newly spawned agents not yet known to us.
         self.hidden_poll_pending = true;
         config::run_typed_command_with(&["sh", "-c",
-            "zellij -s \"$ZELLIJ_SESSION_NAME\" action list-panes --json"], "poll_hidden_panes",
+            "zellij -s \"$ZELLIJ_SESSION_NAME\" action list-panes --json --all"], "poll_hidden_panes",
             &[("generation", &self.ui_generation.to_string())]);
     }
 
@@ -2693,6 +2759,19 @@ impl State {
 #[cfg(test)]
 mod managed_ui_tests {
     use super::*;
+    #[test]
+    fn repeated_permission_cwd_reply_does_not_restart_initialization() {
+        let mut state = State::default();
+        state.launch_dir = Some("/already-initialized".into());
+        state.next_agent_id = 7;
+        let context = std::collections::BTreeMap::from([
+            (config::CMD_TYPE_KEY.to_owned(), CMD_GET_CWD.to_owned()),
+        ]);
+        state.update(Event::RunCommandResult(Some(0), b"/duplicate-reply\n".to_vec(), vec![], context));
+        assert_eq!(state.launch_dir.as_deref(), Some("/already-initialized"));
+        assert!(!state.voice.pending);
+        assert_eq!(state.next_agent_id, 7);
+    }
     fn controller() -> State {
         let mut state = State::default();
         state.managed_ui = true;
@@ -2731,5 +2810,117 @@ mod managed_ui_tests {
         state.handle_key(KeyWithModifier::new(BareKey::Char('n')));
         assert_eq!(state.wizard.as_ref().unwrap().name, "n");
         assert!(state.name_prompt.is_none());
+    }
+}
+
+impl State {
+    fn voice_current_tab(&self) -> bool {
+        get_focused_pane_info().map_or(false, |(tab, _)| self.voice.tab == Some(tab))
+    }
+    fn remember_voice_target(&mut self) {
+        if self.voice.restore_target.is_some() { return; }
+        if !self.voice_current_tab() { return; }
+        if let Ok((_, PaneId::Terminal(id))) = get_focused_pane_info() {
+            if get_pane_info(PaneId::Terminal(id)).map_or(false, |p| !p.is_suppressed) {
+                self.voice.target = Some(id);
+            }
+        }
+    }
+    fn deliver_voice_text(&mut self, text: &str) -> bool {
+        let Some(id) = self.voice.target else {
+            self.voice.snapshot.error = "Focus a visible agent or shell before inserting text".into();
+            return false;
+        };
+        if get_pane_info(PaneId::Terminal(id)).map_or(true, |p| p.is_suppressed || p.exited) {
+            self.voice.snapshot.error = "Voice target was closed or hidden; focus a terminal and try again".into();
+            return false;
+        }
+        write_chars_to_pane_id(text, PaneId::Terminal(id));
+        true
+    }
+    fn voice_request(&mut self, request: serde_json::Value) {
+        if self.voice.pending {
+            if request["action"] != "status" { self.voice.queue.push_back(request); }
+            return;
+        }
+        let mut request = request;
+        request["ack"] = self.voice.ack.into();
+        self.voice.pending = true;
+        config::run_typed_command(&["sh", "-c", "exec lince-voice \"$@\"", "sh", "--controller", &self.own_id.to_string(),
+            "--request", &request.to_string()], "voice");
+    }
+    fn voice_response(&mut self, code: Option<i32>, stdout: &[u8], stderr: &[u8]) -> bool {
+        let before = self.voice.snapshot.clone();
+        self.voice.pending = false;
+        if code == Some(0) {
+            match serde_json::from_slice::<voice::Snapshot>(stdout) {
+                Ok(snapshot) => {
+                    if !self.voice.dirty { self.voice.draft = snapshot.settings.clone(); }
+                    self.voice.snapshot = snapshot;
+                    if !self.voice.snapshot.events.is_empty() { self.remember_voice_target(); }
+                    for event in std::mem::take(&mut self.voice.snapshot.events) {
+                        if event.sequence > self.voice.ack {
+                            if !self.deliver_voice_text(&event.text) { break; }
+                            self.voice.ack = event.sequence;
+                        }
+                    }
+
+                }
+                Err(e) => self.voice.snapshot.error = format!("Invalid voice response: {e}"),
+            }
+        } else {
+            self.voice.snapshot.error = format!("Voice adapter unavailable: {}{}",
+                String::from_utf8_lossy(stdout), String::from_utf8_lossy(stderr));
+        }
+        if !self.voice.snapshot.error.is_empty() && self.voice.snapshot.error != self.voice.error_seen {
+            self.voice.queue.clear();
+            self.voice.error_seen = self.voice.snapshot.error.clone();
+            if self.config.voxcode_enabled && (self.voice.snapshot.installed || self.voice.open) { self.open_ui("voice"); }
+        } else if self.voice.snapshot.error.is_empty() { self.voice.error_seen.clear(); }
+        if let Some(request) = self.voice.queue.pop_front() { self.voice_request(request); }
+        else if self.voice.snapshot.installed && self.config.voxcode_enabled
+            && (self.voice.snapshot.active() || self.voice.open) {
+            // Separate subsecond timer: do not run agent/config polling at meter frequency.
+            self.schedule_voice_poll();
+        }
+        self.voice.snapshot != before
+    }
+    fn handle_voice_key(&mut self, key: KeyWithModifier) -> bool {
+        if self.voice.edit_key(&key) { return true; }
+        if !key.key_modifiers.is_empty() { return false; }
+        match key.bare_key {
+            BareKey::Esc => {
+                self.voice.open = false;
+                self.voice.restore_target = self.voice.target;
+            }
+            BareKey::Char('s') => {
+                self.voice.dirty = false;
+                self.voice_request(serde_json::json!({"action": "save", "settings": self.voice.draft}));
+            }
+            BareKey::Char('a') if self.config.voxcode_enabled => {
+                if self.voice.dirty || !self.voice.snapshot.settings.configured {
+                    self.voice.dirty = false;
+                    self.voice_request(serde_json::json!({"action": "save", "settings": self.voice.draft}));
+                }
+                self.voice_request(serde_json::json!({"action": "start"}));
+            }
+            BareKey::Char('p') => self.voice_request(serde_json::json!({"action": "pause"})),
+            BareKey::Char('x') => self.voice_request(serde_json::json!({"action": "stop"})),
+            BareKey::Char('i') => self.voice_request(serde_json::json!({"action": "send"})),
+            BareKey::Char('c') => self.voice_request(serde_json::json!({"action": "clear"})),
+            BareKey::Char('r') => self.voice_request(serde_json::json!({"action": "devices"})),
+            _ => (),
+        }
+        true
+    }
+    fn schedule_voice_poll(&mut self) {
+        if !self.voice.poll_armed {
+            self.voice.poll_armed = true;
+            set_timeout(0.25);
+        }
+    }
+    fn voice_quit(&mut self) {
+        config::run_typed_command(&["sh", "-c", "exec lince-voice \"$@\"", "sh", "--controller", &self.own_id.to_string(),
+            "--request", "{\"action\":\"shutdown\"}"], "voice_quit");
     }
 }

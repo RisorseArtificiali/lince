@@ -31,6 +31,7 @@ Dashboard behavior and defaults.
 | `project_search_max_depth` | int | `3` | find -maxdepth for project_search_roots |
 | `pane_frames` | bool | — | Override the preset frame choice at launch |
 | `preset` | `"classic"` \| `"minimal"` \| `"statusline"` | `"minimal"` | Presentation preset at launch; independent of theme (minimal when unspecified) |
+| `voxcode_enabled` | bool | `true` | Offer on-demand VoxCode integration when installed; never auto-start the microphone |
 | `attention_blink` | bool | `true` | Alternate I/P with opposite-colored dots in the status bar and compact sidebar |
 | `compact` | bool | `false` | Classic inline density; managed sidebar is always compact and popups are always full |
 | `sidebar_width` | int | `15` | Sidebar width percentage at launch (10-60) |

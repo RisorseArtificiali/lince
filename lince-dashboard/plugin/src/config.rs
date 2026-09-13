@@ -265,6 +265,8 @@ pub struct DashboardConfig {
     pub compact: bool,
     #[serde(default = "default_attention_blink")]
     pub attention_blink: bool,
+    #[serde(default = "default_attention_blink")]
+    pub voxcode_enabled: bool,
     /// Runtime geometry of the named viewport in our own tab.
     #[serde(skip)]
     pub viewport: Option<crate::pane_manager::Viewport>,
@@ -365,6 +367,7 @@ impl Default for DashboardConfig {
             theme: default_theme(),
             compact: false,
             attention_blink: true,
+            voxcode_enabled: true,
             viewport: None,
             default_provider: None,
             providers_by_agent: HashMap::new(),

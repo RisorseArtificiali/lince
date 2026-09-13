@@ -722,6 +722,10 @@ pub fn reconcile_panes(
     for agent in agents.iter_mut() {
         if let Some(pid) = agent.pane_id {
             if !all_pane_ids.contains(&pid) {
+                // A forwarded/CLI manifest can predate a newly opened pane.
+                // Confirm disappearance against the live screen before releasing
+                // its association, or another restoring agent could claim it.
+                if get_pane_info(PaneId::Terminal(pid)).is_some() { continue; }
                 agent.status = AgentStatus::Stopped;
                 agent.pane_id = None;
                 agent.exit_code = None;

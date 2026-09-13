@@ -18,6 +18,8 @@ pub struct Snapshot {
     pub suppress_attention_blink: bool,
     #[serde(default)]
     pub agents_only: bool,
+    #[serde(default)]
+    pub voice: Option<String>,
     pub theme: String,
     pub agents: Vec<Entry>,
     pub warning: Option<String>,
@@ -38,6 +40,7 @@ impl Snapshot {
             summary_only: false,
             suppress_attention_blink: !config.attention_blink,
             agents_only: false,
+            voice: None,
             theme: config.theme.clone(), warning: warning.map(str::to_owned),
             agents: agents.iter().enumerate().map(|(i, a)| Entry {
                 slot: i + 1, label: dashboard::compact_name(a, &config.agent_types),
@@ -53,18 +56,16 @@ impl Snapshot {
     }
 
     // Wrap whole entries; reserve the selection marker even when unselected so
-    // neither selection nor bounce changes positions or line breaks.
+    // neither selection nor animation changes positions or line breaks.
     fn summary(&self, down: bool, lower_row: bool, single_row: bool) -> Vec<(String, String)> {
         let waiting = self.agents.iter().filter(|a| a.attention).count();
         let count = format!("!{waiting}");
         let mut summary = vec![(if lower_row { count } else { " ".repeat(count.len()) }, theme::attention_count())];
         for (i, entry) in self.agents.iter().enumerate() {
             let number = format!("{}{}", if i == 0 { " " } else { "" }, entry.slot);
-            let (symbol, color) = dashboard::attention_symbol(entry.status, down && !self.suppress_attention_blink)
+            let (symbol, color) = dashboard::attention_symbol(entry.status, down && (entry.status == 'R' || !self.suppress_attention_blink))
                 .unwrap_or_else(|| (entry.status, entry.color()));
-            let state = if single_row { symbol }
-                else if entry.status == 'R' { if lower_row == down { 'R' } else { ' ' } }
-                else if lower_row { symbol } else { ' ' };
+            let state = if single_row || lower_row { symbol } else { ' ' };
             summary.push((if lower_row { number.clone() } else { " ".repeat(number.len()) }, entry.color()));
             summary.push((state.to_string(), color));
         }
@@ -74,7 +75,7 @@ impl Snapshot {
         let mut groups = vec![self.summary(dot, true, true)];
         for entry in &self.agents {
             let name_color = theme::color(&entry.sandbox_color);
-            let (symbol, color) = dashboard::attention_symbol(entry.status, dot && !self.suppress_attention_blink)
+            let (symbol, color) = dashboard::attention_symbol(entry.status, dot && (entry.status == 'R' || !self.suppress_attention_blink))
                 .unwrap_or_else(|| (entry.status, entry.color()));
             groups.push(vec![
                 ("|".into(), theme::color("white")),
@@ -114,14 +115,19 @@ impl Snapshot {
             }
         };
         // Reserve the same left column on both rows, even when nobody needs
-        // attention. Bouncing letters cannot overwrite or shift agent names.
-        let left_width = if self.agents_only { 0 } else { cell_width(&groups[0]).min(cols) };
+        // attention. Voice levels cannot overwrite or shift agent names.
+        let left_width = if self.agents_only { 0 } else { cell_width(&groups[0]).max(self.voice.as_ref().map_or(0, |v| v.chars().count())).min(cols) };
         let mut lines = vec![String::new(); rows.min(2)];
         if self.agents_only {
             // Give the agent entries the entire width when the summary is hidden.
         } else if lines.len() == 2 {
-            append(&mut lines[0], &self.summary(down, false, false), cols);
-            append(&mut lines[1], &self.summary(down, true, false), cols);
+            let top = self.voice.as_ref().map_or_else(|| self.summary(down, false, false),
+                |v| vec![(v.clone(), theme::color("cyan"))]);
+            let bottom = self.summary(down, true, false);
+            append(&mut lines[0], &top, left_width);
+            append(&mut lines[1], &bottom, left_width);
+            lines[0].push_str(&" ".repeat(left_width.saturating_sub(cell_width(&top))));
+            lines[1].push_str(&" ".repeat(left_width.saturating_sub(cell_width(&bottom))));
         } else {
             append(&mut lines[0], &groups[0], cols);
         }
@@ -319,7 +325,24 @@ mod tests {
         }
     }
     #[test]
-    fn running_bounces_and_attention_alternates_with_opposite_colored_dots() {
+    fn voice_owns_the_top_left_row_without_moving_agent_summary() {
+        let agents = vec![dashboard::preview_agent("run", AgentStatus::Running)];
+        let mut snapshot = Snapshot::from_agents(&agents, None, &DashboardConfig::default(), None);
+        snapshot.voice = Some("VP-###··· ".into());
+        snapshot.summary_only = true;
+        for phase in [false, true] {
+            let lines = snapshot.styled_lines(2, 100, phase);
+            assert!(lines[0].contains("VP-###"));
+            assert!(!lines[0].contains("!0"));
+            assert!(lines[1].contains("!0"));
+            assert!(lines[1].contains(if phase { "/\x1b[0m" } else { "R\x1b[0m" }));
+        }
+        snapshot.agents_only = true;
+        snapshot.summary_only = false;
+        assert!(!snapshot.styled_lines(2, 100, false).join("").contains("VP-"));
+    }
+    #[test]
+    fn running_alternates_in_place_and_attention_uses_opposite_colored_dots() {
         let agents = vec![dashboard::preview_agent("run", AgentStatus::Running),
             dashboard::preview_agent("input", AgentStatus::WaitingForInput),
             dashboard::preview_agent("permission", AgentStatus::PermissionRequired),
@@ -330,8 +353,8 @@ mod tests {
             let top = snapshot.summary(phase, false, false);
             let bottom = snapshot.summary(phase, true, false);
             assert_eq!(bottom[0].0, "!2");
-            assert_eq!(top[2].0, if phase { " " } else { "R" });
-            assert_eq!(bottom[2].0, if phase { "R" } else { " " });
+            assert_eq!(top[2].0, " ");
+            assert_eq!(bottom[2].0, if phase { "/" } else { "R" });
             assert_eq!(top[4].0, " ");
             assert_eq!(top[6].0, " ");
             for (index, letter, base, dot) in [(1, 'I', "yellow", "red"), (2, 'P', "red", "yellow")] {

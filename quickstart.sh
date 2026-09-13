@@ -1182,6 +1182,7 @@ done
 print_banner
 
 if [ "$USE_DEFAULTS" = true ]; then
+    export LINCE_VOXCODE_ENABLED="${LINCE_VOXCODE_ENABLED:-true}"
     LINCE_DASHBOARD_PRESET="${LINCE_DASHBOARD_PRESET:-minimal}"
     select_dashboard_preset
     if [ "$(uname -s)" = "Darwin" ]; then
@@ -1224,7 +1225,7 @@ check_prerequisites
 print_separator
 
 do_install_sandbox
-do_install_voxcode        # before dashboard so step 14 detects voxcode
+do_install_voxcode        # before dashboard so optional voice integration can be offered
 do_install_dashboard
 do_install_lince_config   # CLI required by the lince-configure skill
 do_install_lince_lab      # optional disposable-VM substrate (opt-in)

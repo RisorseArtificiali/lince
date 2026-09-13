@@ -198,26 +198,14 @@ lince-dashboard-launch --preset minimal --layout dashboard-tiled-vox
 
 ## Voice Relay
 
-[VoxCode](https://github.com/RisorseArtificiali/voxcode) runs in the fixed bottom-left pane and provides voice-to-text input for agents. When configured with pipe mode, transcribed text flows through the dashboard to the active agent:
+VoxCode is now available on demand in any layout. Press `Alt+v` to configure,
+start, pause or stop it. `Alt+x` / `Ctrl+Space` toggles PTT recording; the first row of the
+left status-bar section shows the live microphone level. Text goes to the last
+active visible agent or shell. Settings persist across dashboard restarts;
+listening never starts automatically. See [Voice input](dashboard/voice-input.md).
 
-```
-VoxCode --> zellij pipe --name "voxcode-text" --> Dashboard Plugin --> agent pane
-```
-
-To enable pipe mode, set in your VoxCode config:
-
-```toml
-[zellij]
-use_pipe = true
-```
-
-When `use_pipe = false` (default), VoxCode uses the legacy focus-switch method, which works without the dashboard.
-
-**Target priority** for voice relay:
-
-1. Focused agent (if one is currently shown).
-2. Selected agent (highlighted in the table).
-3. No agent available -- error message in the command bar.
+The explicit `*-vox` layouts remain available for the legacy standalone VoxCode
+pane, but the installer no longer selects them automatically.
 
 ## Status Detection
 

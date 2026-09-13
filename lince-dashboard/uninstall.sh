@@ -299,6 +299,18 @@ if [ -n "$STATUS_FILES" ] || [ "$STATUS_DIR_EXISTS" = true ]; then
 fi
 echo ""
 
+
+if [ -f "$HOME/.local/bin/lince-voice" ]; then
+    if confirm "Remove VoxCode dashboard adapter?"; then
+        rm -f "$HOME/.local/bin/lince-voice"
+    fi
+fi
+if [ -f "$HOME/.config/lince-dashboard/voice.json" ]; then
+    if confirm "Remove saved VoxCode dashboard settings?"; then
+        rm -f "$HOME/.config/lince-dashboard/voice.json"
+    fi
+fi
+
 # ── Done ───────────────────────────────────────────────────────────────
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}   Uninstall Complete${NC}"

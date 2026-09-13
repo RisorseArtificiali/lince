@@ -125,7 +125,7 @@ lince-dashboard/
 │   ├── lince-agent-wrapper     # Generic wrapper for agents without native hooks
 │   └── install-hooks.sh        # Hook installer
 ├── layouts/
-│   ├── dashboard.kdl           # Main layout (plugin + voxcode + shell)
+│   ├── dashboard.kdl           # Main layout (plugin + shell)
 │   ├── dashboard-tiled.kdl     # Controller left, agent viewport right
 │   └── dashboard-statusline.kdl # Attention row and on-demand controller
 ├── lince-dashboard-launch      # Presets and session-scoped Zellij config
@@ -194,3 +194,5 @@ A trailing backslash is not a portable multiline shortcut for Codex.
 - Ensure VoxCode has `use_pipe = true` in its `[zellij]` config section
 
 The installer asks for a preset with descriptions and a documentation link; Enter selects `minimal`. Quickstart asks only once, and `--defaults` uses `minimal`. For unattended preset selection, set `LINCE_DASHBOARD_PRESET=minimal`, `statusline`, or `classic`. The selected preset is saved in the dashboard config.
+
+Voice input is available on demand with `Alt+v` and PTT with `Alt+x` / `Ctrl+Space`, without a permanent pane. Settings persist; the microphone starts only on request. See [Voice input](https://lince.sh/documentation/#/dashboard/voice-input).
