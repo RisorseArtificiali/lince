@@ -217,3 +217,7 @@ set it to `false` to disable the animation. Numbers and names stay stationary.
 The reserved left column keeps names and wrapping stationary, even with nine agents.
 
 `Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/statusline, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/statusline preset. Older saved sessions keep the preset defaults. `Alt+d`, then `q`, leaves the previous saved view unchanged.
+
+In the minimal sidebar, slot numbers and agent types use the sandbox profile’s
+foreground color, independently of the status letter. Right-hand status-bar
+names continue to use white text with colored underlines.

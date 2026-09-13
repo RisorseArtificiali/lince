@@ -122,11 +122,11 @@ class LayoutTests(unittest.TestCase):
             env = {**os.environ, "HOME": directory}
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
             active = home / ".config/lince-dashboard/zellij.kdl"
-            active.write_text('// personal LINCE config\n')
+            active.write_text('// personal LINCE config\ncopy_command "custom-copy"\ncopy_on_select false\n')
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
             self.assertIn('alias lince="lince-dashboard-launch"', rc.read_text())
             self.assertIn('alias custom="echo mine"', rc.read_text())
-            self.assertEqual(active.read_text(), '// personal LINCE config\n')
+            self.assertEqual(active.read_text(), '// personal LINCE config\ncopy_command "custom-copy"\ncopy_on_select false\n')
             self.assertEqual(global_config.read_text(), '// personal global config\n')
             self.assertTrue(active.with_suffix('.kdl.dist').exists())
             self.assertTrue((home / ".local/bin/lince-dashboard-launch").stat().st_mode & 0o111)

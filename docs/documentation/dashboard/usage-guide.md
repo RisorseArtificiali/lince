@@ -253,6 +253,18 @@ Agent-specific environment variables (e.g. `OPENAI_API_KEY` for Codex) are set v
 
 ## Troubleshooting
 
+### Clipboard in dashboard panes
+
+Selecting text with the mouse copies it on release by default. Installation and
+update configure `wl-copy` on Wayland, `xclip`/`xsel` on X11, or `pbcopy` on macOS
+when available, preserving an explicit `copy_command` or `copy_on_select` choice.
+Without an available native backend, Zellij relies on terminal OSC 52 support.
+Install `wl-clipboard` (Wayland) or `xclip` (X11), then rerun the dashboard update
+and start a fresh session if selection does not reach the clipboard.
+`Ctrl+Shift+C` is bound to Copy in normal and locked modes when the terminal sends
+a distinct key event. Holding Shift while selecting lets the host terminal handle
+the selection instead; use its copy shortcut for that selection.
+
 ### Ctrl+Shift+C kills agent (Terminator + Zellij)
 
 When running agents inside the dashboard on **Terminator**, pressing **Ctrl+Shift+C** to copy also delivers a SIGINT to the agent in the focused pane, interrupting it. The same key combo behaves correctly in Terminator without Zellij — the conflict only appears in the Terminator + Zellij combination.

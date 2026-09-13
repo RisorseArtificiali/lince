@@ -48,9 +48,7 @@ impl Snapshot {
                 attention: dashboard::needs_attention(&a.status),
                 focused: focused == Some(a.id.as_str()),
                 sandbox: dashboard::sandbox_badge(a, &config.agent_types),
-                sandbox_color: match dashboard::sandbox_badge(a, &config.agent_types).as_str() {
-                    "NOSB" => "red", "normal" => "green", "permissive" => "yellow", _ => "white",
-                }.into(),
+                sandbox_color: dashboard::permission_color(&dashboard::sandbox_badge(a, &config.agent_types)).into(),
             }).collect(),
         }
     }

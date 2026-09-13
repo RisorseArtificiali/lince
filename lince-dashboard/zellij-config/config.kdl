@@ -5,6 +5,7 @@ keybinds clear-defaults=true {
         bind "Shift Enter" { Write 10; }
     }
     locked {
+        bind "Ctrl Shift c" { Copy; }
         bind "Alt d" { MessagePlugin { name "lince-ui-open"; }; }
         bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
         bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
