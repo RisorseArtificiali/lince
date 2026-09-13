@@ -1,30 +1,6 @@
-// Tiled layout with VoxCode — three fixed panes, VoxCode in B.
-//
-// Same as dashboard-tiled.kdl but pane B runs VoxCode instead of a plain shell.
-//
-// Requires `agent_layout = "tiled"` in config.toml.
-//
-// Usage:
-//   lince-tiled-vox
-//
-// Structure:
-//   ┌──────────────┬─────────────────────┐
-//   │ tab-bar (borderless, size=1)       │
-//   ├──────────────┬─────────────────────┤
-//   │              │                     │
-//   │   A          │        B            │
-//   │  Dashboard   │      Agent          │  ~70%
-//   │  plugin      │                     │
-//   │   40%×70%    │     60%×100%        │
-//   │              │                     │
-//   ├──────────────┤                     │
-//   │   C          │                     │  ~30%
-//   │  VoxCode     │                     │
-//   │              │                     │
-//   │  40%×30%     │                     │
-//   ├──────────────┴─────────────────────┤
-//   │ status-bar (borderless, size=2)    │
-//   └────────────────────────────────────┘
+// Compatibility layout: VoxCode uses Alt+v and the status bar.
+// No dedicated voice process is started. The launcher removes the auxiliary
+// sidebar shell when dashboard.voxcode_enabled is true.
 
 layout {
     default_tab_template {
@@ -47,18 +23,17 @@ layout {
                         config_path "~/.config/lince-dashboard/config.toml"
                     }
                 }
-                // C — Agent viewport (30% of left column)
+                // C — Shell viewport (30% of left column)
                 // Shows ASCII art placeholder; agent floating overlay covers this on focus.
                 pane size="30%" name="lince-sidebar-aux" {
-                    command "voxcode"
-                    args "--use-pipe"
+
                 }
             }
             // Right column — 60%, full height (B)
             pane size="70%" name="lince-viewport" {
-                // B — VoxCode (full height)
+                // B — Agent (full height)
                 command "lince-viewport-placeholder"
-                }
+            }
         }
     }
 }

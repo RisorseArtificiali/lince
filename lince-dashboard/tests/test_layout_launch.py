@@ -31,6 +31,18 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(result.count('role "statusline"'), 1)
             self.assertEqual(result.count('config_path "'), 2)
 
+    def test_integrated_voice_reclaims_sidebar_including_swap_layout(self):
+        for name in ('dashboard-tiled', 'dashboard-tiled-vox', 'dashboard-statusline'):
+            text = (ROOT / 'layouts' / f'{name}.kdl').read_text()
+            for preset in ('minimal', 'statusline'):
+                result = launcher['presentation_layout'](text, preset, True, True)
+                self.assertNotIn('name="lince-sidebar-aux"', result)
+                self.assertNotIn('pane size="70%" focus=true', result)
+                self.assertNotIn('command "voxcode"', result)
+                self.assertEqual(result.count('name="lince-controller"'), 2)
+            disabled = launcher['presentation_layout'](text, 'minimal', True, True, False)
+            self.assertIn('name="lince-sidebar-aux"', disabled)
+
     def test_classic_retains_standard_bars(self):
         text = (ROOT / "layouts/dashboard-tiled.kdl").read_text()
         result = launcher["presentation_layout"](text, "classic", False, True)

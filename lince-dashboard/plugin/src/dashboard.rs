@@ -1303,10 +1303,8 @@ pub(crate) fn status_letter(status: &AgentStatus) -> char {
     }
 }
 
-pub(crate) fn compact_name(agent: &AgentInfo, types: &HashMap<String, AgentTypeConfig>) -> String {
-    let label = types.get(&agent.agent_type).map(|cfg| cfg.short_label.as_str()).unwrap_or("???");
-    let name: String = agent.name.chars().filter(|c| !c.is_control()).take(5).collect();
-    format!("{}-{name}", clip_cells(label, 3))
+pub(crate) fn compact_name(agent: &AgentInfo) -> String {
+    agent.name.chars().filter(|c| !c.is_control()).take(10).collect()
 }
 
 pub(crate) fn permission_color(badge: &str) -> &'static str {
@@ -1450,13 +1448,14 @@ mod compact_tests {
     #[test]
     fn generated_names_and_unicode_do_not_lose_identity() {
         let mut agent = preview_agent("lince-12", AgentStatus::Unknown);
-        let types = crate::config::embedded_agent_types();
-        assert_eq!(compact_name(&agent, &types), "CLA-lince");
+        assert_eq!(compact_name(&agent), "lince-12");
         agent.agent_type = "codex".into();
         agent.name = "pippo-long".into();
-        assert_eq!(compact_name(&agent, &types), "CDX-pippo");
+        assert_eq!(compact_name(&agent), "pippo-long");
         agent.name = "界界界界界界".into();
-        assert_eq!(compact_name(&agent, &types), "CDX-界界界界界");
+        assert_eq!(compact_name(&agent), "界界界界界界");
+        agent.name = "abcdefghijklm".into();
+        assert_eq!(compact_name(&agent), "abcdefghij");
         assert_eq!(clip_cells("界abc", 1), "");
         assert_eq!(clip_cells("a\nb", 2), "ab");
     }

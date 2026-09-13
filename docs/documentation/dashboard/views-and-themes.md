@@ -94,10 +94,9 @@ The left-hand numbers and letters use state colors: green for running, yellow fo
 input, red for permission and muted for unknown/stopped. The count uses a distinct
 accent (cyan by default), including in the monochrome palette.
 
-On the right, each entry is `NUMBER AGENTTYPE-NAME STATUS`, for example `2 CDX-pippo I`.
-The type is the same configured label as the full list (`CLA`, `CDX`, etc.).
-The name is the first five characters of the actual name, with no `P-N` abbreviation.
-`AGENTTYPE-NAME` is white with a sandbox-colored underline: red for unsandboxed, green for
+On the right, each entry is `NUMBER NAME STATUS`, for example `2 pippo I`.
+The name is the first ten characters of the actual name, without an agent-type prefix.
+`NAME` is white with a sandbox-colored underline: red for unsandboxed, green for
 normal/default, yellow for permissive, white for paranoid or custom/unknown levels.
 The status letter has its own state color, independently of the name. These
 semantic colors follow the selected palette.
@@ -198,7 +197,7 @@ or customizing the session configuration. See the [configuration reference](dash
 for all keys and the [usage guide](dashboard/usage-guide.md) for agent workflows.
 
 The attention bar reserves two rows and wraps between complete agent entries.
-Nine agents with five-character ASCII names fit at 100 columns. Agent entries
+Nine agents with ten-character ASCII names fit at 110 columns. Agent entries
 stay in slot order even when selected. Each reserves a marker position: the
 selected `*number` is white. Agent names and unselected numbers are white with a
 colored underline: green for normal, yellow for permissive, red for no sandbox,
@@ -221,3 +220,8 @@ The reserved left column keeps names and wrapping stationary, even with nine age
 In the minimal sidebar, slot numbers and agent types use the sandbox profile’s
 foreground color, independently of the status letter. Right-hand status-bar
 names continue to use white text with colored underlines.
+
+With `dashboard.voxcode_enabled=true` (the default), the sidebar uses the full
+available height: the old auxiliary shell/voice pane is omitted, including in
+the restore layout used by Alt+s. Set the option to false to retain the auxiliary
+shell. Legacy `-vox` layouts no longer start a separate VoxCode process; use Alt+v.

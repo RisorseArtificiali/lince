@@ -145,7 +145,7 @@ def check(zellij, wasm, preset):
             if data.startswith(b"\x1b") and len(data) == 2:
                 data = f"\x1b[{data[1]};3u".encode()
             elif len(data) == 1:
-                data = (f"\x1b[108;5u" if data == b"\x0c" else f"\x1b[{data[0]}u").encode()
+                data = ("\x1b[108;5u" if data == b"\x0c" else f"\x1b[{data[0]}u").encode()
             os.write(master, data)
 
         try:
@@ -156,7 +156,7 @@ def check(zellij, wasm, preset):
             assert initial["lince-attention"]["pane_rows"] == 2
             assert initial["lince-attention"]["pane_y"] == 30
             identities = {(p["id"], p["is_plugin"]) for p in panes()}
-            assert len(identities) == 8
+            assert len(identities) == 7
             viewport = initial["lince-viewport"]
             if preset == "statusline":
                 assert viewport["pane_columns"] == 100, viewport
@@ -278,12 +278,11 @@ def check(zellij, wasm, preset):
                     and (not expected or (ps["lince-controller"]["pane_y"] == 0
                         and ps["lince-viewport"]["pane_columns"] == 85)))
                 assert {(p["id"], p["is_plugin"]) for p in panes()} == identities
-                assert visible("lince-sidebar-aux", expected)(changed)
+                assert "lince-sidebar-aux" not in changed
                 if expected:
                     assert changed["lince-controller"]["pane_x"] == 0, changed
                     assert changed["lince-controller"]["pane_y"] == 0, changed
-                    assert changed["lince-controller"]["pane_rows"] == 21, changed
-                    assert changed["lince-sidebar-aux"]["pane_x"] == 0, changed
+                    assert changed["lince-controller"]["pane_rows"] == changed["lince-viewport"]["pane_rows"], changed
                     assert changed["lince-viewport"]["pane_columns"] == 85, changed
                 # The visible agent must resize immediately, before refocusing it.
                 wait_for(agent_fills_viewport)
@@ -330,7 +329,8 @@ def check(zellij, wasm, preset):
                 key(b"\x1bs")
                 wait_for(visible("lince-controller", True))
                 key(b"\x1bb")  # full -> agents
-                for _ in range(5): pump()
+                for _ in range(5):
+                    pump()
                 key(b"\x1bb")  # agents -> hidden
                 wait_for(visible("lince-attention", False))
                 key(b"\x1bb")  # hidden -> summary
@@ -377,7 +377,8 @@ def check(zellij, wasm, preset):
                         key(b"\x1bs")
                         wait_for(visible("lince-controller", False))
                         key(b"\x1bb")  # summary -> full
-                        for _ in range(5): pump()
+                        for _ in range(5):
+                            pump()
                         key(b"\x1bb")  # full -> agents
                         wait_for(visible("lince-attention", True))
                         wait_for(agent_fills_viewport)
@@ -387,7 +388,8 @@ def check(zellij, wasm, preset):
                         wait_for(agent_fills_viewport)
                     key(b"\x1bq")
                     deadline = time.monotonic() + 15
-                    while process.poll() is None and time.monotonic() < deadline: pump()
+                    while process.poll() is None and time.monotonic() < deadline:
+                        pump()
                     assert process.poll() is not None
                     assert json.loads(state_path.read_text())["view"] == {
                         "sidebar_visible": False, "statusbar_mode": "agents" if expected_sidebar else "hidden"}

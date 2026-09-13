@@ -93,7 +93,7 @@ lince-dashboard-launch --preset statusline
 - Far lavorare un agente con hook: deve passare a `R`, poi `I` quando chiede
   input; per un agente configurato con richieste di permesso, provocarne una
   normalmente e verificare `P`. Non è necessario modificare le policy.
-- A destra nella barra, verificare il formato `2 CDX-pippo I`: sigla identica alla
+- A destra nella barra, verificare il formato `2 pippo I`: sigla identica alla
   lista completa, primi cinque caratteri del nome reale (nessuna abbreviazione
   `P-N`). Il nome deve essere rosso per unsandboxed, verde per normal/default,
   giallo per permissive, bianco per paranoid/custom. La lettera finale segue
@@ -157,7 +157,7 @@ azione eseguita, tipo di agente e comportamento atteso/osservato.
 
 ## Status bar: ordine, selezione e attenzione
 
-- Creare nove agenti e provare una finestra larga 100 colonne: la barra usa due
+- Creare nove agenti e provare una finestra larga 110 colonne: la barra usa due
   righe e deve mostrare tutte le nove voci brevi, senza spezzare una voce.
 - Cambiare con `Alt+1/2/3`: le voci non cambiano ordine né posizione. Solo quella
   selezionata ha `*numero` bianco; gli altri numeri e i nomi sono bianchi con
@@ -203,3 +203,16 @@ azione eseguita, tipo di agente e comportamento atteso/osservato.
   Invio seleziona minimal; scegliere statusline o classic salva il valore in config.
   Il quickstart non ripete la domanda durante l'installazione del dashboard.
   Con `--defaults` non deve chiedere il preset e deve scegliere minimal.
+
+## Nomi estesi e VoxCode integrato
+
+- Creare o rinominare un agente con nome `abcdefghijklm`: la parte destra della
+  barra mostra `abcdefghij`, senza `CLA-`/`CDX-`. Controllare anche nomi Unicode.
+  Cambiare agente: ordine, asterisco e sottolineatura mantengono il comportamento.
+- Avviare con `dashboard.voxcode_enabled=true`: nessun pane sotto la sidebar;
+  la lista occupa tutta l'altezza disponibile. `Alt+s` ripetuto ripristina la
+  stessa geometria e conserva il focus dell'agente.
+- `Alt+v` e PTT continuano a funzionare, usando il pane agente/shell visibile.
+  I layout legacy `-vox` non devono avviare un secondo processo VoxCode.
+- Con `dashboard.voxcode_enabled=false`, al nuovo lancio il layout tiled conserva
+  il pane shell ausiliario. La scelta agisce alla creazione della sessione.

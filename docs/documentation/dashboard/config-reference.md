@@ -289,8 +289,8 @@ steps, `n` jumps to default creation with only the name prompt.
 
 The attention row’s left overview uses state-colored numbers and letters for all
 agents (`1R 2I 3P 4S 5-`); only `I`/`P` contribute to the distinctly colored `!N`.
-On the right, names use the configured type label and first five real-name characters
-(`CDX-pippo I`), with no automatic-name abbreviation. The name uses sandbox-level
+On the right, names use the first ten real-name characters without an agent-type prefix
+(`pippo I`), with no automatic-name abbreviation. The white name is underlined using sandbox-level
 colors (red unsandboxed, green normal, yellow permissive, white paranoid/custom),
 while the trailing state letter keeps its state color. Colors follow the UI palette.
 
