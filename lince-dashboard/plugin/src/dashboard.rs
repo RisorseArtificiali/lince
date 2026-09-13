@@ -15,7 +15,7 @@ use crate::theme;
 use unicode_width::UnicodeWidthChar;
 
 thread_local! {
-    static ATTENTION_BLINK: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    static ATTENTION_BLINK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static ATTENTION_DOT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 pub fn set_attention_blink(enabled: bool) { ATTENTION_BLINK.with(|v| v.set(enabled)); }
@@ -23,11 +23,10 @@ pub fn set_attention_phase(dot: bool) { ATTENTION_DOT.with(|phase| phase.set(dot
 
 pub(crate) fn attention_symbol(status: char, dot: bool) -> Option<(char, String)> {
     match (status, dot) {
-        ('R', false) => Some(('R', theme::color("green"))),
-        ('R', true) => Some(('/', "\x1b[38;5;15m".into())),
-        ('I', false) => Some(('I', theme::color("yellow"))),
+        ('R', _) => Some(('R', theme::color("green"))),
+        ('I', false) => Some(('I', format!("{BOLD}{}", theme::color("yellow")))),
         ('I', true) => Some(('●', theme::color("red"))),
-        ('P', false) => Some(('P', theme::color("red"))),
+        ('P', false) => Some(('P', format!("{BOLD}{}", theme::color("red")))),
         ('P', true) => Some(('●', theme::color("yellow"))),
         _ => None,
     }
@@ -1310,6 +1309,12 @@ pub(crate) fn compact_name(agent: &AgentInfo, types: &HashMap<String, AgentTypeC
     format!("{}-{name}", clip_cells(label, 3))
 }
 
+pub(crate) fn permission_color(badge: &str) -> &'static str {
+    match badge {
+        "NOSB" => "red", "normal" => "green", "permissive" => "yellow", _ => "white",
+    }
+}
+
 pub(crate) fn sandbox_badge(agent: &AgentInfo, types: &HashMap<String, AgentTypeConfig>) -> String {
     use crate::sandbox_backend::SandboxBackend;
     if matches!(agent.sandbox_backend, Some(SandboxBackend::None))
@@ -1366,15 +1371,16 @@ fn render_compact(
                 group_index += 1;
             }
             let badge = sandbox_badge(agent, types);
+            let identity_color = color_name_to_ansi(permission_color(&badge));
             let marker = if badge != "normal" { '!' } else { ' ' };
             let focus = if focused == Some(agent.id.as_str()) { '*' } else if i == selected { '>' } else { ' ' };
             let label = types.get(&agent.agent_type).map(|cfg| cfg.short_label.as_str()).unwrap_or("???");
             let name = clip_cells(&format!("{focus}{marker}{:>number_width$} {}", i + 1, clip_cells(label, 3)), cols.saturating_sub(2));
             let width: usize = name.chars().map(|c| c.width().unwrap_or(0)).sum();
-            let (symbol, color) = attention_symbol(status_letter(&agent.status), ATTENTION_DOT.with(|phase| phase.get()) && (agent.status == AgentStatus::Running || ATTENTION_BLINK.with(|v| v.get())))
+            let (symbol, color) = attention_symbol(status_letter(&agent.status), ATTENTION_DOT.with(|phase| phase.get()) && ATTENTION_BLINK.with(|v| v.get()))
                 .unwrap_or_else(|| (status_letter(&agent.status), theme::status(&agent.status)));
             let text = if cols < 3 { format!("{color}{symbol}{RESET}") } else {
-                format!("{}{} {}{}{}", name, " ".repeat(cols.saturating_sub(width + 2)),
+                format!("{identity_color}{}{} {}{}{}", name, " ".repeat(cols.saturating_sub(width + 2)),
                     color, symbol, RESET)
             };
             let selected_style = if i == selected { theme::selection() } else { String::new() };
@@ -1406,6 +1412,7 @@ mod compact_tests {
     use super::*;
     #[test]
     fn compact_attention_uses_alternating_symbols_without_moving_names() {
+        set_attention_blink(true);
         let agents = vec![preview_agent("input", AgentStatus::WaitingForInput),
             preview_agent("permission", AgentStatus::PermissionRequired)];
         for dot in [false, true] {
@@ -1419,6 +1426,25 @@ mod compact_tests {
             }
         }
         set_attention_phase(false);
+        set_attention_blink(false);
+    }
+
+    #[test]
+    fn compact_identity_uses_permission_color_independent_of_status_and_selection() {
+        theme::set("default", None);
+        for (level, color) in [("normal", "green"), ("permissive", "yellow"), ("paranoid", "white")] {
+            let mut agent = preview_agent("agent", AgentStatus::WaitingForInput);
+            agent.sandbox_level = Some(level.into());
+            for selected in [0, 1] {
+                let frame = crate::render_output::capture(|| render_dashboard(&[agent.clone()], selected, None,
+                    None, 10, 20, None, None, None, &crate::config::embedded_agent_types(),
+                    &SandboxColors::default(), true, 0));
+                let marker = if level == "normal" { ' ' } else { '!' };
+                let focus = if selected == 0 { '>' } else { ' ' };
+                assert!(frame.contains(&format!("{}{focus}{marker}1 CLA", theme::color(color))));
+                assert!(frame.contains(&format!("{BOLD}{}I{RESET}", theme::color("yellow"))));
+            }
+        }
     }
 
     #[test]

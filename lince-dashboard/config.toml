@@ -4,7 +4,7 @@
 # Default: compact sidebar and a two-row LINCE attention bar.
 preset = "minimal"
 # Alternate I/P with opposite-colored dots; false keeps the status letters steady
-attention_blink = true
+attention_blink = false
 # Offer VoxCode if installed; microphone is never started automatically
 voxcode_enabled = true
 # Plugin colors: default (inherit Zellij), minimal-mono, dracula, gruvbox

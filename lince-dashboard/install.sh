@@ -43,63 +43,6 @@ confirm() {
     [[ $REPLY =~ ^[Yy]$ ]]
 }
 
-# Detect clipboard backend (X11/Wayland/macOS) and uncomment the matching
-# copy_command line in the installed Zellij config so Ctrl+Shift+C reaches
-# the system clipboard even when the host terminal lacks OSC 52 support.
-# Idempotent: re-running leaves an already-uncommented line untouched.
-setup_clipboard_backend() {
-    local config="$1"
-    local os_name backend cmd_name pkg_hint install_hint
-    os_name="$(uname -s)"
-
-    if [ "$os_name" = "Darwin" ]; then
-        backend="macOS"
-        cmd_name="pbcopy"
-        pkg_hint=""
-        install_hint=""
-    elif [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
-        backend="Wayland"
-        cmd_name="wl-copy"
-        pkg_hint="wl-clipboard"
-    else
-        backend="X11"
-        cmd_name="xclip"
-        pkg_hint="xclip"
-    fi
-
-    echo -e "${GREEN}  Clipboard backend: $backend ($cmd_name)${NC}"
-
-    if [ -n "$pkg_hint" ] && ! command -v "$cmd_name" >/dev/null 2>&1; then
-        if command -v apt-get >/dev/null 2>&1; then
-            install_hint="sudo apt-get install $pkg_hint"
-        elif command -v dnf >/dev/null 2>&1; then
-            install_hint="sudo dnf install $pkg_hint"
-        elif command -v pacman >/dev/null 2>&1; then
-            install_hint="sudo pacman -S $pkg_hint"
-        elif command -v zypper >/dev/null 2>&1; then
-            install_hint="sudo zypper install $pkg_hint"
-        else
-            install_hint="install '$pkg_hint' via your package manager"
-        fi
-        echo -e "${YELLOW}  ⚠ '$cmd_name' not found — copy will rely on terminal OSC 52.${NC}"
-        echo -e "${YELLOW}    For reliable copy: $install_hint${NC}"
-    fi
-
-    case "$cmd_name" in
-        xclip)
-            sed -i.bak -E 's|^// (copy_command "xclip[^"]*"[[:space:]]*// x11)$|\1|' "$config"
-            ;;
-        wl-copy)
-            sed -i.bak -E 's|^// (copy_command "wl-copy"[[:space:]]*// wayland)$|\1|' "$config"
-            ;;
-        pbcopy)
-            sed -i.bak -E 's|^// (copy_command "pbcopy"[[:space:]]*// osx)$|\1|' "$config"
-            ;;
-    esac
-    rm -f "${config}.bak"
-    echo -e "${GREEN}  ✓ copy_command set for $backend${NC}"
-}
-
 select_dashboard_preset
 
 # ── Step 1: Prerequisites ─────────────────────────────────────────────
@@ -248,7 +191,6 @@ echo -e "${GREEN}  ✓ Layouts and launcher installed${NC}"
 # ── Step 6: Session-scoped Zellij configuration ─────────────────────────
 echo -e "${GREEN}[6/14] LINCE session keybindings...${NC}"
 LINCE_SESSION_CONFIG="$HOME/.config/lince-dashboard/zellij.kdl"
-setup_clipboard_backend "$LINCE_SESSION_CONFIG"
 echo "  LINCE uses $LINCE_SESSION_CONFIG; your global Zellij config is unchanged."
 echo ""
 

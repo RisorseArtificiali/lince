@@ -122,7 +122,7 @@
         "attention_blink": {
           "type": "boolean",
           "description": "Alternate I/P with opposite-colored dots in the status bar and compact sidebar",
-          "default": true
+          "default": false
         },
         "compact": {
           "type": "boolean",

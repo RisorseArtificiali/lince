@@ -76,3 +76,6 @@ if updated != text:
     path.with_suffix('.kdl.bak-shortcuts').write_text(text)
     path.write_text(updated)
 PY
+
+# Configure local clipboard transport on both installation and update.
+python3 "$UI_SOURCE/setup-clipboard.py" "$HOME/.config/lince-dashboard/zellij.kdl"

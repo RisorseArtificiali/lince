@@ -27,7 +27,7 @@ Created by `install.sh`. Holds dashboard-wide settings and optional agent type o
 |-----|------|---------|-------------|
 | `preset` | string | `"minimal"` | `minimal`, `statusline`, or `classic`; minimal when unspecified. Applied by the launcher. |
 | `voxcode_enabled` | boolean | `true` | Offer on-demand VoxCode when installed. `Alt+v` configures/starts it; no automatic microphone activation. See [Voice input](dashboard/voice-input.md). |
-| `attention_blink` | boolean | `true` | Alternate I/P with opposite-colored dots in both status bar sections and the compact sidebar; `false` keeps letters steady. |
+| `attention_blink` | boolean | `false` | Opt in to alternating I/P with opposite-colored dots in both bar sections and the compact sidebar. By default I/P are bold, static letters; R is always static. |
 | `compact` | boolean | Preset-dependent | Classic inline density only; managed sidebar is compact and popup list is full. |
 | `sidebar_width` | integer | 15 (minimal), 40 (classic) | Sidebar percentage, 10–60; applied at launch. |
 | `pane_frames` | boolean | Preset-dependent | Override frame visibility at launch. |

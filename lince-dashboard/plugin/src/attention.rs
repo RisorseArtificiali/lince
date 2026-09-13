@@ -48,9 +48,7 @@ impl Snapshot {
                 attention: dashboard::needs_attention(&a.status),
                 focused: focused == Some(a.id.as_str()),
                 sandbox: dashboard::sandbox_badge(a, &config.agent_types),
-                sandbox_color: match dashboard::sandbox_badge(a, &config.agent_types).as_str() {
-                    "NOSB" => "red", "normal" => "green", "permissive" => "yellow", _ => "white",
-                }.into(),
+                sandbox_color: dashboard::permission_color(&dashboard::sandbox_badge(a, &config.agent_types)).into(),
             }).collect(),
         }
     }
@@ -63,7 +61,7 @@ impl Snapshot {
         let mut summary = vec![(if lower_row { count } else { " ".repeat(count.len()) }, theme::attention_count())];
         for (i, entry) in self.agents.iter().enumerate() {
             let number = format!("{}{}", if i == 0 { " " } else { "" }, entry.slot);
-            let (symbol, color) = dashboard::attention_symbol(entry.status, down && (entry.status == 'R' || !self.suppress_attention_blink))
+            let (symbol, color) = dashboard::attention_symbol(entry.status, down && !self.suppress_attention_blink)
                 .unwrap_or_else(|| (entry.status, entry.color()));
             let state = if single_row || lower_row { symbol } else { ' ' };
             summary.push((if lower_row { number.clone() } else { " ".repeat(number.len()) }, entry.color()));
@@ -74,8 +72,8 @@ impl Snapshot {
     fn groups(&self, dot: bool) -> Vec<Vec<(String, String)>> {
         let mut groups = vec![self.summary(dot, true, true)];
         for entry in &self.agents {
-            let name_color = theme::color(&entry.sandbox_color);
-            let (symbol, color) = dashboard::attention_symbol(entry.status, dot && (entry.status == 'R' || !self.suppress_attention_blink))
+            let name_color = theme::permission_name(&entry.sandbox_color);
+            let (symbol, color) = dashboard::attention_symbol(entry.status, dot && !self.suppress_attention_blink)
                 .unwrap_or_else(|| (entry.status, entry.color()));
             groups.push(vec![
                 ("|".into(), theme::color("white")),
@@ -197,7 +195,8 @@ mod tests {
             dashboard::preview_agent("permit", AgentStatus::PermissionRequired)];
         let config = DashboardConfig::parse_toml("[dashboard]\nattention_blink=false").0;
         assert!(!config.attention_blink);
-        assert!(DashboardConfig::parse_toml("[dashboard]").0.attention_blink);
+        assert!(!DashboardConfig::parse_toml("[dashboard]").0.attention_blink);
+        assert!(DashboardConfig::parse_toml("[dashboard]").0.voxcode_enabled);
         let snapshot = Snapshot::from_agents(&agents, None, &config, None);
         let first = snapshot.styled_lines(2, 100, false);
         let second = snapshot.styled_lines(2, 100, true);
@@ -250,12 +249,12 @@ mod tests {
             let line = snapshot.styled_line(200);
             assert!(snapshot.plain_line(200).starts_with("!2 1R2I3P4S5-|"));
             assert!(line.starts_with(&format!("{}!2\x1b[0m", theme::attention_count())));
-            assert!(line.contains(&format!("{}I\x1b[0m", theme::color("yellow"))));
-            assert!(line.contains(&format!("{}P\x1b[0m", theme::color("red"))));
+            assert!(line.contains(&format!("\x1b[1m{}I\x1b[0m", theme::color("yellow"))));
+            assert!(line.contains(&format!("\x1b[1m{}P\x1b[0m", theme::color("red"))));
             for (entry, agent) in snapshot.agents.iter().zip(&agents) {
                 assert_ne!(theme::attention_count(), theme::status(&agent.status));
                 assert!(line.contains(&format!("{}{}{}\x1b[0m", theme::status(&agent.status), if entry.slot == 1 { " " } else { "" }, entry.slot)));
-                assert!(line.contains(&format!("{}{}\x1b[0m", theme::color(&entry.sandbox_color), entry.label)));
+                assert!(line.contains(&format!("{}{}\x1b[0m", theme::permission_name(&entry.sandbox_color), entry.label)));
                 assert!(line.contains(&format!("{} {}\x1b[0m", dashboard::attention_symbol(entry.status, false).map(|(_, c)| c).unwrap_or_else(|| entry.color()), entry.status)));
             }
         }
@@ -292,7 +291,7 @@ mod tests {
         assert!(snapshot.agents.iter().all(|a| a.label == "CDX-pippo" && a.status == 'I'));
         theme::set("default", None);
         let line = snapshot.styled_line(200);
-        assert!(line.contains(&format!("{}CDX-pippo\x1b[0m{} I\x1b[0m", theme::color("green"), theme::color("yellow"))));
+        assert!(line.contains(&format!("{}CDX-pippo\x1b[0m\x1b[1m{} I\x1b[0m", theme::permission_name("green"), theme::color("yellow"))));
     }
     #[test]
     fn selection_keeps_order_width_and_sandbox_name_colors() {
@@ -311,7 +310,7 @@ mod tests {
             assert!(!line.contains("[permissive]"));
             let groups = selected.groups(false);
             assert_eq!(groups[index + 1][1].1, "\x1b[38;5;15m");
-            assert_eq!(groups[index + 1][2].1, theme::color("yellow"));
+            assert_eq!(groups[index + 1][2].1, theme::permission_name("yellow"));
             for (i, group) in groups.iter().skip(1).take(9).enumerate() {
                 if i != index { assert_eq!(group[1].1, group[2].1); }
             }
@@ -335,33 +334,34 @@ mod tests {
             assert!(lines[0].contains("VP-###"));
             assert!(!lines[0].contains("!0"));
             assert!(lines[1].contains("!0"));
-            assert!(lines[1].contains(if phase { "/\x1b[0m" } else { "R\x1b[0m" }));
+            assert!(lines[1].contains("R\x1b[0m"));
         }
         snapshot.agents_only = true;
         snapshot.summary_only = false;
         assert!(!snapshot.styled_lines(2, 100, false).join("").contains("VP-"));
     }
     #[test]
-    fn running_alternates_in_place_and_attention_uses_opposite_colored_dots() {
+    fn running_stays_static_and_opt_in_attention_uses_opposite_colored_dots() {
         let agents = vec![dashboard::preview_agent("run", AgentStatus::Running),
             dashboard::preview_agent("input", AgentStatus::WaitingForInput),
             dashboard::preview_agent("permission", AgentStatus::PermissionRequired),
             dashboard::preview_agent("stopped", AgentStatus::Stopped),
             dashboard::preview_agent("unknown", AgentStatus::Unknown)];
-        let snapshot = Snapshot::from_agents(&agents, None, &DashboardConfig::default(), None);
+        let config = DashboardConfig::parse_toml("[dashboard]\nattention_blink=true").0;
+        let snapshot = Snapshot::from_agents(&agents, None, &config, None);
         for phase in [false, true] {
             let top = snapshot.summary(phase, false, false);
             let bottom = snapshot.summary(phase, true, false);
             assert_eq!(bottom[0].0, "!2");
             assert_eq!(top[2].0, " ");
-            assert_eq!(bottom[2].0, if phase { "/" } else { "R" });
+            assert_eq!(bottom[2].0, "R");
             assert_eq!(top[4].0, " ");
             assert_eq!(top[6].0, " ");
             for (index, letter, base, dot) in [(1, 'I', "yellow", "red"), (2, 'P', "red", "yellow")] {
                 let expected = (if phase { "●" } else if letter == 'I' { "I" } else { "P" }).to_string();
-                assert_eq!(bottom[2 + index * 2], (expected.clone(), theme::color(if phase { dot } else { base })));
+                assert_eq!(bottom[2 + index * 2], (expected.clone(), format!("{}{}", if phase { "" } else { "\x1b[1m" }, theme::color(if phase { dot } else { base }))));
                 let groups = snapshot.groups(phase);
-                assert_eq!(groups[index + 1][3], (format!(" {expected}"), theme::color(if phase { dot } else { base })));
+                assert_eq!(groups[index + 1][3], (format!(" {expected}"), format!("{}{}", if phase { "" } else { "\x1b[1m" }, theme::color(if phase { dot } else { base }))));
                 assert_eq!(bottom[1 + index * 2].1, snapshot.agents[index].color());
             }
             assert_eq!(bottom[8].0, "S");
@@ -393,7 +393,7 @@ mod tests {
             assert!(!lines.join("").contains("!1"));
             assert!(lines[0].contains("*1 "));
             assert!(lines[0].contains(&snapshot.agents[0].label));
-            assert!(lines[0].contains(if phase { '●' } else { 'I' }));
+            assert!(lines[0].contains('I'));
         }
     }
     #[test]

@@ -160,11 +160,12 @@ azione eseguita, tipo di agente e comportamento atteso/osservato.
 - Creare nove agenti e provare una finestra larga 100 colonne: la barra usa due
   righe e deve mostrare tutte le nove voci brevi, senza spezzare una voce.
 - Cambiare con `Alt+1/2/3`: le voci non cambiano ordine né posizione. Solo quella
-  selezionata ha `*numero` bianco; gli altri numeri hanno il colore del nome.
-  Il nome mantiene il colore sandbox e non compare `[normal]` o un altro livello.
+  selezionata ha `*numero` bianco; gli altri numeri e i nomi sono bianchi con
+  sottolineatura del colore sandbox e non compare `[normal]` o un altro livello.
 - Conteggio e numeri a sinistra devono restare sulla seconda riga.
-- Portare un agente in `R`: solo la `R` rimbalza verticalmente tra le due righe.
-- Portare agenti in `I` e `P`: `I` gialla ↔ `●` rosso; `P` rossa ↔ `●` giallo,
+- Portare un agente in `R`: la `R` resta verde e fissa, anche con lampeggio abilitato.
+- Portare agenti in `I` e `P`: lettere in grassetto e fisse per default.
+  Abilitando `attention_blink = true`: `I` gialla ↔ `●` rosso; `P` rossa ↔ `●` giallo,
   nella stessa cella, sia a sinistra sia a destra della barra e nella sidebar.
   Nessuna `v` nella riga superiore. Numeri e nomi mantengono posizione e colore.
 - `S` e `-` restano fissi sulla seconda riga. Nei passaggi `R → I/P → R`,
@@ -192,8 +193,8 @@ azione eseguita, tipo di agente e comportamento atteso/osservato.
   senza riquadri azzurri. Verificare anche restringendo la finestra.
 
 - Impostare `[dashboard] attention_blink = false`, riavviare: I/P restano lettere
-  fisse nella sidebar e nelle due parti della status bar; R continua a rimbalzare.
-  Rimuovere l'opzione o impostarla a `true`: torna l'alternanza con i pallini.
+  fisse e in grassetto nella sidebar e nelle due parti della status bar; R resta fissa.
+  Rimuovere l'opzione: stesso risultato. Impostarla a `true`: torna l'alternanza I/P con i pallini.
 - Con configurazione senza `preset`, il launcher usa minimal; `--preset classic`
   continua a selezionare esplicitamente la vista classica. Una vista salvata con
   Alt+q continua a ripristinare la visibilità scelta.
