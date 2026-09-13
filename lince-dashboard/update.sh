@@ -56,13 +56,8 @@ echo ""
 echo -e "${GREEN}[3/8] Updating layouts...${NC}"
 LAYOUT_DIR="$HOME/.config/zellij/layouts"
 mkdir -p "$LAYOUT_DIR"
-for layout in dashboard.kdl agent-single.kdl agent-multi.kdl; do
-    SRC="$SCRIPT_DIR/layouts/$layout"
-    if [ -f "$SRC" ]; then
-        cp "$SRC" "$LAYOUT_DIR/$layout"
-        echo -e "${GREEN}  ✓ $layout${NC}"
-    fi
-done
+bash "$SCRIPT_DIR/install-ui.sh"
+echo -e "${GREEN}  ✓ All layout variants and launcher updated${NC}"
 echo ""
 
 # ── Config ─────────────────────────────────────────────────────────────

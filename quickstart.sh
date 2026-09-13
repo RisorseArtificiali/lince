@@ -21,6 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=scripts/check-zellij.sh
 source "$SCRIPT_DIR/scripts/check-zellij.sh"
+source "$SCRIPT_DIR/scripts/dashboard-preset.sh"
 
 # ── Colors & formatting ──────────────────────────────────────────────
 RED='\033[0;31m'
@@ -664,7 +665,7 @@ confirm_installation() {
     echo -e "    Backends: ${BOLD}${SELECTED_BACKENDS[*]}${NC}"
     echo -e "    Levels:   ${BOLD}paranoid / normal / permissive${NC} ${DIM}(chosen per agent at spawn time)${NC}"
 
-    echo -e "  ${GREEN}✓${NC} lince-dashboard  ${DIM}(multi-agent TUI)${NC}"
+    echo -e "  ${GREEN}✓${NC} lince-dashboard  ${DIM}(multi-agent TUI; preset: ${LINCE_DASHBOARD_PRESET:-minimal})${NC}"
     echo -e "  ${GREEN}✓${NC} lince-config     ${DIM}(config CLI + lince-configure skill)${NC}"
 
     if [ "$INSTALL_VOXCODE" = true ]; then
@@ -889,7 +890,7 @@ do_install_dashboard() {
     echo ""
 
     cd "$SCRIPT_DIR/lince-dashboard"
-    if bash install.sh; then
+    if LINCE_DASHBOARD_PRESET="$LINCE_DASHBOARD_PRESET" bash install.sh; then
         echo -e "${GREEN}✓ lince-dashboard installed${NC}"
     else
         echo -e "${RED}✗ lince-dashboard installation failed${NC}"
@@ -1181,6 +1182,8 @@ done
 print_banner
 
 if [ "$USE_DEFAULTS" = true ]; then
+    LINCE_DASHBOARD_PRESET="${LINCE_DASHBOARD_PRESET:-minimal}"
+    select_dashboard_preset
     if [ "$(uname -s)" = "Darwin" ]; then
         SELECTED_BACKENDS=("seatbelt")  # bwrap is Linux-only; seatbelt is built into macOS
         echo -e "  ${DIM}Using defaults: all agents, seatbelt sandbox (macOS)${NC}"
@@ -1212,6 +1215,7 @@ else
         select_voxcode
         select_lince_lab
     fi
+    select_dashboard_preset
     confirm_installation
 fi
 

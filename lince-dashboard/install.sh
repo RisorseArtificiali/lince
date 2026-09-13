@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=scripts/check-zellij.sh
 source "$SCRIPT_DIR/../scripts/check-zellij.sh"
+source "$SCRIPT_DIR/../scripts/dashboard-preset.sh"
 
 # Sandbox isolation levels (paranoid/normal/permissive) are no longer chosen at
 # install time. Under Config v2 they are a dimension of each agent, offered by
@@ -23,6 +24,8 @@ for arg in "$@"; do
             echo "Usage: $0"
             echo ""
             echo "  Installs the lince-dashboard Zellij plugin and its config."
+            echo "  Choose a dashboard preset interactively (default: minimal)."
+            echo "  Set LINCE_DASHBOARD_PRESET=minimal|statusline|classic to skip that prompt."
             echo "  Sandbox isolation levels are offered per agent at spawn time"
             echo "  by the dashboard wizard — no install-time selection needed."
             exit 0 ;;
@@ -96,6 +99,8 @@ setup_clipboard_backend() {
     rm -f "${config}.bak"
     echo -e "${GREEN}  ✓ copy_command set for $backend${NC}"
 }
+
+select_dashboard_preset
 
 # ── Step 1: Prerequisites ─────────────────────────────────────────────
 echo -e "${GREEN}[1/14] Checking prerequisites...${NC}"
@@ -237,55 +242,14 @@ echo -e "${GREEN}[5/14] Installing layouts...${NC}"
 LAYOUT_DIR="$HOME/.config/zellij/layouts"
 mkdir -p "$LAYOUT_DIR"
 
-for layout in dashboard.kdl dashboard-vox.kdl dashboard-tiled.kdl dashboard-tiled-vox.kdl agent-single.kdl agent-multi.kdl; do
-    SRC="$SCRIPT_DIR/layouts/$layout"
-    DST="$LAYOUT_DIR/$layout"
-    if [ -f "$SRC" ]; then
-        cp "$SRC" "$DST"
-        echo -e "${GREEN}  ✓ $layout${NC}"
-    fi
-done
-echo ""
+bash "$SCRIPT_DIR/install-ui.sh"
+echo -e "${GREEN}  ✓ Layouts and launcher installed${NC}"
 
-# ── Step 6: Zellij keybinding configuration ──────────────────────────
-echo -e "${GREEN}[6/14] Zellij keybinding configuration...${NC}"
-
-ZELLIJ_CONFIG="$HOME/.config/zellij/config.kdl"
-LINCE_ZELLIJ_CONFIG="$SCRIPT_DIR/zellij-config/config.kdl"
-
-if [ -f "$LINCE_ZELLIJ_CONFIG" ]; then
-    if [ -f "$ZELLIJ_CONFIG" ]; then
-        echo -e "${YELLOW}  Existing Zellij config found: $ZELLIJ_CONFIG${NC}"
-        echo ""
-        echo "  LINCE includes keybindings optimized for AI coding agents"
-        echo "  (Ctrl+O disabled to avoid conflicts, custom mode bindings)."
-        echo "  Your current config will be backed up."
-        echo ""
-        if confirm "  Install LINCE keybindings?"; then
-            BACKUP="${ZELLIJ_CONFIG}.bak.$(date +%Y%m%d-%H%M%S)"
-            cp "$ZELLIJ_CONFIG" "$BACKUP"
-            echo -e "${GREEN}  ✓ Backup: $BACKUP${NC}"
-            cp "$LINCE_ZELLIJ_CONFIG" "$ZELLIJ_CONFIG"
-            echo -e "${GREEN}  ✓ LINCE keybindings installed${NC}"
-            setup_clipboard_backend "$ZELLIJ_CONFIG"
-        else
-            echo -e "${YELLOW}  Skipped — keeping your existing config${NC}"
-            echo -e "${YELLOW}  Note: some keybindings may conflict with AI coding agents${NC}"
-        fi
-    else
-        echo "  No existing Zellij config found."
-        if confirm "  Install LINCE keybindings? (Ctrl+O disabled for agent compatibility)"; then
-            mkdir -p "$(dirname "$ZELLIJ_CONFIG")"
-            cp "$LINCE_ZELLIJ_CONFIG" "$ZELLIJ_CONFIG"
-            echo -e "${GREEN}  ✓ LINCE keybindings installed${NC}"
-            setup_clipboard_backend "$ZELLIJ_CONFIG"
-        else
-            echo -e "${YELLOW}  Skipped${NC}"
-        fi
-    fi
-else
-    echo -e "${YELLOW}  ⚠ zellij-config/config.kdl not found — skipping${NC}"
-fi
+# ── Step 6: Session-scoped Zellij configuration ─────────────────────────
+echo -e "${GREEN}[6/14] LINCE session keybindings...${NC}"
+LINCE_SESSION_CONFIG="$HOME/.config/lince-dashboard/zellij.kdl"
+setup_clipboard_backend "$LINCE_SESSION_CONFIG"
+echo "  LINCE uses $LINCE_SESSION_CONFIG; your global Zellij config is unchanged."
 echo ""
 
 # ── Step 7: Install config ────────────────────────────────────────────
@@ -301,7 +265,7 @@ if [ -f "$CONFIG_DST" ]; then
     cp "$CONFIG_DST" "$BACKUP"
     echo -e "${YELLOW}  Existing config backed up → $(basename "$BACKUP")${NC}"
 fi
-cp "$SCRIPT_DIR/config.toml" "$CONFIG_DST"
+write_dashboard_preset_config "$SCRIPT_DIR/config.toml" "$CONFIG_DST"
 echo -e "${GREEN}  ✓ Installed: $CONFIG_DST${NC}"
 echo ""
 
@@ -460,9 +424,12 @@ echo ""
 # ── Step 13: Shell aliases ────────────────────────────────────────────
 echo -e "${GREEN}[13/14] Setting up shell aliases...${NC}"
 
-ALIAS_LINES='alias lince="zellij --layout dashboard-tiled"
-alias lince-floating="zellij --layout dashboard"
-alias zd="zellij --layout dashboard-tiled"
+ALIAS_LINES='alias lince-classic="lince-dashboard-launch --preset classic"
+alias lince-minimal="lince-dashboard-launch --preset minimal"
+alias lince-statusline="lince-dashboard-launch --preset statusline"
+alias lince="lince-dashboard-launch"
+alias lince-floating="lince-dashboard-launch --layout dashboard"
+alias zd="lince-dashboard-launch"
 alias z="zellij"
 alias zn="zellij attach -c"'
 ALIAS_COMMENT="# LINCE aliases"
@@ -480,6 +447,9 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
             "${_sed_inplace[@]}" '/# LINCE aliases/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince=/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince-floating=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-classic=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-minimal=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-statusline=/d' "$rc"
             "${_sed_inplace[@]}" '/alias zd=/d' "$rc"
             "${_sed_inplace[@]}" '/alias z="zellij"/d' "$rc"
             "${_sed_inplace[@]}" '/alias zn=/d' "$rc"

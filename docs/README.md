@@ -7,13 +7,19 @@ Static HTML + Tailwind CDN. Hosted on GitHub Pages.
 ## Local preview
 
 ```bash
-python3 -m http.server 8000
-# Open http://localhost:8000
+python3 -m http.server 8000 --directory docs
+# Run from the repository root; open http://localhost:8000
 ```
 
 ## Deploy
 
-Pushed to `main` and deployed automatically via GitHub Pages (Settings > Pages > Source: Deploy from branch `main`, root `/`).
+The site sources live in `docs/`; the documentation app in `docs/documentation/`
+uses Docsify. Changes are reviewed in the same PR as the feature. Merging to
+`main` makes them available to the configured GitHub Pages deployment.
+
+The homepage links to the [Views and Themes guide](documentation/dashboard/views-and-themes.md).
+Its palette previews in `assets/dashboard-theme-*.svg` come from the dashboard
+renderer; they are not screenshots of the compact or statusline layouts.
 
 ## Custom domain
 

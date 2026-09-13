@@ -42,21 +42,21 @@ layout {
     tab name="dashboard" {
         pane split_direction="vertical" {
             // Left column — 40%, split horizontally into A + C
-            pane size="40%" split_direction="horizontal" {
+            pane size="30%" split_direction="horizontal" {
                 // A — Dashboard plugin (70% of left column)
-                pane size="70%" focus=true {
+                pane size="70%" focus=true name="lince-controller" {
                     plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
                         config_path "~/.config/lince-dashboard/config.toml"
                     }
                 }
                 // C — Shell viewport (30% of left column)
                 // Shows ASCII art placeholder; agent floating overlay covers this on focus.
-                pane size="30%" {
+                pane size="30%" name="lince-sidebar-aux" {
                     
                 }
             }
             // Right column — 60%, full height (B)
-            pane size="60%" {
+            pane size="70%" name="lince-viewport" {
                 // B — Agent (full height)
                 command "lince-viewport-placeholder"
             }
