@@ -56,6 +56,12 @@ fn index(name: &str) -> usize {
 pub fn color(name: &str) -> String {
     CURRENT.with(|p| ansi(p.borrow().colors[index(name)], false))
 }
+/// White identity text, with the sandbox profile encoded only by its underline.
+/// SGR 58 uses the same palette as status colors, including RGB themes.
+pub fn permission_name(name: &str) -> String {
+    let underline = color(name).replacen("[38;", "[58;", 1);
+    format!("\x1b[38;5;15m\x1b[4m{underline}")
+}
 pub fn selection() -> String {
     CURRENT.with(|p| {
         let p = p.borrow();
@@ -89,6 +95,14 @@ pub fn status(status: &AgentStatus) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn permission_underline_preserves_white_text_for_indexed_and_rgb_palettes() {
+        set("default", None);
+        assert_eq!(permission_name("yellow"), "\x1b[38;5;15m\x1b[4m\x1b[58;5;3m");
+        set("dracula", None);
+        assert_eq!(permission_name("red"), "\x1b[38;5;15m\x1b[4m\x1b[58;2;255;85;85m");
+        set("default", None);
+    }
     #[test]
     fn presets_and_inheritance() {
         assert!(known("default") && known("minimal-mono") && known("dracula") && known("gruvbox"));

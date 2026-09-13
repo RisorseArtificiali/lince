@@ -42,7 +42,7 @@ Persist your choices in `~/.config/lince-dashboard/config.toml`:
 ```toml
 [dashboard]
 preset = "minimal"
-attention_blink = true # false keeps I/P steady in the status bar and compact sidebar
+attention_blink = false # opt in with true for alternating I/P dots
 sidebar_width = 25
 pane_frames = false
 theme = "dracula"
@@ -97,11 +97,11 @@ accent (cyan by default), including in the monochrome palette.
 On the right, each entry is `NUMBER AGENTTYPE-NAME STATUS`, for example `2 CDX-pippo I`.
 The type is the same configured label as the full list (`CLA`, `CDX`, etc.).
 The name is the first five characters of the actual name, with no `P-N` abbreviation.
-`AGENTTYPE-NAME` uses the sandbox-level color: red for unsandboxed, green for
+`AGENTTYPE-NAME` is white with a sandbox-colored underline: red for unsandboxed, green for
 normal/default, yellow for permissive, white for paranoid or custom/unknown levels.
 The status letter has its own state color, independently of the name. These
 semantic colors follow the selected palette.
-The selected `*number` is white; other numbers share the name color. Entries stay
+The selected `*number` is white; other numbers share the name’s colored underline. Entries stay
 in slot order and do not show a textual sandbox level. The count and compact slot overview take priority over
 ordinary names when the terminal is narrow; the overview is clipped if it cannot fit.
 
@@ -200,12 +200,20 @@ for all keys and the [usage guide](dashboard/usage-guide.md) for agent workflows
 The attention bar reserves two rows and wraps between complete agent entries.
 Nine agents with five-character ASCII names fit at 100 columns. Agent entries
 stay in slot order even when selected. Each reserves a marker position: the
-selected `*number` is white; other numbers share the sandbox color of their
-names. The sandbox level is conveyed by color, without a bracketed label.
-The left-hand count and agent numbers sit on the second row. Green `R` alternates with white `/` in place; the first row is reserved for optional VoxCode status. On the second row, yellow `I` alternates with a red `●`,
-and red `P` with a yellow `●`. The same animation appears in right-hand agent entries
-and the compact sidebar. No arrow is drawn above them; numbers retain their colors. Stopped/unknown states stay on the second row. The reserved left column
-keeps names and wrapping stationary, even with nine agents. A legacy single-row
-pane keeps all state animations in place.
+selected `*number` is white. Agent names and unselected numbers are white with a
+colored underline: green for normal, yellow for permissive, red for no sandbox,
+and white for paranoid or special profiles. Status letters are not underlined.
+Colored underlines require terminal support for SGR 58 and Zellij's
+`styled_underlines` option (enabled by default). Terminals without that support
+may show a plain white underline.
+
+The left-hand count and agent numbers sit on the second row; the first row is
+reserved for optional VoxCode status. Green `R` remains static. Yellow **I** and
+red **P** are bold and static by default, in both bar sections and the compact
+sidebar. Set `[dashboard] attention_blink = true` to alternate I with a red `●`
+and P with a yellow `●`; R remains static even with this option enabled.
+Existing configurations that explicitly set `true` retain that preference;
+set it to `false` to disable the animation. Numbers and names stay stationary.
+The reserved left column keeps names and wrapping stationary, even with nine agents.
 
 `Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/statusline, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/statusline preset. Older saved sessions keep the preset defaults. `Alt+d`, then `q`, leaves the previous saved view unchanged.

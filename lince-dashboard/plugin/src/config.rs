@@ -263,9 +263,9 @@ pub struct DashboardConfig {
     pub theme: String,
     #[serde(default)]
     pub compact: bool,
-    #[serde(default = "default_attention_blink")]
+    #[serde(default)]
     pub attention_blink: bool,
-    #[serde(default = "default_attention_blink")]
+    #[serde(default = "default_voxcode_enabled")]
     pub voxcode_enabled: bool,
     /// Runtime geometry of the named viewport in our own tab.
     #[serde(skip)]
@@ -357,7 +357,7 @@ pub struct DashboardConfig {
     pub discovered_sandbox_levels: HashMap<String, Vec<String>>,
 }
 
-fn default_attention_blink() -> bool { true }
+fn default_voxcode_enabled() -> bool { true }
 
 fn default_theme() -> String { "default".into() }
 
@@ -366,7 +366,7 @@ impl Default for DashboardConfig {
         DashboardConfig {
             theme: default_theme(),
             compact: false,
-            attention_blink: true,
+            attention_blink: false,
             voxcode_enabled: true,
             viewport: None,
             default_provider: None,

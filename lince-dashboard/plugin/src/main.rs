@@ -970,7 +970,7 @@ impl ZellijPlugin for State {
                 }
                 self.refresh_agent_geometry();
                 self.poll_hidden_panes();
-                self.sidebar_visible && self.agents.iter().any(|a| dashboard::needs_attention(&a.status) || a.status == AgentStatus::Running)
+                self.sidebar_visible && self.config.attention_blink && self.agents.iter().any(|a| dashboard::needs_attention(&a.status))
             }
             "lince-statusbar-toggle" => {
                 if self.managed_ui { self.set_statusbar_mode(self.statusbar_mode.next()); }
