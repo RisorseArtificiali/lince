@@ -99,8 +99,8 @@ for the environment, the exact steps and what is still unverified.
 - **Ctrl+Space** is also the macOS *Select the previous input source* shortcut
   when enabled (System Settings → Keyboard → Keyboard Shortcuts → Input
   Sources). Disable it or use `Alt+x`.
-- **CPU only.** Select CPU in `Alt+v`; the CUDA choice does not apply on macOS
-  and Metal/MPS acceleration is not covered.
+- **CPU only.** Select CPU in `Alt+v`; the CUDA choice does nothing on macOS and
+  the ctranslate2 backend used by VoxCode has no Metal/MPS support.
 - The worker socket lives in `/tmp/lince-voice-<uid>/` because
   `XDG_RUNTIME_DIR` is unset on macOS.
 

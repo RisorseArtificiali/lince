@@ -152,7 +152,9 @@ sh-3.2$ inserimento vocale nella scelle visibile del dashboard
 The worker was spawned by the Zellij server process, captured the microphone,
 transcribed on CPU, and the plugin inserted the text into the visible shell
 without an Enter and without the clipboard. `x` stopped the worker and the
-status bar returned to `VA-STOP`.
+status bar returned to `VA-STOP`. The same run with the `statusline` preset
+(sidebar hidden) delivered the text identically; no difference between
+`minimal` and `statusline` with real audio.
 
 One observation, not shown to be macOS-specific: when `Alt+v` was the very first
 popup of a fresh session and the floating layer had never been shown, the
@@ -172,9 +174,14 @@ The problem did not occur once any popup had been opened and closed first.
 - First-run microphone permission prompt for a terminal app without prior
   Microphone access, and the behaviour when access is denied (expected: level
   meter stays at zero, no text).
-- Intel Macs, Metal/MPS acceleration, `voxcode` standalone UI.
-- Differences between `minimal` and `statusline` with real audio (the fixture run
-  covered both presets; the real-audio run used `minimal`).
+- Intel Macs and the `voxcode` standalone UI.
+
+Metal/MPS is not a pending check but a stack limitation: VoxCode transcribes
+only through faster-whisper/ctranslate2, and the ctranslate2 wheel installed on
+macOS reports `unsupported device mps` / `unsupported device metal` and is not
+compiled with CUDA (`ctranslate2.get_supported_compute_types`). CPU (`int8`,
+`float32`) is the only option on macOS today; the adapter's CUDA choice does
+nothing here.
 
 ## Follow-ups
 
