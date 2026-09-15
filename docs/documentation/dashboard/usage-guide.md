@@ -53,6 +53,7 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 | `Alt+s` | Toggle the sidebar (minimal/statusline) |
 | `Alt+n` | Open the creation wizard from any pane |
 | `Alt+1`–`Alt+9` | Focus an agent from any pane |
+| `Alt+k` / `Alt+j` | Previous / next agent in status bar order, including locked mode |
 | `Alt+PageUp` / `Alt+PageDown` | Cycle agents from any pane |
 
 ### Inline Name Prompt

@@ -22,12 +22,14 @@ pub fn save_state_async(
     agents: Vec<SavedAgentInfo>,
     next_agent_id: u32,
     session_defaults: Option<SessionDefaults>,
+    manual_agent_order: bool,
     view: Option<SavedView>,
 ) -> Result<(), String> {
     let path = state_file_path(launch_dir);
 
     let state = SavedState {
         version: STATE_VERSION,
+        manual_agent_order,
         view,
         agents,
         next_agent_id,
@@ -85,7 +87,7 @@ mod tests {
         use crate::types::StatusBarMode;
         for sidebar in [false, true] {
             for mode in [StatusBarMode::Hidden, StatusBarMode::Summary, StatusBarMode::Full, StatusBarMode::Agents] {
-                let state = SavedState { version: 3, agents: vec![], next_agent_id: 0,
+                let state = SavedState { manual_agent_order: false, version: 3, agents: vec![], next_agent_id: 0,
                     session_defaults: None, view: Some(SavedView { sidebar_visible: sidebar, statusbar_mode: mode }) };
                 let restored = parse_loaded_state(&serde_json::to_vec(&state).unwrap()).unwrap().view.unwrap();
                 assert_eq!(restored.sidebar_visible, sidebar);
@@ -129,6 +131,7 @@ mod tests {
         let state = parse_loaded_state(json).expect("v2 state must load");
         assert!(state.session_defaults.is_none());
         assert!(state.view.is_none());
+        assert!(!state.manual_agent_order);
     }
 
     /// gh#62: v3 state file with `session_defaults` round-trips through

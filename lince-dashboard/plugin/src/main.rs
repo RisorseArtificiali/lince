@@ -82,6 +82,7 @@ struct State {
     config_path: Option<String>,
     config_mtime: u64,
     agents: Vec<AgentInfo>,
+    manual_agent_order: bool,
     selected_index: usize,
     focused_agent: Option<String>,
     show_detail: bool,
@@ -161,6 +162,7 @@ impl Default for State {
             config_path: None,
             config_mtime: 0,
             agents: Vec::new(),
+            manual_agent_order: false,
             selected_index: 0,
             focused_agent: None,
             show_detail: false,
@@ -538,6 +540,7 @@ impl ZellijPlugin for State {
                         if exit_code == Some(0) && !stdout.is_empty() {
                             match state_file::parse_loaded_state(&stdout) {
                                 Ok(saved) => {
+                                    self.manual_agent_order = saved.manual_agent_order;
                                     self.next_agent_id = saved.next_agent_id;
                                     self.session_defaults = saved.session_defaults;
                                     self.pending_view = saved.view;
@@ -1047,8 +1050,6 @@ fn workdir_key(s: &str) -> &str {
 }
 
 impl State {
-    /// Sort agents by project_dir, then by name within each group.
-    /// Preserves the selected agent across the sort.
     /// Record a freshly-spawned agent's project dir into the global recents
     /// (MRU), then persist asynchronously. Only fires on user-initiated spawns
     /// — never on session restore (#127).
@@ -1058,7 +1059,10 @@ impl State {
         }
     }
 
+    /// Apply the default directory/name order unless the user has moved agents.
+    /// Preserve selection; in manual mode new agents stay appended to the list.
     fn sort_agents_by_dir(&mut self) {
+        if self.manual_agent_order { return; }
         let selected_id = self.agents.get(self.selected_index).map(|a| a.id.clone());
 
         self.agents.sort_by(|a, b| {
@@ -1070,6 +1074,17 @@ impl State {
             if let Some(pos) = self.agents.iter().position(|a| a.id == id) {
                 self.selected_index = pos;
             }
+        }
+    }
+
+    /// Move one slot without wrapping, keeping selection and focus on the same agent.
+    fn move_selected_agent(&mut self, down: bool) {
+        let from = self.selected_index;
+        let to = if down { from.checked_add(1) } else { from.checked_sub(1) };
+        if let Some(to) = to.filter(|&to| from < self.agents.len() && to < self.agents.len()) {
+            self.agents.swap(from, to);
+            self.selected_index = to;
+            self.manual_agent_order = true;
         }
     }
 
@@ -1135,6 +1150,19 @@ impl State {
                     default_name,
                     label: "Name",
                 });
+                true
+            }
+            BareKey::Char('K') => {
+                self.move_selected_agent(false);
+                true
+            }
+            BareKey::Char('J') => {
+                self.move_selected_agent(true);
+                true
+            }
+            BareKey::Char('a') => {
+                self.manual_agent_order = false;
+                self.sort_agents_by_dir();
                 true
             }
             BareKey::Char('r') => {
@@ -2407,7 +2435,7 @@ impl State {
             .map(SavedAgentInfo::from)
             .collect();
 
-        match state_file::save_state_async(dir, saved, self.next_agent_id, self.session_defaults.clone(),
+        match state_file::save_state_async(dir, saved, self.next_agent_id, self.session_defaults.clone(), self.manual_agent_order,
             self.managed_ui.then(|| SavedView { sidebar_visible: self.sidebar_visible, statusbar_mode: self.statusbar_mode })) {
             Ok(()) => {
                 self.status_message = Some("Saving state...".to_string());
@@ -2782,6 +2810,69 @@ mod managed_ui_tests {
             dashboard::preview_agent("second-agent", types::AgentStatus::WaitingForInput)];
         state
     }
+    #[test]
+    fn agent_moves_preserve_identity_across_directories_and_reset_to_default() {
+        let mut state = controller();
+        state.agents[1].project_dir = "/other/project".into();
+        state.focused_agent = Some("first-agent".into());
+        state.handle_key(KeyWithModifier::new(BareKey::Char('J')));
+        assert_eq!(state.selected_index, 1);
+        assert_eq!(state.agents[1].id, "first-agent");
+        assert_eq!(state.focused_agent.as_deref(), Some("first-agent"));
+        assert!(state.manual_agent_order);
+
+        // Renaming and adding agents must not undo the user's arrangement.
+        state.agents[1].name = "aaa-renamed".into();
+        state.agents.push(dashboard::preview_agent("aaa-new", AgentStatus::Running));
+        state.sort_agents_by_dir();
+        assert_eq!(state.agents[1].id, "first-agent");
+        assert_eq!(state.agents[2].id, "aaa-new");
+
+        state.handle_key(KeyWithModifier::new(BareKey::Char('K')));
+        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.agents[0].id, "first-agent");
+        state.handle_key(KeyWithModifier::new(BareKey::Char('a')));
+        assert!(!state.manual_agent_order);
+        assert_eq!(state.agents.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(),
+            vec!["second-agent", "aaa-new", "first-agent"]);
+        assert_eq!(state.selected_index, 2);
+    }
+
+    #[test]
+    fn agent_moves_at_boundaries_do_not_wrap_or_enable_manual_order() {
+        let mut state = State::default();
+        for names in [vec![], vec!["one"], vec!["one", "two"]] {
+            state.agents = names.iter().map(|name| dashboard::preview_agent(name, AgentStatus::Running)).collect();
+            state.selected_index = 0;
+            state.move_selected_agent(false);
+            assert_eq!(state.selected_index, 0);
+            state.selected_index = state.agents.len().saturating_sub(1);
+            state.move_selected_agent(true);
+            assert_eq!(state.selected_index, state.agents.len().saturating_sub(1));
+            assert!(!state.manual_agent_order);
+            assert_eq!(state.agents.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), names);
+        }
+    }
+
+    #[test]
+    fn saved_manual_order_survives_reload_and_sort() {
+        let mut state = controller();
+        state.move_selected_agent(true);
+        let saved = types::SavedState {
+            version: 3, manual_agent_order: state.manual_agent_order,
+            agents: state.agents.iter().map(SavedAgentInfo::from).collect(),
+            next_agent_id: 2, session_defaults: None, view: None,
+        };
+        let loaded = state_file::parse_loaded_state(&serde_json::to_vec(&saved).unwrap()).unwrap();
+        let mut restored = State::default();
+        restored.manual_agent_order = loaded.manual_agent_order;
+        restored.agents = loaded.agents.iter()
+            .map(|a| dashboard::preview_agent(&a.name, AgentStatus::Running)).collect();
+        restored.sort_agents_by_dir();
+        assert_eq!(restored.agents[0].name, "second-agent");
+        assert_eq!(restored.agents[1].name, "first-agent");
+    }
+
     #[test]
     fn global_list_is_full_and_info_targets_the_focused_agent() {
         let mut state = controller();
