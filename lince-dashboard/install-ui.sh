@@ -42,6 +42,10 @@ import re
 path = Path(sys.argv[1])
 text = path.read_text()
 replacements = {
+    'bind "Alt j" { MoveFocus "down"; }': 'bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }',
+    'bind "Alt k" { MoveFocus "up"; }': 'bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }',
+    'bind "Alt left" { MoveFocusOrTab "left"; }': 'bind "Alt left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }',
+    'bind "Alt right" { MoveFocusOrTab "right"; }': 'bind "Alt right" { MessagePlugin { name "cycle-agent"; payload "next"; }; }',
     'bind "Alt h" { MoveFocusOrTab "left"; }': 'bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }',
     'bind "Alt i" { MoveTab "left"; }': 'bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }',
     'bind "Alt l" { MoveFocusOrTab "right"; }': 'bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }',
@@ -72,6 +76,14 @@ for key, binding in [
     if f'bind "{key}"' not in updated:
         updated = re.sub(r'(?m)^([ \t]*)(bind "Alt n" \{ MessagePlugin \{ name "lince-ui-open"; payload "wizard"; \}; \})$',
             lambda m: m.group(0) + '\n' + m.group(1) + binding, updated)
+# Add cycling in existing locked blocks without overriding custom bindings.
+def add_locked_cycle(match):
+    body = match.group(0)
+    for key, direction in [('left', 'prev'), ('right', 'next'), ('j', 'next'), ('k', 'prev')]:
+        if f'bind "Alt {key}"' not in body:
+            body += f'        bind "Alt {key}" {{ MessagePlugin {{ name "cycle-agent"; payload "{direction}"; }}; }}\n'
+    return body
+updated = re.sub(r'(?m)^    locked \{\n(?:(?!^    \}).*\n)*', add_locked_cycle, updated)
 if updated != text:
     path.with_suffix('.kdl.bak-shortcuts').write_text(text)
     path.write_text(updated)

@@ -80,6 +80,12 @@ entry in the attention bar convey the sandbox level through color; details show
 the explicit identity (`NOSB` means unsandboxed).
 
 Use `j`/`k` to select, `Enter` or `f` to focus, and `i` for details.
+In the agent list, `r` renames the selected agent; `K` (Shift+k) moves it up
+and `J` (Shift+j) moves it down, including across project directories.
+The default order is alphabetical by directory, then name. After a move,
+renaming keeps the custom order and new agents are appended. Number shortcuts
+and agent cycling follow the displayed order. Save and quit (`Alt+q` or `Q`)
+preserves it for the next session. Press `a` to restore the default order.
 `PageUp`/`PageDown` scroll long details. In the minimal view, details, help and
 creation dialogs open in a larger bordered popup without resizing the sidebar or viewport.
 `Alt+i` opens the focused agent’s information directly; `Alt+h` opens help.
@@ -113,7 +119,8 @@ ordinary names when the terminal is narrow; the overview is clipped if it cannot
 | `-` | Unknown or no native status hooks | No |
 
 While typing in an agent, `Alt+d` opens the controller, `Alt+1`–`Alt+9` selects
-an agent, and `Alt+PageUp`/`Alt+PageDown` cycles agents. Bare letters are sent to
+an agent, and `Alt+k`/`Alt+j` cycles agents in status bar order, wrapping
+at either end (also in locked mode). `Alt+PageUp`/`Alt+PageDown` also cycles agents. Bare letters are sent to
 the agent. With the attention row focused, digits select agents, arrow keys cycle,
 and Enter opens the controller.
 

@@ -821,11 +821,11 @@ fn status_bar_hints(empty: bool, focused: bool, detail: bool) -> Vec<KeyHint> {
     if empty {
         vec![("n", "New-defaults"), ("N", "New-wizard"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else if focused {
-        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+PgDn/Up", "Cycle"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+k/j", "Cycle"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else if detail {
-        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("x", "Kill"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else {
-        vec![("n", "New-defaults"), ("N", "New-wizard"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("x", "Kill"), ("i", "Info"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("n", "New-defaults"), ("N", "New-wizard"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("i", "Info"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     }
 }
 
@@ -1187,8 +1187,9 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
         "Alt+i/h      Info / help", "Alt+s        Toggle sidebar",
         "Alt+b        Bar: hidden / left / full / right", "Alt+n        New agent wizard",
         "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
-        "Alt+PgUp/Dn  Cycle agents", "i            Info (PgUp/Dn scroll)",
+        "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "i            Info (PgUp/Dn scroll)",
         "n            New agent", "N            New agent wizard", "r            Rename selected",
+        "K/J          Move selected up/down", "a            Reset directory/name order",
         "x            Kill selected", "s            Relay last message", "S            Relay N messages",
         "Alt+q / Q    Save and quit", "q (list)     Quit without saving", "Esc / ?      Close help"];
     for row in 0..rows {

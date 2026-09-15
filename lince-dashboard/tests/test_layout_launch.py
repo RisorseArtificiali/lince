@@ -120,6 +120,70 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(active.read_text(), migrated)
             self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), old)
 
+    def test_arrow_cycle_migration_updates_defaults_and_preserves_custom_keys(self):
+        import os
+        import subprocess
+        import tempfile
+        for custom in (False, True):
+            with tempfile.TemporaryDirectory() as directory:
+                active = Path(directory) / ".config/lince-dashboard/zellij.kdl"
+                active.parent.mkdir(parents=True)
+                source = (ROOT / "zellij-config/config.kdl").read_text()
+                for key, direction in (("left", "prev"), ("right", "next")):
+                    binding = f'        bind "Alt {key}" {{ MessagePlugin {{ name "cycle-agent"; payload "{direction}"; }}; }}'
+                    source = source.replace(binding + "\n", "", 1)
+                    source = source.replace(binding, f'        bind "Alt {key}" {{ MoveFocusOrTab "{key}"; }}')
+                if custom:
+                    source = source.replace('    locked {', '    locked {\n        bind "Alt left" { Write 42; }')
+                    source = source.replace('bind "Alt right" { MoveFocusOrTab "right"; }', 'bind "Alt right" { Write 43; }')
+                active.write_text(source)
+                env = {**os.environ, "HOME": directory}
+                subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
+                migrated = active.read_text()
+                for key, direction in (("left", "prev"), ("right", "next")):
+                    binding = f'bind "Alt {key}" {{ MessagePlugin {{ name "cycle-agent"; payload "{direction}"; }}; }}'
+                    self.assertEqual(migrated.count(binding), 1 if custom else 2)
+                if custom:
+                    self.assertIn('bind "Alt left" { Write 42; }', migrated)
+                    self.assertIn('bind "Alt right" { Write 43; }', migrated)
+                self.assertIn('bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }', migrated)
+                self.assertIn('bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }', migrated)
+                self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), source)
+                subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
+                self.assertEqual(active.read_text(), migrated)
+                self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), source)
+
+    def test_jk_cycle_migration_updates_defaults_and_preserves_custom_keys(self):
+        import os
+        import subprocess
+        import tempfile
+        for custom in (False, True):
+            with tempfile.TemporaryDirectory() as directory:
+                active = Path(directory) / ".config/lince-dashboard/zellij.kdl"
+                active.parent.mkdir(parents=True)
+                source = (ROOT / "zellij-config/config.kdl").read_text()
+                for key, direction in (("k", "prev"), ("j", "next")):
+                    binding = f'        bind "Alt {key}" {{ MessagePlugin {{ name "cycle-agent"; payload "{direction}"; }}; }}'
+                    source = source.replace(binding + "\n", "", 1)
+                    source = source.replace(binding, f'        bind "Alt {key}" {{ MoveFocus "{"up" if key == "k" else "down"}"; }}')
+                if custom:
+                    source = source.replace('    locked {', '    locked {\n        bind "Alt k" { Write 42; }')
+                    source = source.replace('bind "Alt j" { MoveFocus "down"; }', 'bind "Alt j" { Write 43; }')
+                active.write_text(source)
+                env = {**os.environ, "HOME": directory}
+                subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
+                migrated = active.read_text()
+                for key, direction in (("k", "prev"), ("j", "next")):
+                    binding = f'bind "Alt {key}" {{ MessagePlugin {{ name "cycle-agent"; payload "{direction}"; }}; }}'
+                    self.assertEqual(migrated.count(binding), 1 if custom else 2)
+                if custom:
+                    self.assertIn('bind "Alt k" { Write 42; }', migrated)
+                    self.assertIn('bind "Alt j" { Write 43; }', migrated)
+                self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), source)
+                subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
+                self.assertEqual(active.read_text(), migrated)
+                self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), source)
+
     def test_install_update_preserve_user_session_config(self):
         import os
         import subprocess

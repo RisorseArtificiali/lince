@@ -563,6 +563,9 @@ pub struct SavedView {
 /// Top-level saved state written to `.lince-dashboard`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SavedState {
+    /// Keep the serialized list order on restore; older files use directory/name order.
+    #[serde(default)]
+    pub manual_agent_order: bool,
     #[serde(default)]
     pub view: Option<SavedView>,
     pub version: u32,
