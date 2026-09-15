@@ -15,6 +15,7 @@ import select
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import termios
 import time
@@ -49,7 +50,12 @@ def check(zellij, wasm, preset):
                        for i in (1, 2, 3)]}))
         (work / "session.kdl").write_text((ROOT / "zellij-config/config.kdl").read_text()
             + f'\nenv {{ PATH "{work}:{Path(zellij).parent}:/usr/bin:/bin"; }}\n')
-        permissions = work / "cache/zellij/permissions.kdl"
+        # Zellij reads plugin permissions from the platform cache directory:
+        # $XDG_CACHE_HOME on Linux, ~/Library/Caches on macOS (HOME is redirected below).
+        if sys.platform == "darwin":
+            permissions = work / "Library/Caches/org.Zellij-Contributors.Zellij/permissions.kdl"
+        else:
+            permissions = work / "cache/zellij/permissions.kdl"
         permissions.parent.mkdir(parents=True)
         permissions.write_text(f'"{wasm}" {{\n RunCommands\n ReadApplicationState\n ReadCliPipes\n'
                                ' WriteToStdin\n ChangeApplicationState\n OpenTerminalsOrPlugins\n'
@@ -57,7 +63,7 @@ def check(zellij, wasm, preset):
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 100, 0, 0))
         env = {key: value for key, value in os.environ.items() if not key.startswith("ZELLIJ")}
-        env.update(TERM="xterm-256color", XDG_CACHE_HOME=str(work / "cache"),
+        env.update(TERM="xterm-256color", XDG_CACHE_HOME=str(work / "cache"), HOME=str(work),
                    PATH=f"{Path(zellij).parent}:{work}:{os.environ['PATH']}")
         session = f"lince-ui-test-{uuid.uuid4().hex[:10]}"
         process = subprocess.Popen(
