@@ -98,6 +98,7 @@ class LayoutTests(unittest.TestCase):
             old = ('keybinds {\n    locked {\n        bind "Ctrl l" { SwitchToMode "normal"; }\n    }\n'
                    '    shared_except "locked" {\n'
                    '        bind "Alt n" { NewPane; }\n'
+                   '        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
                    '        bind "Alt l" { MessagePlugin { name "lince-sidebar-toggle"; }; }\n'
                    '        bind "Alt i" { Write 42; }\n    }\n}\n')
             active.write_text(old)
@@ -109,7 +110,10 @@ class LayoutTests(unittest.TestCase):
             self.assertNotIn('bind "Alt l"', migrated)
             self.assertEqual(migrated.count('bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }'), 2)
-            self.assertEqual(migrated.count('bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
             self.assertTrue((Path(directory) / ".local/bin/lince-voice").is_file())
             self.assertIn('bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }', migrated)

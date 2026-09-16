@@ -1182,12 +1182,12 @@ pub fn render_wizard(
 
 pub fn render_help_overlay(rows: usize, cols: usize) {
     if rows == 0 || cols == 0 { return; }
-    let hints = ["LINCE — Keybindings", "Alt+d        Expanded agent list",
-        "Alt+v        VoxCode settings / start / pause / stop", "Alt+x / Ctrl+Space  Toggle PTT recording",
-        "Alt+i/h      Info / help", "Alt+s        Toggle sidebar",
+    let hints = ["LINCE — Keybindings", "Alt+d        Detailed agent list",
+        "Alt+v        VoxCode settings / start / mute / stop", "Alt+m          Mute/unmute VoxCode",
+        "Alt+t / Ctrl+Space  Toggle PTT recording", "Alt+i/h/?    Info / help", "Alt+s        Toggle sidebar",
         "Alt+b        Bar: hidden / left / full / right", "Alt+n        New agent wizard",
         "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
-        "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "i            Info (PgUp/Dn scroll)",
+        "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "Alt+x        Kill focused agent", "i            Info (PgUp/Dn scroll)",
         "n            New agent", "N            New agent wizard", "r            Rename selected",
         "K/J          Move selected up/down", "a            Reset directory/name order",
         "x            Kill selected", "s            Relay last message", "S            Relay N messages",
@@ -1200,6 +1200,17 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn help_uses_current_global_shortcuts_and_detailed_list_name() {
+        let frame = crate::render_output::capture(|| render_help_overlay(20, 80));
+        assert!(frame.contains("Detailed agent list"));
+        assert!(frame.contains("Alt+k/j"));
+        assert!(frame.contains("Alt+m"));
+        assert!(frame.contains("Alt+t / Ctrl+Space"));
+        assert!(frame.contains("Alt+x        Kill focused agent"));
+        assert!(!frame.contains("Alt+←/→"));
+    }
 
     /// Plain text fits — return as-is.
     #[test]
@@ -1401,7 +1412,7 @@ fn render_compact(
         let footer = if detail.is_some() { "PgUp/PgDn scroll i:close".into() } else { message.map(str::to_string).unwrap_or_else(||
             if matches!(relay, Some(RelayPhase::DeliveryPending { .. })) {
                 "Enter:send Esc:cancel".into()
-            } else { format!("!{waiting} Alt+d:list i:info") }) };
+            } else { format!("!{waiting} Alt+d:details i:info") }) };
         print!("{}", clip_cells(&footer, cols));
     }
 }

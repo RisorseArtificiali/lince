@@ -36,12 +36,12 @@ available; backend-specific configuration remains in VoxCode's own config.
 
 - `s`: save configuration.
 - `a`: save changes and start listening; model loading is indicated separately.
-- `p`: pause/resume. Pausing closes the microphone stream and discards unfinished
+- `m`: mute/unmute. Muting closes the microphone stream and discards unfinished
   speech and pending transcription results; the loaded model stays available.
 - `x`: stop, release the microphone and model, clear the unsent buffer.
 - `i`: insert the current transcription buffer into the target terminal.
 - `c`: clear the buffer.
-- Escape: close the popup, keeping the chosen listening/paused state.
+- Escape: close the popup, keeping the chosen listening/muted state.
 
 Stop before editing settings. They are saved immediately and atomically in
 `~/.config/lince-dashboard/voice.json`, independently of the project agent state.
@@ -51,7 +51,7 @@ stopped**. The microphone is opened only after an explicit start.
 
 ## Push-to-talk and voice activation
 
-In PTT mode, `Alt+x` or `Ctrl+Space` starts recording and a second press stops it
+In PTT mode, `Alt+t` or `Ctrl+Space` starts recording and a second press stops it
 for transcription. Both shortcuts control the same recording: you can start with
 one and stop with the other. `Ctrl+Space` is reserved for PTT rather than being
 forwarded to the application in the pane. When VoxCode is configured but stopped,
@@ -61,8 +61,9 @@ These global shortcuts also work in Zellij locked mode.
 
 VAD mode records speech automatically after starting VoxCode. Silence ends each
 segment. The threshold and silence duration come from VoxCode's `[vad]` config.
-Reopen `Alt+v` at any time to pause or stop it. While paused the microphone is
-closed, so resume through the popup rather than a spoken command.
+`Alt+m` mutes or unmutes VoxCode from any pane. Reopen `Alt+v` at any time to
+mute or stop it. While muted the microphone is closed, so unmute with `Alt+m`,
+the popup, or a spoken command.
 
 Text accumulates in the buffer unless auto-insert is enabled. Existing VoxCode
 voice commands such as `comando: invia` and `comando: cancella` still send or clear
@@ -85,7 +86,7 @@ The standalone `voxcode-text` pipe retains its existing focused/selected-agent r
 | `VP-LOAD` / `VA-LOAD` | Loading the transcription model |
 | `VP-###···` / `VA-###···` | Live microphone level, six fixed cells |
 | `VP-...` / `VA-...` | Transcribing |
-| `VP-PAUSA` / `VA-PAUSA` | Temporarily muted |
+| `VP-MUTE` / `VA-MUTE` | Temporarily muted |
 | `V-ERR` | Error; details are shown in the popup |
 
 The left agent summary stays entirely on the second row. Green `R` alternates
@@ -94,7 +95,7 @@ agents-only, the voice indicator is hidden too, while voice shortcuts still work
 Disabling voice integration or not installing VoxCode leaves the first row free.
 
 Each dashboard controller owns a private local voice worker. Text delivery is
-acknowledged to avoid duplication; audio/results queued before a pause are
+acknowledged to avoid duplication; audio/results queued before muting are
 invalidated. Normal dashboard exit stops the worker; after an interrupted session
 it expires when no dashboard polls it for 20 seconds. No microphone or model is
 needed for the automated tests; real audio is verified with the smoke checklist.

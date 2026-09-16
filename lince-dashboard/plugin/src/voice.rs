@@ -36,13 +36,13 @@ pub struct Snapshot {
     pub events: Vec<TextEvent>,
 }
 impl Snapshot {
-    pub fn active(&self) -> bool { matches!(self.status.as_str(), "loading" | "listening" | "recording" | "transcribing" | "paused") }
+    pub fn active(&self) -> bool { matches!(self.status.as_str(), "loading" | "listening" | "recording" | "transcribing" | "muted") }
     pub fn indicator(&self) -> String {
         if !self.error.is_empty() { return "V-ERR     ".into(); }
         if !self.settings.configured { return "V-??????  ".into(); }
         let prefix = if self.settings.mode == "ptt" { "VP" } else { "VA" };
         let suffix = match self.status.as_str() {
-            "paused" => "PAUSA ".into(),
+            "muted" => "MUTE  ".into(),
             "loading" => "LOAD  ".into(),
             "transcribing" => "...   ".into(),
             "stopped" | "" => "STOP  ".into(),
@@ -84,9 +84,9 @@ impl Voice {
         lines.push(format!("Buffer: {}", self.snapshot.buffer));
         if !self.snapshot.error.is_empty() { lines.push(format!("Error: {}", self.snapshot.error)); }
         lines.push("Tab/↑/↓ field · ←/→ change · Enter edit/finish".into());
-        lines.push("[s] Save [a] Start [p] Pause/resume [x] Stop".into());
+        lines.push("[s] Save [a] Start [m] Mute/unmute [x] Stop".into());
         lines.push("[i] Insert buffer [c] Clear [r] Refresh microphones [Esc] Close".into());
-        lines.push("Alt+x / Ctrl+Space: toggle PTT. Text is inserted without Enter.".into());
+        lines.push("Alt+m: mute/unmute · Alt+t / Ctrl+Space: toggle PTT. Text is inserted without Enter.".into());
         lines.push("Stop before editing. Settings persist; listening never auto-starts.".into());
         for line in lines.iter().take(rows) {
             crate::render_output::write(format_args!("{}\n", crate::dashboard::clip_cells(line, cols)));
@@ -139,21 +139,21 @@ mod tests {
         snapshot.settings.configured = true;
         for mode in ["ptt", "vad"] {
             snapshot.settings.mode = mode.into();
-            for state in ["stopped", "loading", "paused", "listening", "recording", "transcribing"] {
+            for state in ["stopped", "loading", "muted", "listening", "recording", "transcribing"] {
                 snapshot.status = state.into();
                 snapshot.level = 99;
                 assert_eq!(snapshot.indicator().chars().count(), 10);
             }
         }
-        snapshot.status = "paused".into();
-        assert!(snapshot.indicator().contains("PAUSA"));
+        snapshot.status = "muted".into();
+        assert!(snapshot.indicator().contains("MUTE"));
         snapshot.status = "stopped".into();
         assert!(!snapshot.active());
     }
     #[test]
-    fn configuration_editing_is_blocked_during_listening_and_pause() {
+    fn configuration_editing_is_blocked_during_listening_and_mute() {
         let mut voice = Voice::default();
-        for status in ["listening", "paused", "loading"] {
+        for status in ["listening", "muted", "loading"] {
             voice.snapshot.status = status.into();
             let original = voice.draft.clone();
             voice.edit_key(&KeyWithModifier::new(BareKey::Right));

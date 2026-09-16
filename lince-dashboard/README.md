@@ -75,10 +75,11 @@ Press `n` to spawn an agent (quick name prompt), or `N` for the full wizard (typ
 | `h` / `Esc` | Hide agent pane |
 | `j` / `k` | Navigate agent list |
 | `i` | Toggle details; PageUp/PageDown scroll |
-| `Alt+d` | Expanded list popup from any pane |
+| `Alt+d` | Detailed agent list popup from any pane |
 | `Alt+i` / `Alt+h` | Information / help popup |
 | `Alt+s` | Toggle sidebar (minimal/statusline) |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order (also in locked mode) |
+| `Alt+x` | Kill focused agent and focus the next agent, if any |
 | `Alt+b` | Cycle status bar: hidden → left summary → full → agents only (minimal/statusline) |
 | `Alt+n` | Creation wizard |
 | `Alt+1`–`Alt+9` | Focus agent from any pane |
@@ -196,4 +197,4 @@ A trailing backslash is not a portable multiline shortcut for Codex.
 
 The installer asks for a preset with descriptions and a documentation link; Enter selects `minimal`. Quickstart asks only once, and `--defaults` uses `minimal`. For unattended preset selection, set `LINCE_DASHBOARD_PRESET=minimal`, `statusline`, or `classic`. The selected preset is saved in the dashboard config.
 
-Voice input is available on demand with `Alt+v` and PTT with `Alt+x` / `Ctrl+Space`, without a permanent pane. Settings persist; the microphone starts only on request. See [Voice input](https://lince.sh/documentation/#/dashboard/voice-input).
+Voice input is available on demand with `Alt+v`, mute/unmute with `Alt+m`, and PTT with `Alt+t` / `Ctrl+Space`, without a permanent pane. Settings persist; the microphone starts only on request. See [Voice input](https://lince.sh/documentation/#/dashboard/voice-input).

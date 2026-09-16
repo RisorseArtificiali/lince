@@ -45,8 +45,8 @@ with path.with_suffix(".lock").open("a") as lock:
         state["status"] = "stopped"
     elif action == "start":
         state["status"] = "listening"
-    elif action == "pause":
-        state["status"] = "listening" if state["status"] == "paused" else "paused"
+    elif action == "mute":
+        state["status"] = "listening" if state["status"] == "muted" else "muted"
     elif action == "ptt":
         state["status"] = "listening" if state["status"] == "recording" else "recording"
         if state["status"] == "listening":

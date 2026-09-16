@@ -48,13 +48,14 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 | `[` | Focus previous agent directly |
 | `i` | Toggle info/detail view (`PageUp` / `PageDown` scroll) |
 | `?` | Show help |
-| `Alt+d` | Open the expanded list popup from any pane |
-| `Alt+i` / `Alt+h` | Open information / help directly |
+| `Alt+d` | Open the detailed agent list from any pane |
+| `Alt+i` / `Alt+h` / `Alt+?` | Open information / help directly |
 | `Alt+s` | Toggle the sidebar (minimal/statusline) |
 | `Alt+n` | Open the creation wizard from any pane |
 | `Alt+1`–`Alt+9` | Focus an agent from any pane |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order, including locked mode |
 | `Alt+PageUp` / `Alt+PageDown` | Cycle agents from any pane |
+| `Alt+x` | Kill the focused agent and focus the next agent, if any |
 
 ### Inline Name Prompt
 
@@ -200,7 +201,7 @@ lince-dashboard-launch --preset minimal --layout dashboard-tiled-vox
 ## Voice Relay
 
 VoxCode is now available on demand in any layout. Press `Alt+v` to configure,
-start, pause or stop it. `Alt+x` / `Ctrl+Space` toggles PTT recording; the first row of the
+start, mute or stop it. `Alt+m` mutes/unmutes VoxCode; `Alt+t` / `Ctrl+Space` toggles PTT recording; the first row of the
 left status-bar section shows the live microphone level. Text goes to the last
 active visible agent or shell. Settings persist across dashboard restarts;
 listening never starts automatically. See [Voice input](dashboard/voice-input.md).
