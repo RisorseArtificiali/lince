@@ -75,12 +75,17 @@ impl Snapshot {
             let name_color = theme::permission_name(&entry.sandbox_color);
             let (symbol, color) = dashboard::attention_symbol(entry.status, dot && !self.suppress_attention_blink)
                 .unwrap_or_else(|| (entry.status, entry.color()));
+            // Match the selected-row treatment in the sidebar: the focused
+            // agent is a full highlighted tab, with the selection foreground
+            // retained for contrast instead of the normal white name colour.
+            let selected = entry.focused.then(theme::selection);
+            let tab_color = |color: String| selected.clone().unwrap_or(color);
             groups.push(vec![
                 ("|".into(), theme::color("white")),
                 (format!("{}{} ", if entry.focused { '*' } else { ' ' }, entry.slot),
-                    if entry.focused { "\x1b[38;5;15m".into() } else { name_color.clone() }),
-                (entry.label.clone(), name_color),
-                (format!(" {symbol}"), color),
+                    tab_color(name_color.clone())),
+                (entry.label.clone(), tab_color(name_color)),
+                (format!(" {symbol}"), tab_color(color)),
             ]);
         }
         if let Some(warning) = &self.warning {
@@ -254,8 +259,11 @@ mod tests {
             for (entry, agent) in snapshot.agents.iter().zip(&agents) {
                 assert_ne!(theme::attention_count(), theme::status(&agent.status));
                 assert!(line.contains(&format!("{}{}{}\x1b[0m", theme::status(&agent.status), if entry.slot == 1 { " " } else { "" }, entry.slot)));
-                assert!(line.contains(&format!("{}{}\x1b[0m", theme::permission_name(&entry.sandbox_color), entry.label)));
-                assert!(line.contains(&format!("{} {}\x1b[0m", dashboard::attention_symbol(entry.status, false).map(|(_, c)| c).unwrap_or_else(|| entry.color()), entry.status)));
+                let selected = entry.focused.then(theme::selection);
+                let name_color = selected.clone().unwrap_or_else(|| theme::permission_name(&entry.sandbox_color));
+                let status_color = selected.unwrap_or_else(|| dashboard::attention_symbol(entry.status, false).map(|(_, c)| c).unwrap_or_else(|| entry.color()));
+                assert!(line.contains(&format!("{}{}\x1b[0m", name_color, entry.label)));
+                assert!(line.contains(&format!("{} {}\x1b[0m", status_color, entry.status)));
             }
         }
     }
@@ -309,8 +317,8 @@ mod tests {
             assert_eq!(line.replace('*', " "), plain);
             assert!(!line.contains("[permissive]"));
             let groups = selected.groups(false);
-            assert_eq!(groups[index + 1][1].1, "\x1b[38;5;15m");
-            assert_eq!(groups[index + 1][2].1, theme::permission_name("yellow"));
+            assert_eq!(groups[index + 1][1].1, theme::selection());
+            assert_eq!(groups[index + 1][2].1, theme::selection());
             for (i, group) in groups.iter().skip(1).take(9).enumerate() {
                 if i != index { assert_eq!(group[1].1, group[2].1); }
             }

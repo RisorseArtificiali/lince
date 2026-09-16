@@ -80,6 +80,7 @@ Press `n` to spawn an agent (quick name prompt), or `N` for the full wizard (typ
 | `Alt+s` | Toggle sidebar (minimal/statusline) |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order (also in locked mode) |
 | `Alt+x` | Kill focused agent and focus the next agent, if any |
+| `Alt+r` | Rename focused agent from any pane |
 | `Alt+b` | Cycle status bar: hidden → left summary → full → agents only (minimal/statusline) |
 | `Alt+n` | Creation wizard |
 | `Alt+1`–`Alt+9` | Focus agent from any pane |

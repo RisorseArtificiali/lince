@@ -59,6 +59,7 @@ new_locked = '    locked {\n' + '\n'.join('        ' + binding for binding in [
     *dict.fromkeys(replacements.values()),
     'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }',
     'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }',
+    'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }',
     'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }',
 ]) + '\n        bind "Ctrl l" { SwitchToMode "normal"; }\n    }'
 updated = text.replace(old_locked, new_locked)
@@ -77,6 +78,7 @@ for key, binding in [
     ('Alt m', 'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'),
     ('Alt t', 'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'),
     ('Alt x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
+    ('Alt r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
     ('Alt ?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
     ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
 ]:
@@ -91,6 +93,7 @@ def add_shared_shortcuts(match):
         ('Alt m', 'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'),
         ('Alt t', 'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'),
         ('Alt x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
+        ('Alt r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
         ('Alt ?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
         ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
     ]:
@@ -110,6 +113,7 @@ def add_locked_shortcuts(match):
         ('m', 'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'),
         ('t', 'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'),
         ('x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
+        ('r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
         ('?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
         ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
     ]:

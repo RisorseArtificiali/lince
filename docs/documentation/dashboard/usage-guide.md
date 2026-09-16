@@ -56,6 +56,7 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order, including locked mode |
 | `Alt+PageUp` / `Alt+PageDown` | Cycle agents from any pane |
 | `Alt+x` | Kill the focused agent and focus the next agent, if any |
+| `Alt+r` | Rename the focused agent from any pane |
 
 ### Inline Name Prompt
 

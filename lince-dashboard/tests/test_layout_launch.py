@@ -111,6 +111,7 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(migrated.count('bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'), 2)

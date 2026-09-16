@@ -36,6 +36,7 @@ const PIPE_VOXCODE_TEXT: &str = "voxcode-text";
 const PIPE_FOCUS_AGENT: &str = "focus-agent";
 const PIPE_CYCLE_AGENT: &str = "cycle-agent";
 const PIPE_KILL_FOCUSED_AGENT: &str = "kill-focused-agent";
+const PIPE_RENAME_FOCUSED_AGENT: &str = "rename-focused-agent";
 const CMD_GET_CWD: &str = "get_cwd";
 const CMD_LOAD_CONFIG: &str = "load_config";
 
@@ -55,6 +56,7 @@ struct State {
     dialog_frame: Option<String>,
     dialog_dirty: bool,
     dialog_open: bool,
+    dialog_compact: bool,
     managed_ui: bool,
     sidebar_visible: bool,
     statusbar_mode: StatusBarMode,
@@ -135,6 +137,7 @@ impl Default for State {
             dialog_frame: None,
             dialog_dirty: true,
             dialog_open: false,
+            dialog_compact: false,
             managed_ui: false,
             sidebar_visible: true,
             statusbar_mode: StatusBarMode::Full,
@@ -871,10 +874,16 @@ impl ZellijPlugin for State {
                 if let (PipeSource::Plugin(id), Some(payload)) = (&pipe_message.source, &pipe_message.payload) {
                     if Some(*id) == self.controller_id {
                         if let Ok((frame, return_to)) = serde_json::from_str::<(Option<String>, Option<u32>)>(payload) {
-                            if frame.is_some() && !self.dialog_open {
+                            let compact = frame.as_ref().map_or(false, |value| value.contains("LINCE — Rename agent"));
+                            if frame.is_some() && (!self.dialog_open || compact != self.dialog_compact) {
                                 show_self(true);
-                                let mut coords = FloatingPaneCoordinates::default().with_x_percent(10)
-                                    .with_y_percent(3).with_width_percent(80).with_height_percent(90);
+                                let mut coords = if compact {
+                                    FloatingPaneCoordinates::default().with_x_percent(25)
+                                        .with_y_percent(32).with_width_percent(50).with_height_percent(30)
+                                } else {
+                                    FloatingPaneCoordinates::default().with_x_percent(10)
+                                        .with_y_percent(3).with_width_percent(80).with_height_percent(90)
+                                };
                                 coords.borderless = Some(true);
                                 change_floating_panes_coordinates(vec![(PaneId::Plugin(self.own_id), coords)]);
                             }
@@ -888,6 +897,7 @@ impl ZellijPlugin for State {
                                 }
                             }
                             self.dialog_open = frame.is_some();
+                            self.dialog_compact = compact;
                             self.dialog_frame = frame;
                             return true;
                         }
@@ -1035,6 +1045,16 @@ impl ZellijPlugin for State {
                 }) {
                     self.selected_index = index;
                     self.kill_selected_agent(true);
+                    return true;
+                }
+                false
+            }
+            PIPE_RENAME_FOCUSED_AGENT => {
+                if let Some(index) = self.agents.iter().position(|agent| {
+                    Some(&agent.id) == self.focused_agent.as_ref()
+                }) {
+                    self.selected_index = index;
+                    self.open_rename_selected();
                     return true;
                 }
                 false
@@ -1187,14 +1207,7 @@ impl State {
                 true
             }
             BareKey::Char('r') => {
-                if let Some(agent) = self.agents.get(self.selected_index) {
-                    self.rename_target = Some(agent.id.clone());
-                    self.name_prompt = Some(NamePromptState {
-                        input: String::new(),
-                        default_name: agent.name.clone(),
-                        label: "Rename",
-                    });
-                }
+                self.open_rename_selected();
                 true
             }
             BareKey::Char('s') => {
@@ -2042,6 +2055,35 @@ impl State {
         }
     }
 
+    fn start_rename_selected(&mut self) {
+        if let Some(agent) = self.agents.get(self.selected_index) {
+            self.rename_target = Some(agent.id.clone());
+            self.name_prompt = Some(NamePromptState {
+                input: String::new(),
+                default_name: agent.name.clone(),
+                label: "Rename",
+            });
+        }
+    }
+
+    /// Open a focused, compact name editor for the selected agent.
+    fn open_rename_selected(&mut self) {
+        self.voice.open = false;
+        if self.dialog_frame.is_some() {
+            if let Some(id) = self.dialog_id { focus_plugin_pane(id, true, false); }
+        }
+        self.menu_open = false;
+        self.show_help = false;
+        self.show_detail = false;
+        self.wizard = None;
+        self.name_prompt = None;
+        self.rename_target = None;
+        self.relay_state = None;
+        self.start_rename_selected();
+        // Direct KDL users may not have a passive popup installed.
+        if self.dialog_id.is_none() { show_self(false); }
+    }
+
     /// Stop and remove the selected agent. A global kill keeps work flowing by
     /// focusing the next entry when one exists; list-local removal stays in the
     /// dashboard so the user can continue managing the list.
@@ -2517,9 +2559,9 @@ impl State {
         if spawned > 0 {
             self.sort_agents_by_dir();
             self.hide_all_agent_panes();
-            // Auto-focus the first restored agent
-            self.selected_index = 0;
-            self.focus_selected();
+            // Auto-focus the first restored agent. Newly spawned panes may not
+            // be present in this manifest yet, so queue the focus when needed.
+            self.focus_agent_by_index(0);
             self.status_message = Some(format!("Restored {} agents", spawned));
             set_timeout(3.0);
         }
@@ -2639,6 +2681,15 @@ impl State {
             return;
         }
 
+        // Renaming an existing agent is intentionally a small, dedicated form.
+        // The regular name prompt is still embedded in the new-agent flow.
+        if self.rename_target.is_some() {
+            if let Some(prompt) = self.name_prompt.as_ref() {
+                dashboard::render_rename_prompt(prompt, rows, cols);
+                return;
+            }
+        }
+
         let config_warning = self.config_error.as_deref();
         let effective_status = self.status_message.as_deref().or(config_warning);
 
@@ -2675,6 +2726,7 @@ impl State {
         let Some(id) = self.dialog_id else { return; };
         let frame = if self.has_dialog() {
             let title = if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
+                else if self.rename_target.is_some() && self.name_prompt.is_some() { "LINCE — Rename agent" }
                 else if self.wizard.is_some() || self.name_prompt.is_some() { "LINCE — New agent" } else { "LINCE — Agents" };
             Some(render_output::bordered(self.dialog_size.0, self.dialog_size.1, title,
                 |rows, cols| self.render_controller(rows, cols)))
@@ -2908,6 +2960,35 @@ mod managed_ui_tests {
         assert_eq!(state.selected_index, 0);
         assert_eq!(state.pending_focus_agent.as_deref(), Some("second-agent"));
         assert!(state.focused_agent.is_none());
+    }
+
+    #[test]
+    fn startup_focus_queues_the_first_agent_until_its_pane_is_available() {
+        let mut state = controller();
+        state.selected_index = 1;
+
+        state.focus_agent_by_index(0);
+
+        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.pending_focus_agent.as_deref(), Some("first-agent"));
+    }
+
+    #[test]
+    fn global_rename_targets_the_focused_agent() {
+        let mut state = controller();
+        state.focused_agent = Some("second-agent".into());
+        let selected = state.agents.iter().position(|agent| agent.id == "second-agent").unwrap();
+        state.selected_index = selected;
+        state.open_rename_selected();
+
+        assert_eq!(state.rename_target.as_deref(), Some("second-agent"));
+        assert_eq!(state.name_prompt.as_ref().map(|prompt| prompt.default_name.as_str()), Some("second-agent"));
+        assert_eq!(state.name_prompt.as_ref().map(|prompt| prompt.label), Some("Rename"));
+        assert!(!state.menu_open);
+        let frame = render_output::capture(|| state.render_controller(12, 60));
+        assert!(frame.contains("Rename agent"));
+        assert!(frame.contains("Name:"));
+        assert!(!frame.contains("first-agent"));
     }
 
     #[test]
