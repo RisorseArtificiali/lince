@@ -35,6 +35,7 @@ const PIPE_LINCE_STATUS: &str = "lince-status";
 const PIPE_VOXCODE_TEXT: &str = "voxcode-text";
 const PIPE_FOCUS_AGENT: &str = "focus-agent";
 const PIPE_CYCLE_AGENT: &str = "cycle-agent";
+const PIPE_KILL_FOCUSED_AGENT: &str = "kill-focused-agent";
 const CMD_GET_CWD: &str = "get_cwd";
 const CMD_LOAD_CONFIG: &str = "load_config";
 
@@ -947,6 +948,16 @@ impl ZellijPlugin for State {
                 else { self.voice_request(serde_json::json!({"action": "ptt"})); }
                 true
             }
+            "lince-voice-mute" => {
+                if !self.voice_current_tab() { return false; }
+                if !self.config.voxcode_enabled {
+                    self.status_message = Some("VoxCode disabled: set dashboard.voxcode_enabled=true".into());
+                    return true;
+                }
+                if !self.voice.snapshot.settings.configured { self.open_ui("voice"); }
+                else { self.voice_request(serde_json::json!({"action": "mute"})); }
+                true
+            }
             attention::OPEN => {
                 if pipe_message.payload.as_deref() == Some("voice") && !self.voice_current_tab() { return false; }
                 self.remember_voice_target();
@@ -1014,6 +1025,16 @@ impl ZellijPlugin for State {
                         }
                     };
                     self.focus_agent_by_index(new_idx);
+                    return true;
+                }
+                false
+            }
+            PIPE_KILL_FOCUSED_AGENT => {
+                if let Some(index) = self.agents.iter().position(|agent| {
+                    Some(&agent.id) == self.focused_agent.as_ref()
+                }) {
+                    self.selected_index = index;
+                    self.kill_selected_agent(true);
                     return true;
                 }
                 false
@@ -1304,16 +1325,7 @@ impl State {
                 true
             }
             BareKey::Char('x') => {
-                if let Some(agent) = self.agents.get(self.selected_index) {
-                    let name = agent.name.clone();
-                    agent::stop_agent(agent);
-                    self.agents.remove(self.selected_index);
-                    if self.selected_index > 0 && self.selected_index >= self.agents.len() {
-                        self.selected_index = self.agents.len().saturating_sub(1);
-                    }
-                    self.sort_agents_by_dir();
-                    self.status_message = Some(format!("Killed {}", name));
-                }
+                self.kill_selected_agent(false);
                 true
             }
             BareKey::Char('j') | BareKey::Down => {
@@ -2027,6 +2039,34 @@ impl State {
             self.pending_focus_agent = Some(self.agents[idx].id.clone());
         } else {
             self.focus_selected();
+        }
+    }
+
+    /// Stop and remove the selected agent. A global kill keeps work flowing by
+    /// focusing the next entry when one exists; list-local removal stays in the
+    /// dashboard so the user can continue managing the list.
+    fn kill_selected_agent(&mut self, focus_successor: bool) {
+        if self.selected_index >= self.agents.len() { return; }
+
+        let agent = self.agents.remove(self.selected_index);
+        let name = agent.name.clone();
+        let was_focused = self.focused_agent.as_deref() == Some(agent.id.as_str());
+        agent::stop_agent(&agent);
+
+        if was_focused {
+            self.focused_agent = None;
+            self.pending_focus_agent = None;
+            self.pending_agent_geometry = None;
+        }
+
+        let has_successor = self.selected_index < self.agents.len();
+        if !has_successor {
+            self.selected_index = self.agents.len().saturating_sub(1);
+        }
+        self.status_message = Some(format!("Killed {name}"));
+
+        if focus_successor && has_successor {
+            self.focus_agent_by_index(self.selected_index);
         }
     }
 
@@ -2855,6 +2895,22 @@ mod managed_ui_tests {
     }
 
     #[test]
+    fn global_kill_removes_the_focused_agent_and_selects_its_successor() {
+        let mut state = controller();
+        state.agents.push(dashboard::preview_agent("third-agent", AgentStatus::Running));
+        state.focused_agent = Some("first-agent".into());
+        state.selected_index = 0;
+
+        state.kill_selected_agent(true);
+
+        assert_eq!(state.agents.iter().map(|agent| agent.id.as_str()).collect::<Vec<_>>(),
+            vec!["second-agent", "third-agent"]);
+        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.pending_focus_agent.as_deref(), Some("second-agent"));
+        assert!(state.focused_agent.is_none());
+    }
+
+    #[test]
     fn saved_manual_order_survives_reload_and_sort() {
         let mut state = controller();
         state.move_selected_agent(true);
@@ -2995,7 +3051,7 @@ impl State {
                 }
                 self.voice_request(serde_json::json!({"action": "start"}));
             }
-            BareKey::Char('p') => self.voice_request(serde_json::json!({"action": "pause"})),
+            BareKey::Char('m') => self.voice_request(serde_json::json!({"action": "mute"})),
             BareKey::Char('x') => self.voice_request(serde_json::json!({"action": "stop"})),
             BareKey::Char('i') => self.voice_request(serde_json::json!({"action": "send"})),
             BareKey::Char('c') => self.voice_request(serde_json::json!({"action": "clear"})),

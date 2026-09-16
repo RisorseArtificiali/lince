@@ -65,7 +65,7 @@ preset generation and the session configuration.
 
 ## Compact sidebar and details
 
-Press `Alt+d` from any pane to open the expanded agent list in a bordered popup.
+Press `Alt+d` from any pane to open the detailed agent list in a bordered popup.
 The bare `d` density toggle has been removed. `Alt+s` shows or hides the sidebar
 and its shell/voice pane, preserving agents and restoring the configured column layout.
 The compact list shows the global agent number on the left, the configured
@@ -128,7 +128,7 @@ These shortcuts work with either preset, including while the sidebar is visible:
 
 | Key | Action |
 |-----|--------|
-| `Alt+d` | Expanded agent list in a bordered popup |
+| `Alt+d` | Detailed agent list in a bordered popup |
 | `Alt+i` | Focused agent information directly |
 | `Alt+h` | Help directly |
 | `Alt+s` | Hide/show the sidebar and its shell/voice pane |

@@ -86,7 +86,7 @@ impl Snapshot {
         if let Some(warning) = &self.warning {
             groups.push(vec![(format!(" | ! {warning}"), theme::color("yellow"))]);
         }
-        groups.push(vec![(" | Alt+d menu".into(), theme::color("cyan"))]);
+        groups.push(vec![(" | Alt+d details".into(), theme::color("cyan"))]);
         groups
     }
     #[cfg(test)]
@@ -398,6 +398,6 @@ mod tests {
     }
     #[test]
     fn empty_bar_still_explains_how_to_open_menu() {
-        assert!(Snapshot::default().plain_line(80).contains("Alt+d menu"));
+        assert!(Snapshot::default().plain_line(80).contains("Alt+d details"));
     }
 }

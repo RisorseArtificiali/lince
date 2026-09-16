@@ -75,15 +75,15 @@ class VoiceTests(unittest.TestCase):
         self.assertIn("PTT mode", session.request(dict(action="ptt"))["error"])
         self.assertIsNone(session.thread)
 
-    def test_pause_cancels_inflight_speech_and_stop_terminates_worker(self):
+    def test_mute_cancels_inflight_speech_and_stop_terminates_worker(self):
         session = self.session()
         session.active = True
         session.recording = True
         epoch = session.epoch
-        self.assertEqual(session.request(dict(action="pause"))["status"], "paused")
+        self.assertEqual(session.request(dict(action="mute"))["status"], "muted")
         self.assertFalse(session.recording)
         self.assertGreater(session.epoch, epoch)
-        self.assertEqual(session.request(dict(action="pause"))["status"], "listening")
+        self.assertEqual(session.request(dict(action="mute"))["status"], "listening")
         self.assertEqual(session.request(dict(action="stop"))["status"], "stopped")
         self.assertFalse(session.active)
         self.assertTrue(session.shutdown)
@@ -127,7 +127,7 @@ class VoiceTests(unittest.TestCase):
         finally:
             request("shutdown")
 
-    def test_audio_ptt_pause_resume_and_late_result(self):
+    def test_audio_ptt_mute_resume_and_late_result(self):
         import numpy as np
 
         opened = threading.Event()
@@ -195,10 +195,10 @@ class VoiceTests(unittest.TestCase):
                 session.request(dict(action="ptt"))
                 audio_queue.put(np.ones(480, dtype=np.float32))
                 self.assertTrue(transcribing.wait(2))
-                session.request(dict(action="pause"))
+                session.request(dict(action="mute"))
                 self.assertTrue(closed.wait(2))
                 release.set()
-                session.request(dict(action="pause"))
+                session.request(dict(action="mute"))
                 self.assertTrue(opened.wait(2))
                 audio_queue.put(np.ones(480, dtype=np.float32))
                 time.sleep(0.1)

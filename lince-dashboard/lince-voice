@@ -108,7 +108,7 @@ class Session:
         self.sequence = time.time_ns()
         self.epoch = 0
         self.active = False
-        self.paused = False
+        self.muted = False
         self.recording = False
         self.shutdown = False
         self.thread = None
@@ -157,31 +157,31 @@ class Session:
                     if not self.settings["configured"]:
                         raise ValueError("Select a microphone and save the configuration first")
                     if action == "ptt" and self.settings["mode"] != "ptt":
-                        raise ValueError("Alt+x / Ctrl+Space is available in PTT mode; use Alt+v for voice activation")
+                        raise ValueError("Alt+t / Ctrl+Space is available in PTT mode; use Alt+v for voice activation")
                     if not self.active:
                         if self.thread and self.thread.is_alive():
                             raise ValueError("VoxCode is still stopping; try again shortly")
                         self.active = True
-                        self.paused = False
+                        self.muted = False
                         self.recording = action == "ptt"
                         self.error = ""
                         self.status = "loading"
                         self.epoch += 1
                         self.thread = threading.Thread(target=self.run_audio, daemon=True)
                         self.thread.start()
-                    elif action == "ptt" and not self.paused:
+                    elif action == "ptt" and not self.muted:
                         self.recording = not self.recording
-                elif action == "pause":
+                elif action in ("mute", "pause"):
                     if self.active:
-                        self.paused = not self.paused
+                        self.muted = not self.muted
                         self.recording = False
                         self.epoch += 1  # discard in-flight speech/results when muting
                         self.level = 0
-                        self.status = "paused" if self.paused else "listening"
+                        self.status = "muted" if self.muted else "listening"
                 elif action in ("stop", "shutdown"):
                     self.active = False
                     self.recording = False
-                    self.paused = False
+                    self.muted = False
                     self.epoch += 1
                     self.level = 0
                     self.status = "stopped"
@@ -288,19 +288,19 @@ class Session:
             previous_epoch = self.epoch
             while self.active:
                 with self.lock:
-                    epoch, paused, recording = self.epoch, self.paused, self.recording
+                    epoch, muted, recording = self.epoch, self.muted, self.recording
                 if previous_epoch != epoch:
                     frames.clear()
                     vad.reset()
                     previous_epoch = epoch
-                if paused:
+                if muted:
                     if stream_open:
                         audio.stop()
                         stream_open = False
                     time.sleep(0.05)
                     continue
                 if not stream_open:
-                    # Drop buffered audio from before pause, never replay it.
+                    # Drop buffered audio from before muting, never replay it.
                     while not audio.audio_queue.empty():
                         audio.audio_queue.get_nowait()
                     audio.start()
@@ -313,7 +313,7 @@ class Session:
                 with self.lock:
                     if not self.active:
                         break
-                    if self.paused or epoch != self.epoch:
+                    if self.muted or epoch != self.epoch:
                         continue
                     recording = self.recording
                     self.level = min(6, max(0, round(AudioCapture.get_level(frame) * 60)))
@@ -338,7 +338,7 @@ class Session:
                     result_epoch, result, error = results.get_nowait()
                     outstanding = max(0, outstanding - 1)
                     with self.lock:
-                        if result_epoch != self.epoch or not self.active or self.paused:
+                        if result_epoch != self.epoch or not self.active or self.muted:
                             continue
                         if error:
                             raise error
@@ -352,7 +352,7 @@ class Session:
                             elif parsed.command == CommandType.CANCEL:
                                 self.buffer = ""
                             elif parsed.command == CommandType.PAUSE:
-                                self.request({"action": "pause"})
+                                self.request({"action": "mute"})
                         else:
                             if len(self.buffer) + len(parsed.text) > 65536:
                                 raise ValueError("Voice buffer is full; insert or clear it")

@@ -408,7 +408,7 @@ echo ""
 echo -e "${GREEN}[14/14] VoxCode integration...${NC}"
 if command -v voxcode >/dev/null 2>&1; then
     if [ -z "${LINCE_VOXCODE_ENABLED:-}" ]; then
-        echo "  Alt+v opens voice settings; Alt+x / Ctrl+Space toggles PTT. No permanent voice pane."
+        echo "  Alt+v opens voice settings; Alt+m mutes, Alt+t / Ctrl+Space toggles PTT. No permanent voice pane."
         read -r -p "  Enable VoxCode integration? [Y/n]: " VOICE_REPLY || VOICE_REPLY=""
         case "$VOICE_REPLY" in n|N|no|No) LINCE_VOXCODE_ENABLED=false ;; *) LINCE_VOXCODE_ENABLED=true ;; esac
     fi
