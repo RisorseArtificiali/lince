@@ -768,6 +768,42 @@ fn render_name_prompt_bar(prompt: &NamePromptState, cols: usize) {
     println!();
 }
 
+/// Render the dedicated form used to rename an existing agent. Keeping this
+/// separate from the dashboard avoids opening the full agent-details list just
+/// to edit a title.
+pub fn render_rename_prompt(prompt: &NamePromptState, rows: usize, cols: usize) {
+    if rows == 0 || cols == 0 { return; }
+
+    let cursor = "\u{2588}";
+    let value = if prompt.input.is_empty() {
+        format!("{}{}{}{}", DIM, prompt.default_name, RESET, cursor)
+    } else {
+        format!("{}{}", prompt.input, cursor)
+    };
+    let form_width = cols.min(52);
+    let left = cols.saturating_sub(form_width) / 2;
+    let top = rows.saturating_sub(5) / 2;
+    let lines = [
+        format!("{}Rename agent{}", BOLD, RESET),
+        String::new(),
+        format!("  Name: {}", value),
+        String::new(),
+        format!("{}[Enter]{} Save    {}[Esc]{} Cancel", theme::color("cyan"), RESET, theme::color("cyan"), RESET),
+    ];
+
+    for row in 0..rows {
+        let line = if (top..top + lines.len()).contains(&row) {
+            let text = &lines[row - top];
+            // `clip_cells` removes control bytes, including ESC, which leaves
+            // the rest of an ANSI sequence (such as `[1m`) visible on screen.
+            format!("{}{}", " ".repeat(left), truncate(text, form_width))
+        } else {
+            String::new()
+        };
+        println!("{}", line);
+    }
+}
+
 /// Render the relay message-count prompt bar (blue background).
 /// Pattern matches render_name_prompt_bar: cursor block, dim default, hints.
 fn render_relay_message_prompt(input: &str, cols: usize) {
@@ -821,7 +857,7 @@ fn status_bar_hints(empty: bool, focused: bool, detail: bool) -> Vec<KeyHint> {
     if empty {
         vec![("n", "New-defaults"), ("N", "New-wizard"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else if focused {
-        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+k/j", "Cycle"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+k/j", "Cycle"), ("Alt+r", "Rename"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else if detail {
         vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
     } else {
@@ -1187,7 +1223,7 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
         "Alt+t / Ctrl+Space  Toggle PTT recording", "Alt+i/h/?    Info / help", "Alt+s        Toggle sidebar",
         "Alt+b        Bar: hidden / left / full / right", "Alt+n        New agent wizard",
         "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
-        "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "Alt+x        Kill focused agent", "i            Info (PgUp/Dn scroll)",
+        "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "Alt+r        Rename focused agent", "Alt+x        Kill focused agent", "i            Info (PgUp/Dn scroll)",
         "n            New agent", "N            New agent wizard", "r            Rename selected",
         "K/J          Move selected up/down", "a            Reset directory/name order",
         "x            Kill selected", "s            Relay last message", "S            Relay N messages",
@@ -1208,8 +1244,21 @@ mod tests {
         assert!(frame.contains("Alt+k/j"));
         assert!(frame.contains("Alt+m"));
         assert!(frame.contains("Alt+t / Ctrl+Space"));
+        assert!(frame.contains("Alt+r        Rename focused agent"));
         assert!(frame.contains("Alt+x        Kill focused agent"));
         assert!(!frame.contains("Alt+←/→"));
+    }
+
+    #[test]
+    fn rename_prompt_preserves_ansi_sequences_when_fitting_the_form() {
+        let prompt = NamePromptState {
+            input: String::new(),
+            default_name: "primo".into(),
+            label: "Rename",
+        };
+        let frame = crate::render_output::capture(|| render_rename_prompt(&prompt, 8, 40));
+        assert!(frame.contains("\x1b[1mRename agent"));
+        assert!(frame.contains("\x1b[2mprimo\x1b[0m"));
     }
 
     /// Plain text fits — return as-is.
