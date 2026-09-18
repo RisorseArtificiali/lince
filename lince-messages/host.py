@@ -6,12 +6,14 @@ import json
 import os
 from pathlib import Path
 import signal
+import re
 import subprocess
 import sys
 import time
 
 from protocol import ProtocolError, call, require
 from service import private_directory
+from adapters import capabilities as agent_capabilities
 
 
 class Supervisor:
@@ -53,8 +55,16 @@ class Supervisor:
         raise ProtocolError("unavailable", "Messaging service did not start; inspect its private service.log")
 
     def run(self, alias, agent, command, capabilities=None):
+        require(agent in {"claude", "codex", "bob"}, "unsupported", "Messaging v1 supports Claude, Codex and Bob")
         self.ensure()
-        instance = self.rpc("register", alias=alias, agent=agent, capabilities=capabilities or {})
+        if capabilities is None:
+            try:
+                version_output = subprocess.run([agent, "--version"], capture_output=True, text=True, timeout=3)
+                version = re.search(r"\b\d+\.\d+\.\d+\b", version_output.stdout)
+                capabilities = agent_capabilities(agent, version.group(0) if version else "unknown")
+            except (OSError, subprocess.TimeoutExpired):
+                capabilities = agent_capabilities(agent, "unknown")
+        instance = self.rpc("register", alias=alias, agent=agent, capabilities=capabilities or {}, leased=True)
         credential = self.root / "credentials" / (instance["instance"] + ".token")
         fd = os.open(credential, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as output:
@@ -72,7 +82,16 @@ class Supervisor:
             for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
                 previous[signum] = signal.signal(signum, forward)
             child = subprocess.Popen(command, env=env)
-            returncode = child.wait()
+            while True:
+                try:
+                    returncode = child.wait(timeout=5)
+                    break
+                except subprocess.TimeoutExpired:
+                    try:
+                        self.rpc("heartbeat", instance=instance["instance"])
+                    except (OSError, ProtocolError):
+                        # Keep the user's TUI alive; expired messaging fails closed.
+                        pass
             return returncode if returncode >= 0 else 128 - returncode
         finally:
             for signum, handler in previous.items():

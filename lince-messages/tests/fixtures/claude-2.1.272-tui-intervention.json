@@ -1,0 +1,39 @@
+{
+  "source": "Real original claude 2.1.272 TUI in a PTY on Linux, 2026-09-18. Peer work was accepted by the fixture before a real human prompt; actual PermissionRequest observed with no approval or file creation.",
+  "human_pause": true,
+  "permission_queued": true,
+  "events": [
+    {
+      "hook_event_name": "SessionStart",
+      "session_id": "39264b99-4ec0-458a-be3f-69ebdce15f5e"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "39264b99-4ec0-458a-be3f-69ebdce15f5e",
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "39264b99-4ec0-458a-be3f-69ebdce15f5e",
+      "stop_hook_active": false,
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "39264b99-4ec0-458a-be3f-69ebdce15f5e",
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "39264b99-4ec0-458a-be3f-69ebdce15f5e",
+      "permission_mode": "default",
+      "tool_name": "Bash"
+    },
+    {
+      "hook_event_name": "PermissionRequest",
+      "session_id": "39264b99-4ec0-458a-be3f-69ebdce15f5e",
+      "permission_mode": "default",
+      "tool_name": "Bash"
+    }
+  ]
+}

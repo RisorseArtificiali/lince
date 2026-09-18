@@ -8,7 +8,13 @@ fi
 if [[ -L "$BIN/lince-msg-host" && "$(readlink "$BIN/lince-msg-host")" == "$DEST/lince-msg-host" ]]; then
     rm -- "$BIN/lince-msg-host"
 fi
-for file in protocol.py store.py service.py host.py instructions.md lince-msg lince-msg-host; do
+if [[ -L "$BIN/lince-msg-hook" && "$(readlink "$BIN/lince-msg-hook")" == "$DEST/lince-msg-hook" ]]; then
+    rm -- "$BIN/lince-msg-hook"
+fi
+if [[ -f "$DEST/hook_config.py" ]]; then
+    python3 "$DEST/hook_config.py" claude "$HOME/.claude/settings.json" --remove
+fi
+for file in protocol.py store.py service.py host.py adapters.py hook_config.py instructions.md lince-msg lince-msg-host lince-msg-hook; do
     rm -f -- "$DEST/$file"
 done
 echo "Removed messaging executables; user settings and mailbox history preserved."
