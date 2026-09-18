@@ -2,6 +2,7 @@
 # Shared by install.sh and update.sh: presentation assets have identical coverage.
 set -euo pipefail
 UI_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$UI_SOURCE/../lince-messages/install.sh" --configure-all
 mkdir -p "$HOME/.config/zellij/layouts" "$HOME/.config/lince-dashboard" "$HOME/.local/bin"
 for layout in "$UI_SOURCE"/layouts/*.kdl; do
     cp "$layout" "$HOME/.config/zellij/layouts/"

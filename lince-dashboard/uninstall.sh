@@ -24,6 +24,7 @@ PLUGIN="$HOME/.config/zellij/plugins/lince-dashboard.wasm"
 if [ -f "$PLUGIN" ]; then
     echo -e "${YELLOW}Found: $PLUGIN${NC}"
     if confirm "  Remove plugin?"; then
+        bash "$SCRIPT_DIR/../lince-messages/uninstall.sh"
         rm -f "$PLUGIN" "${PLUGIN}.bak."* 2>/dev/null
         echo -e "${GREEN}  ✓ Removed${NC}"
     fi

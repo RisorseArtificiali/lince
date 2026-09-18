@@ -1,0 +1,36 @@
+{
+  "source": "Real Codex 0.154.0 exec native Stop continuation on Linux, 2026-09-18. Lifecycle fields only.",
+  "result": "Final response included LINCE_NATIVE_DELIVERY. A CLI lookup failed because lince-msg was absent from probe PATH; no acceptance or reply claimed.",
+  "events": [
+    {
+      "hook_event_name": "SessionStart",
+      "session_id": "01a0b5c7-6054-7e11-b576-ac9c08645ebd",
+      "permission_mode": "bypassPermissions",
+      "source": "startup"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "01a0b5c7-6054-7e11-b576-ac9c08645ebd",
+      "turn_id": "01a0b5c7-60e9-7032-ac3d-e016ec374c80",
+      "permission_mode": "bypassPermissions"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "01a0b5c7-6054-7e11-b576-ac9c08645ebd",
+      "turn_id": "01a0b5c7-60e9-7032-ac3d-e016ec374c80",
+      "stop_hook_active": false,
+      "permission_mode": "bypassPermissions"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "01a0b5c7-6054-7e11-b576-ac9c08645ebd",
+      "turn_id": "01a0b5c7-60e9-7032-ac3d-e016ec374c80",
+      "stop_hook_active": true,
+      "permission_mode": "bypassPermissions"
+    },
+    {
+      "hook_event_name": "SessionEnd",
+      "session_id": "01a0b5c7-6054-7e11-b576-ac9c08645ebd"
+    }
+  ]
+}

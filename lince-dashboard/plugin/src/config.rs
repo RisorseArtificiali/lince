@@ -265,6 +265,8 @@ pub struct DashboardConfig {
     pub compact: bool,
     #[serde(default)]
     pub attention_blink: bool,
+    #[serde(default)]
+    pub messaging_ascii: bool,
     #[serde(default = "default_voxcode_enabled")]
     pub voxcode_enabled: bool,
     /// Runtime geometry of the named viewport in our own tab.
@@ -369,6 +371,7 @@ impl Default for DashboardConfig {
             theme: default_theme(),
             compact: false,
             attention_blink: false,
+            messaging_ascii: false,
             voxcode_enabled: true,
             viewport: None,
             agent_borderless: false,

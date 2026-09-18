@@ -1,0 +1,32 @@
+{
+  "source": "Real Claude Code 2.1.272 --print native Stop continuation on Linux, 2026-09-18. Lifecycle fields only.",
+  "result": "Final response included LINCE_NATIVE_DELIVERY; tools disabled, no acceptance or completion claimed.",
+  "events": [
+    {
+      "hook_event_name": "SessionStart",
+      "session_id": "3a84b0de-a154-49b3-8b3e-69e0e0123a46",
+      "source": "startup"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "3a84b0de-a154-49b3-8b3e-69e0e0123a46",
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "3a84b0de-a154-49b3-8b3e-69e0e0123a46",
+      "stop_hook_active": false,
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "3a84b0de-a154-49b3-8b3e-69e0e0123a46",
+      "stop_hook_active": true,
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "SessionEnd",
+      "session_id": "3a84b0de-a154-49b3-8b3e-69e0e0123a46"
+    }
+  ]
+}
