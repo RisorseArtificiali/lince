@@ -25,6 +25,7 @@ class LayoutTests(unittest.TestCase):
         for name in ("dashboard", "dashboard-vox", "dashboard-tiled", "dashboard-tiled-vox", "dashboard-statusline"):
             text = (ROOT / "layouts" / f"{name}.kdl").read_text()
             result = launcher["presentation_layout"](text, "minimal", True, True)
+            self.assertIn('agent_borderless "true"', result)
             self.assertNotIn('location="zellij:tab-bar"', result)
             self.assertNotIn('location="zellij:status-bar"', result)
             # The swap inherits the one status row through default_tab_template.
@@ -65,6 +66,8 @@ class LayoutTests(unittest.TestCase):
             fresh = launch()
             self.assertEqual(fresh.returncode, 0, fresh.stderr)
             self.assertIn("pane_frames false", fresh.stdout)
+            self.assertIn('agent_borderless "true"', fresh.stdout)
+            self.assertIn('agent_borderless "false"', launch('--frames').stdout)
             self.assertIn('pane size="15%" split_direction="horizontal"', fresh.stdout)
             self.assertIn('pane size="85%" name="lince-viewport"', fresh.stdout)
             self.assertIn('role "dialog"', fresh.stdout)
@@ -99,6 +102,7 @@ class LayoutTests(unittest.TestCase):
                    '    shared_except "locked" {\n'
                    '        bind "Alt n" { NewPane; }\n'
                    '        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
+                   '        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
                    '        bind "Alt l" { MessagePlugin { name "lince-sidebar-toggle"; }; }\n'
                    '        bind "Alt i" { Write 42; }\n    }\n}\n')
             active.write_text(old)
@@ -115,7 +119,7 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(migrated.count('bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'), 2)
-            self.assertEqual(migrated.count('bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'), 2)
             self.assertTrue((Path(directory) / ".local/bin/lince-voice").is_file())
             self.assertIn('bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }', migrated)
             self.assertIn('bind "Alt i" { Write 42; }', migrated)

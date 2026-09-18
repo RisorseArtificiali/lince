@@ -22,7 +22,14 @@ impl Default for Settings {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Microphone { pub id: String, pub name: String }
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct TextEvent { pub sequence: u64, pub text: String }
+#[serde(default)]
+pub struct TextEvent {
+    pub sequence: u64,
+    pub text: String,
+    pub pinned: bool,
+    pub target: Option<u32>,
+    pub submit: bool,
+}
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Snapshot {
@@ -86,7 +93,7 @@ impl Voice {
         lines.push("Tab/↑/↓ field · ←/→ change · Enter edit/finish".into());
         lines.push("[s] Save [a] Start [m] Mute/unmute [x] Stop".into());
         lines.push("[i] Insert buffer [c] Clear [r] Refresh microphones [Esc] Close".into());
-        lines.push("Alt+m: mute/unmute · Alt+t / Ctrl+Space: toggle PTT. Text is inserted without Enter.".into());
+        lines.push("Alt+m: mute/unmute · PTT stop: Ctrl+Space inserts + Enter; Alt+t inserts only.".into());
         lines.push("Stop before editing. Settings persist; listening never auto-starts.".into());
         for line in lines.iter().take(rows) {
             crate::render_output::write(format_args!("{}\n", crate::dashboard::clip_cells(line, cols)));

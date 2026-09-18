@@ -51,7 +51,8 @@ with path.with_suffix(".lock").open("a") as lock:
         state["status"] = "listening" if state["status"] == "recording" else "recording"
         if state["status"] == "listening":
             state["count"] += 1
-            state["events"].append(dict(sequence=state["count"], text="VOICE_FIXTURE_TEXT"))
+            state["events"].append(dict(sequence=state["count"], text="VOICE_FIXTURE_TEXT", pinned=True,
+                                         target=request.get("target"), submit=request.get("submit", False)))
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(state))
     temporary.replace(path)

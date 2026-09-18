@@ -53,7 +53,9 @@ stopped**. The microphone is opened only after an explicit start.
 
 In PTT mode, `Alt+t` or `Ctrl+Space` starts recording and a second press stops it
 for transcription. Both shortcuts control the same recording: you can start with
-one and stop with the other. `Ctrl+Space` is reserved for PTT rather than being
+one and stop with the other. The closing shortcut determines delivery: `Ctrl+Space`
+inserts the transcription followed by Enter; `Alt+t` inserts text without Enter.
+PTT inserts automatically when transcription finishes. `Ctrl+Space` is reserved for PTT rather than being
 forwarded to the application in the pane. When VoxCode is configured but stopped,
 the first press starts it and arms recording; wait for model loading to complete before speaking.
 Before configuration, the shortcut opens the settings popup instead.
@@ -65,16 +67,21 @@ segment. The threshold and silence duration come from VoxCode's `[vad]` config.
 mute or stop it. While muted the microphone is closed, so unmute with `Alt+m`,
 the popup, or a spoken command.
 
-Text accumulates in the buffer unless auto-insert is enabled. Existing VoxCode
+In VAD mode, text accumulates in the buffer unless auto-insert is enabled. Existing VoxCode
 voice commands such as `comando: invia` and `comando: cancella` still send or clear
-it. Inserting text never adds an Enter keystroke. Clipboard PTT is not part of this
+it. VAD and manual buffer insertion do not add an Enter keystroke. Clipboard PTT is not part of this
 integration.
 
 ## Destination and indicator
 
-The destination is the last focused, visible terminal: an agent or a shell.
-Opening the popup does not change it. Switching terminals before delivery
-selects the new destination. If the target disappears or becomes suppressed,
+PTT fixes the destination to the active terminal when recording stops. Switching
+panes during transcription does not redirect the result: it is delivered to the
+original pane even if that pane is now hidden, without changing focus. If that
+pane closes, the result is retained with an error; it is not sent elsewhere.
+
+For VAD and manual insertion, the destination is the last focused, visible
+terminal. Opening the popup does not change it. Switching terminals before
+delivery selects the new destination. If that target disappears or becomes suppressed,
 LINCE retains the undelivered message and opens the popup with an error; focus a
 visible terminal to deliver it. It never reveals a hidden agent just to insert text.
 The standalone `voxcode-text` pipe retains its existing focused/selected-agent routing.

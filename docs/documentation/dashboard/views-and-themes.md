@@ -26,7 +26,11 @@ lince-dashboard-launch --preset classic
 | `statusline` | Same managed view, with the sidebar hidden initially | 15% when shown | Off |
 | `classic` | Full agent table and standard Zellij tab/keybinding bars | 40% | On |
 
-When no preset is specified, `minimal` is used, including for existing configurations. Minimal and statusline differ only in initial sidebar
+Minimal also removes the floating agent's entire frame and title. The bottom
+attention bar remains separate; there is no individual bottom-edge frame setting.
+Explicit `--frames` or `pane_frames = true` restores the agent frame.
+
+When no preset is specified, `minimal` is used, including for existing configurations. Minimal and statusline also differ in initial sidebar
 visibility; `Alt+s` toggles it at runtime, restoring the same column arrangement
 on every second press. With the sidebar hidden, agent panes fill the window
 above the status line. An open agent stays visible and keeps focus when the

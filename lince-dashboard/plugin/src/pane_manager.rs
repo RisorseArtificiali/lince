@@ -22,6 +22,7 @@ pub fn focus_agent(
     focus_mode: &FocusMode,
     agent_layout: &AgentLayout,
     viewport: Option<Viewport>,
+    borderless: bool,
 ) -> bool {
     let pid = match agent.pane_id {
         Some(pid) => pid,
@@ -36,7 +37,7 @@ pub fn focus_agent(
         show_pane_with_id(PaneId::Terminal(pid), true, true);
         focus_terminal_pane(pid, true, true);
         change_floating_panes_coordinates(vec![
-            (PaneId::Terminal(pid), viewport.map(Viewport::coordinates).unwrap_or_else(crate::agent::default_agent_pane_coords)),
+            (PaneId::Terminal(pid), agent_coordinates(viewport, borderless)),
         ]);
     } else {
         match focus_mode {
@@ -44,7 +45,7 @@ pub fn focus_agent(
                 show_pane_with_id(PaneId::Terminal(pid), true, true);
                 focus_terminal_pane(pid, true, true);
                 change_floating_panes_coordinates(vec![
-                    (PaneId::Terminal(pid), crate::agent::default_agent_pane_coords()),
+                    (PaneId::Terminal(pid), agent_coordinates(None, borderless)),
                 ]);
             }
             FocusMode::Replace => {
@@ -127,4 +128,11 @@ mod viewport_tests {
         manifest.panes.get_mut(&1).unwrap()[1].pane_columns = 60;
         assert_eq!(find_viewport(&manifest, 7).unwrap().width, 60);
     }
+}
+
+/// Apply the presentation choice to every agent geometry update.
+pub fn agent_coordinates(viewport: Option<Viewport>, borderless: bool) -> FloatingPaneCoordinates {
+    let mut coords = viewport.map(Viewport::coordinates).unwrap_or_else(crate::agent::default_agent_pane_coords);
+    coords.borderless = Some(borderless);
+    coords
 }

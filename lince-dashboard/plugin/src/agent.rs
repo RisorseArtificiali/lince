@@ -593,12 +593,12 @@ fn spawn_inner(
 
     match config.agent_layout {
         AgentLayout::Floating => {
-            open_command_pane_floating(command, Some(default_agent_pane_coords()), BTreeMap::new());
+            open_command_pane_floating(command, Some(crate::pane_manager::agent_coordinates(None, config.agent_borderless)), BTreeMap::new());
         }
         AgentLayout::Tiled => {
             // Tiled layout: agents are still floating panes, but hidden at spawn.
             // When focused, they overlay the viewport pane (B) in the 3-pane layout.
-            open_command_pane_floating(command, Some(config.viewport.map(crate::pane_manager::Viewport::coordinates).unwrap_or_else(default_agent_pane_coords)), BTreeMap::new());
+            open_command_pane_floating(command, Some(crate::pane_manager::agent_coordinates(config.viewport, config.agent_borderless)), BTreeMap::new());
         }
     }
 

@@ -246,6 +246,7 @@ impl ZellijPlugin for State {
             _ => None,
         };
         if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
+        self.config.agent_borderless = configuration.get("agent_borderless").map(String::as_str) == Some("true");
         self.managed_ui = configuration.get("presentation").map(String::as_str) == Some("managed");
         self.sidebar_visible = configuration.get("sidebar_visible").map(String::as_str) != Some("false");
         self.passive_dialog = configuration.get("role").map(String::as_str) == Some("dialog");
@@ -503,11 +504,13 @@ impl ZellijPlugin for State {
                             let prev_providers = std::mem::take(&mut self.config.providers_by_agent);
                             let prev_details = std::mem::take(&mut self.config.provider_details_by_agent);
                             let viewport = self.config.viewport;
+                            let agent_borderless = self.config.agent_borderless;
                             self.config = cfg;
                             if !self.config.voxcode_enabled && self.voice.snapshot.active() {
                                 self.voice_request(serde_json::json!({"action": "stop"}));
                             }
                             self.config.viewport = viewport;
+                            self.config.agent_borderless = agent_borderless;
                             if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
                             self.config_error = err;
                             if self.config.agent_types.is_empty() {
@@ -955,7 +958,9 @@ impl ZellijPlugin for State {
                 if !self.config.voxcode_enabled { self.status_message = Some("VoxCode disabled: set dashboard.voxcode_enabled=true".into()); return true; }
                 self.remember_voice_target();
                 if !self.voice.snapshot.settings.configured { self.open_ui("voice"); }
-                else { self.voice_request(serde_json::json!({"action": "ptt"})); }
+                else { self.voice_request(serde_json::json!({"action": "ptt",
+                    "target": self.voice.target,
+                    "submit": pipe_message.payload.as_deref() == Some("submit")})); }
                 true
             }
             "lince-voice-mute" => {
@@ -1477,8 +1482,9 @@ impl State {
                             self.status_message = Some(format!("Spawned {}", info.name));
                             self.record_recent_project_dir(&info.project_dir);
                             self.agents.push(info);
-                            self.sort_agents_by_dir();
                             self.hide_all_agent_panes();
+                            self.focus_agent_by_index(self.agents.len() - 1);
+                            self.sort_agents_by_dir();
                         }
                         Err(e) => {
                             self.status_message = Some(e);
@@ -2007,8 +2013,10 @@ impl State {
                 self.status_message = Some(format!("Spawned {}", info.name));
                 self.record_recent_project_dir(&info.project_dir);
                 self.agents.push(info);
-                self.sort_agents_by_dir();
                 self.hide_all_agent_panes();
+                // Queue focus until reconciliation discovers the new terminal pane.
+                self.focus_agent_by_index(self.agents.len() - 1);
+                self.sort_agents_by_dir();
             }
             Err(e) => {
                 self.status_message = Some(e);
@@ -2024,7 +2032,7 @@ impl State {
         self.ui_generation = self.ui_generation.wrapping_add(1);
         if let Some(agent) = self.agents.get(self.selected_index) {
             if pane_manager::focus_agent(
-                agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
+                agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout, self.config.viewport, self.config.agent_borderless,
             ) {
                 self.menu_open = false;
                 self.show_detail = false;
@@ -2198,7 +2206,7 @@ impl State {
         // Show the agent pane after delivering text
         if pane_manager::focus_agent(
             &self.agents[idx], &self.agents,
-            &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
+            &self.config.focus_mode, &self.config.agent_layout, self.config.viewport, self.config.agent_borderless,
         ) {
             self.focused_agent = Some(self.agents[idx].id.clone());
             self.selected_index = idx;
@@ -2477,6 +2485,7 @@ impl State {
                 &self.config.focus_mode,
                 &self.config.agent_layout,
                 self.config.viewport,
+                self.config.agent_borderless,
             ) {
                 self.focused_agent = Some(target_id);
                 self.selected_index = target_idx;
@@ -2811,7 +2820,7 @@ impl State {
             // Suppressing fixed chrome leaves Zellij's floating viewport stale.
             // Recompute bounds after the layout has settled, before resizing.
             set_selectable(true);
-            change_floating_panes_coordinates(vec![(PaneId::Terminal(pid), rect.coordinates())]);
+            change_floating_panes_coordinates(vec![(PaneId::Terminal(pid), pane_manager::agent_coordinates(Some(rect), self.config.agent_borderless))]);
         }
     }
 
@@ -3054,16 +3063,23 @@ impl State {
             }
         }
     }
-    fn deliver_voice_text(&mut self, text: &str) -> bool {
-        let Some(id) = self.voice.target else {
+    fn deliver_voice_text(&mut self, event: &voice::TextEvent) -> bool {
+        let Some(id) = (if event.pinned { event.target } else { self.voice.target }) else {
             self.voice.snapshot.error = "Focus a visible agent or shell before inserting text".into();
             return false;
         };
-        if get_pane_info(PaneId::Terminal(id)).map_or(true, |p| p.is_suppressed || p.exited) {
-            self.voice.snapshot.error = "Voice target was closed or hidden; focus a terminal and try again".into();
+        if get_pane_info(PaneId::Terminal(id)).map_or(true, |p| (!event.pinned && p.is_suppressed) || p.exited) {
+            self.voice.snapshot.error = if event.pinned {
+                "PTT target was closed; transcription retained and not redirected".into()
+            } else {
+                "Voice target was closed or hidden; focus a terminal and try again".into()
+            };
             return false;
         }
-        write_chars_to_pane_id(text, PaneId::Terminal(id));
+        write_chars_to_pane_id(&event.text, PaneId::Terminal(id));
+        if event.submit && !event.text.trim().is_empty() {
+            write_to_pane_id(vec![b'\r'], PaneId::Terminal(id));
+        }
         true
     }
     fn voice_request(&mut self, request: serde_json::Value) {
@@ -3088,7 +3104,7 @@ impl State {
                     if !self.voice.snapshot.events.is_empty() { self.remember_voice_target(); }
                     for event in std::mem::take(&mut self.voice.snapshot.events) {
                         if event.sequence > self.voice.ack {
-                            if !self.deliver_voice_text(&event.text) { break; }
+                            if !self.deliver_voice_text(&event) { break; }
                             self.voice.ack = event.sequence;
                         }
                     }
