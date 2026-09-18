@@ -31,7 +31,7 @@ sub-issue; subsequent corrections will be folded into the relevant commits.
 | --- | --- | --- |
 | Claude 2.1.272 / Linux | Actual basic lifecycle payloads; deterministic adapter tests | Live questions/tasks in both directions; cross-agent flow; Stop continuation; TUI/bwrap and permission/human intervention checks |
 | Codex 0.154.0 / Linux | Actual basic lifecycle payloads; deterministic adapter tests | Live questions/tasks and cross-agent flows; native continuation; TUI/bwrap checks |
-| Bob 2.0.4 (01dddf684) / Linux | Installed version observed; current Shell documentation read | Adapter, actual payloads, explicit inbox/context intake and live flows |
+| Bob 2.0.4 (01dddf684) / Linux | Explicit-inbox adapter and deterministic tests; current Shell docs | Actual payloads and live flows: headless mode requires BOB_API_KEY; TUI probe remains in session restoration |
 | macOS / Seatbelt | Generated rules tested only | Real transport and UI validation before any macOS support claim |
 | Dashboard | Existing architecture inspected | Status line, Alt+d, disposable Zellij smoke and regressions |
 
@@ -66,3 +66,10 @@ prompt. The probe used `--dangerously-bypass-hook-trust` for that invocation onl
 after verifying that existing user hooks were exclusively LINCE status handlers;
 plugins were disabled. Product installation does not bypass trust. The retained
 fixture is `lince-messages/tests/fixtures/codex-0.154.0-lifecycle.json`.
+
+Bob runtime probe: `bob run --disable-mcp --disable-subagents --max-turns 1
+--trust` in a disposable workspace failed before hook execution with “Bob API key
+is required”. A separate original-TUI `bob chat` probe remained in “Restoring
+session…” and was interrupted. Neither counts as a successful model or hook
+validation. The installed adapter accepts both documented `event` and bundled
+`hook_event_name` payload spellings, and never attempts automatic wakeup.

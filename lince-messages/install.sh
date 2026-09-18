@@ -20,4 +20,7 @@ if [[ "${1:-}" == "--configure-codex" ]]; then
     python3 "$DEST/hook_config.py" codex "${2:-$HOME/.codex/hooks.json}"
     echo "Codex: review the installed hooks with /hooks; LINCE does not bypass hook trust."
 fi
+if [[ "${1:-}" == "--configure-bob" ]]; then
+    python3 "$DEST/hook_config.py" bob "${2:-$HOME/.bob/settings/settings.json}"
+fi
 echo "Installed lince-msg. Agent instructions: $DEST/instructions.md"

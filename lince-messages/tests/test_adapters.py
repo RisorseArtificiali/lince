@@ -194,3 +194,36 @@ class CodexAdapterTests(MailboxFixture):
         update(path, "codex", remove=True)
         self.assertEqual(json.loads(path.read_text()), original)
         self.assertFalse(capabilities("codex", "0.1.0")["session_identity"])
+
+
+class BobAdapterTests(MailboxFixture):
+    def test_context_explicit_inbox_and_human_precedence(self):
+        self.store.db.execute("UPDATE instances SET capabilities=? WHERE id=?",
+                             (json.dumps(capabilities("bob", "2.0.4")), self.b["instance"]))
+        credential = self.path / "bob-token"
+        credential.write_text(self.b["token"])
+        def event(name, field="event"):
+            return invoke("bob", {field: name, "session_id": "bob-session"}, self.path / "socket", credential)
+        self.assertIn("lince-msg peers", event("SessionStart"))
+        request = self.send()["id"]
+        self.assertIsNone(event("Stop", field="hook_event_name"))
+        self.assertEqual(self.rpc(self.b, "get", request=request)["delivery"], "queued")
+        self.error("unsupported", self.host, "automatic", instance=self.b["instance"], enabled=True)
+        self.rpc(self.b, "accept", request=request)
+        event("UserPromptSubmit")
+        self.assertEqual(self.rpc(self.b, "get", request=request)["work"], "paused")
+        self.rpc(self.b, "resume", request=request)
+        self.assertEqual(self.rpc(self.b, "reply", request=request, key="reply", text="checked")["work"], "completed")
+
+    def test_registration_does_not_invent_permission_hooks(self):
+        path = self.path / "bob-settings.json"
+        original = {"hooks": {"Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "bob-status-hook.sh"}]}]}}
+        path.write_text(json.dumps(original))
+        update(path, "bob")
+        installed = path.read_text()
+        self.assertNotIn("PermissionRequest", installed)
+        self.assertNotIn("Notification", installed)
+        update(path, "bob")
+        self.assertEqual(path.read_text(), installed)
+        update(path, "bob", remove=True)
+        self.assertEqual(json.loads(path.read_text()), original)

@@ -17,10 +17,16 @@ EVENTS = {
                "Notification", "Stop", "SessionEnd"),
     "codex": ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest",
               "PreCompact", "PostCompact", "Stop", "Interrupt", "SessionEnd"),
+    "bob": ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "PostCompact", "Stop"),
 }
 
 
 def capabilities(agent, version):
+    if agent == "bob" and version == "2.0.4":
+        return {"version": version, "session_identity": True, "human_attribution": True,
+                "context_events": [], "permission_detection": False, "question_detection": False,
+                "idle_wakeup": False, "native_cancellation": False,
+                "reason": "Bob Stop ignores hook output; explicit inbox only, no automatic wakeup"}
     if (agent, version) in {("claude", "2.1.272"), ("codex", "0.154.0")}:
         return {"version": version, "session_identity": True, "human_attribution": True,
                 "context_events": ["Stop"], "permission_detection": True, "question_detection": False,
@@ -34,6 +40,8 @@ def normalize(agent, payload):
     if agent not in EVENTS or not isinstance(payload, dict):
         return None
     event = payload.get("hook_event_name")
+    if agent == "bob" and not event:
+        event = payload.get("event")
     session = payload.get("session_id")
     if event not in EVENTS[agent] or not isinstance(session, str) or not session:
         return None
@@ -69,6 +77,8 @@ def invoke(agent, payload, endpoint, credential):
         return None
     if event == "SessionStart":
         instructions = Path(__file__).with_name("instructions.md").read_text()
+        if agent == "bob":
+            return instructions
         return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": instructions}}
     if event == "Stop" and response.get("context"):
         return {"decision": "block", "reason": response["context"]}
@@ -91,7 +101,7 @@ def main():
             return 0
         result = invoke(sys.argv[1], json.loads(raw), endpoint, credential)
         if result is not None:
-            print(json.dumps(result, ensure_ascii=True))
+            print(result if isinstance(result, str) else json.dumps(result, ensure_ascii=True))
     except (OSError, ValueError, ProtocolError, TypeError):
         # Fail open for normal agent use, closed for message delivery. Incomplete
         # delivery stays visible in the durable inbox; never emit a permission decision.
