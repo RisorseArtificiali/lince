@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Exercise real Zellij plugin roles with harmless fixture agents and no user state.
+"""Exercise real Zellij plugin roles in disposable sessions.
 
 Requires Zellij >= 0.45.1 and a built WASM. Uses disposable sessions/config/cache.
+Ordinary smoke tests use harmless fixture agents. The explicit native-review
+option uses authenticated Claude/Codex TUIs and saves review evidence.
   python3 tests/check-ui-session.py --zellij /path/to/zellij
 """
 import argparse
@@ -10,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import pty
+import re
 import runpy
 import select
 import shutil
@@ -24,7 +27,11 @@ ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = runpy.run_path(str(ROOT / "lince-dashboard-launch"))
 
 
-def check(zellij, wasm, preset):
+def check(zellij, wasm, preset, messaging=False, native_review=None):
+    version = subprocess.check_output([zellij, '--version'], text=True).strip()
+    match = re.fullmatch(r'zellij (\d+)\.(\d+)\.(\d+)', version)
+    if not match or tuple(map(int, match.groups())) < (0, 45, 1):
+        raise SystemExit(f'Zellij >= 0.45.1 required; found {version} at {zellij}')
     with tempfile.TemporaryDirectory(prefix="lince-ui-test-") as directory:
         work = Path(directory)
         layout_name = "dashboard-statusline" if preset == "statusline" else "dashboard-tiled"
@@ -36,16 +43,21 @@ def check(zellij, wasm, preset):
         text += '\ndefault_shell "/bin/sh"\npane_frames false\nauto_layout false\nshow_startup_tips false\nshow_release_notes false\n'
         (work / "layout.kdl").write_text(text)
         (work / "config.toml").write_text('[dashboard]\nagent_layout="tiled"\ncompact=true\nsandbox_command="/bin/false"\n')
-        # Resolve only a harmless sleep process: never launch a real AI CLI.
+        # Ordinary smoke runs launch only harmless sleep processes.
         fixture = {"agents": {"fixture": {"display_name": "Fixture", "short_label": "FIX",
             "color": "green", "command": ["/bin/sleep", "600"],
             "dashboard": {"pane_title_pattern": "sleep", "has_native_hooks": True}}}}
+        if native_review:
+            from native_review_ui import prepare
+            fixture = prepare(work, fixture)
         (work / "lince-config").write_text("#!/bin/sh\ncat <<'FIXTURE'\n" + json.dumps(fixture) + "\nFIXTURE\n")
         (work / "lince-config").chmod(0o755)
         shutil.copyfile(ROOT / "tests/voice-fixture.py", work / "lince-voice")
         (work / "lince-voice").chmod(0o755)
         (work / ".lince-dashboard").write_text(json.dumps({"version": 3, "next_agent_id": 0,
-            "agents": [{"name": f"fixture{i}", "agent_type": "fixture", "project_dir": str(work)}
+            "agents": [{"name": f"fixture{i}",
+                        "agent_type": ({1: "claude", 2: "codex"}.get(i, "fixture") if native_review else "fixture"),
+                        "project_dir": str(ROOT.parent if native_review else work)}
                        for i in (1, 2, 3)]}))
         (work / "session.kdl").write_text((ROOT / "zellij-config/config.kdl").read_text()
             + f'\nenv {{ PATH "{work}:{Path(zellij).parent}:/usr/bin:/bin"; }}\n')
@@ -56,9 +68,27 @@ def check(zellij, wasm, preset):
                                ' MessageAndLaunchOtherPlugins\n}\n')
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 100, 0, 0))
+        terminal = None
+        if messaging:
+            import pyte
+            class ObservationScreen(pyte.Screen):
+                def report_device_status(self, *args, **kwargs):
+                    pass
+
+                def report_device_attributes(self, *args, **kwargs):
+                    pass
+
+            terminal = ObservationScreen(100, 32)
+            terminal_stream = pyte.ByteStream(terminal)
         env = {key: value for key, value in os.environ.items() if not key.startswith("ZELLIJ")}
         env.update(TERM="xterm-256color", XDG_CACHE_HOME=str(work / "cache"),
                    PATH=f"{Path(zellij).parent}:{work}:{os.environ['PATH']}")
+        if messaging:
+            env.update(HOME=str(work), LINCE_MESSAGES_BIN_DIR=str(work),
+                       LINCE_MESSAGES_INSTALL_DIR=str(work / "messages"))
+            env.pop("CODEX_HOME", None)
+            subprocess.run(["bash", str(ROOT.parent / "lince-messages/install.sh")],
+                           env=env, check=True, capture_output=True)
         session = f"lince-ui-test-{uuid.uuid4().hex[:10]}"
         process = subprocess.Popen(
             [zellij, "--config", str(work / "session.kdl"), "--config-dir", str(work),
@@ -66,8 +96,10 @@ def check(zellij, wasm, preset):
              "options", "--session-name", session], cwd=work, env=env,
             stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
         os.close(slave)
+        terminal_pending = b''
 
         def pump():
+            nonlocal terminal_pending
             # Drain the PTY: one read per CLI query can back-pressure Zellij's
             # renderer and delay keyboard events when the voice meter updates.
             ready = select.select([master], [], [], 0.01)[0]
@@ -77,6 +109,16 @@ def check(zellij, wasm, preset):
                     chunk = os.read(master, 100000)
                     if not chunk:
                         break
+                    if terminal is not None:
+                        # Zellij emits colon-form truecolor SGR, which pyte 0.8
+                        # does not parse. Ignore styling, retaining all cursor
+                        # and erase controls and incomplete sequences across reads.
+                        data = terminal_pending + chunk
+                        partial = re.search(rb'\x1b(?:\[[0-9:;?]*)?$', data)
+                        terminal_pending = data[partial.start():] if partial else b''
+                        if partial:
+                            data = data[:partial.start()]
+                        terminal_stream.feed(re.sub(rb'\x1b\[[0-9:;]*m', b'', data))
                     drained += len(chunk)
                 except OSError:
                     break
@@ -111,8 +153,8 @@ def check(zellij, wasm, preset):
                     return []
                 raise AssertionError(f"Unexpected list-panes response: {stdout[:300]!r}") from error
 
-        def wait_for(predicate):
-            end = time.monotonic() + 15
+        def wait_for(predicate, timeout=15):
+            end = time.monotonic() + timeout
             while time.monotonic() < end:
                 pump()
                 current = {pane["title"]: pane for pane in panes()}
@@ -125,6 +167,8 @@ def check(zellij, wasm, preset):
                     pump()
             fields = ("title", "is_suppressed", "is_focused", "pane_x", "pane_y", "pane_columns", "pane_rows", "terminal_command")
             summary = [{k: p[k] for k in fields} for p in panes()]
+            if terminal is not None:
+                print('\n'.join(terminal.display), flush=True)
             raise AssertionError(f"{preset}: UI condition timed out; panes={summary}")
 
         def floating_visible():
@@ -149,14 +193,33 @@ def check(zellij, wasm, preset):
             os.write(master, data)
 
         try:
+            # Let the first client attach before issuing CLI queries; Zellij
+            # 0.45.1 can panic when an action races initial client registration.
+            attach_deadline = time.monotonic() + 0.5
+            while time.monotonic() < attach_deadline and process.poll() is None:
+                pump()
             initial = wait_for(lambda ps: visible("lince-dialog", False)(ps)
-                and visible("lince-controller", preset == "minimal")(ps)
-                and "lince-viewport" in ps and sum("fixture" in name and ps[name]["is_suppressed"]
-                    for name in ps) == 3)
+                and visible("lince-controller", preset != "statusline")(ps)
+                and "lince-viewport" in ps and sum("fixture" in name for name in ps) == 3
+                and sum("fixture" in name and ps[name]["is_suppressed"] for name in ps) >= 2)
+            if preset == "classic":
+                from messaging_ui_smoke import check_messages
+                assert 'lince-attention' not in initial
+                check_messages(work, session, cli, wait_for, key, panes, visible, env, terminal, attention=False)
+                print('classic: original Zellij chrome retained; Alt+d messaging controls OK')
+                return
             assert initial["lince-attention"]["pane_rows"] == 2
             assert initial["lince-attention"]["pane_y"] == 30
+            if native_review:
+                from native_review_ui import check_review
+                check_review(work, session, cli, wait_for, key, panes, visible, env,
+                             terminal, native_review)
+                return
             identities = {(p["id"], p["is_plugin"]) for p in panes()}
             assert len(identities) == 7
+            if messaging:
+                from messaging_ui_smoke import check_messages
+                check_messages(work, session, cli, wait_for, key, panes, visible, env, terminal)
             viewport = initial["lince-viewport"]
             if preset == "statusline":
                 assert viewport["pane_columns"] == 100, viewport
@@ -216,7 +279,7 @@ def check(zellij, wasm, preset):
             wait_for(voice_state("listening"))
             key(b"\x1b")
             wait_for(visible("lince-dialog", False))
-            key(b"\x1bx")
+            key(b"\x1bt")
             wait_for(voice_state("recording"))
             # Enhanced-keyboard Ctrl+Space also works in locked mode.
             key(b"\x1b[32;5u")
@@ -254,9 +317,9 @@ def check(zellij, wasm, preset):
             key(b"\x1b1")
             agent_panes = wait_for(agent_fills_viewport)
             agent_id = focused_fixture(agent_panes)["id"]
-            key(b"\x1bx")
+            key(b"\x1bt")
             wait_for(voice_state("recording"))
-            key(b"\x1bx")
+            key(b"\x1bt")
             wait_for(voice_state("listening"))
             wait_for(lambda ps: "VOICE_FIXTURE_TEXT" in cli(["-s", session, "action", "dump-screen", "--pane-id", str(agent_id)])[1])
             key(b"\x1bv")
@@ -407,6 +470,9 @@ def check(zellij, wasm, preset):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
+                if messaging:
+                    subprocess.run(["python3", str(work / "messages/maintenance.py")],
+                                   env=env, check=True, timeout=15)
 
 
 if __name__ == "__main__":
@@ -414,8 +480,19 @@ if __name__ == "__main__":
     parser.add_argument("--zellij", default=shutil.which("zellij"))
     parser.add_argument("--wasm", type=Path,
                         default=ROOT / "plugin/target/wasm32-wasip1/release/lince-dashboard.wasm")
+    parser.add_argument("--messaging", action="store_true", help="Also exercise a real isolated mailbox and its UI")
+    parser.add_argument("--native-review-evidence", type=Path,
+                        help="Opt-in authenticated Claude/Codex TUI review; save sanitized evidence in this directory")
+    parser.add_argument("--reviewed-hook-trust", action="store_true",
+                        help="Confirm review of existing Codex status hooks for the native probe's invocation-only bypass")
     args = parser.parse_args()
     if not args.zellij or not args.wasm.exists():
         parser.error("Zellij and a built WASM are required")
-    for preset in ("statusline", "minimal"):
-        check(str(Path(args.zellij).resolve()), args.wasm.resolve(), preset)
+    if args.native_review_evidence:
+        if not args.reviewed_hook_trust:
+            parser.error("Native review requires --reviewed-hook-trust after reviewing existing Codex hooks")
+        check(str(Path(args.zellij).resolve()), args.wasm.resolve(), "statusline", True,
+              args.native_review_evidence.resolve())
+        raise SystemExit(0)
+    for preset in (("statusline", "minimal", "classic") if args.messaging else ("statusline", "minimal")):
+        check(str(Path(args.zellij).resolve()), args.wasm.resolve(), preset, args.messaging)

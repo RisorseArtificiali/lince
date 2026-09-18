@@ -109,6 +109,14 @@ The multi-agent TUI dashboard — a Zellij WASM plugin (Rust, ~900 KB) that mana
 
 Documentation: [Usage Guide](https://lince.sh/documentation/#/dashboard/usage-guide) | [Configuration](https://lince.sh/documentation/#/dashboard/config-reference) | [Agent Examples](https://lince.sh/documentation/#/dashboard/agent-examples)
 
+### [lince-messages/](lince-messages/)
+
+Host-controlled peer messaging and delegation for existing agent panes, with a
+durable mailbox, restricted `lince-msg` CLI, status-line provenance and Alt+d
+controls. Original agent TUIs are preserved. See the [operator guide](docs/agent-messaging.md)
+and [validation ledger](docs/agent-messaging-validation.md) for version-specific
+capabilities and outstanding real-agent/platform checks.
+
 ### [lince-config/](lince-config/)
 
 Structured CLI for reading and editing LINCE configuration files (`~/.agent-sandbox/config.toml` and `~/.config/lince-dashboard/config.toml`). Preserves comments and formatting via `tomlkit`. Installed to `~/.local/bin/lince-config`.
