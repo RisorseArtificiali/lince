@@ -15,11 +15,13 @@ from store import digest
 EVENTS = {
     "claude": ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest",
                "Notification", "Stop", "SessionEnd"),
+    "codex": ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest",
+              "PreCompact", "PostCompact", "Stop", "Interrupt", "SessionEnd"),
 }
 
 
 def capabilities(agent, version):
-    if agent == "claude" and version == "2.1.272":
+    if (agent, version) in {("claude", "2.1.272"), ("codex", "0.154.0")}:
         return {"version": version, "session_identity": True, "human_attribution": True,
                 "context_events": ["Stop"], "permission_detection": True, "question_detection": False,
                 "idle_wakeup": False, "native_cancellation": False,
@@ -44,6 +46,14 @@ def normalize(agent, payload):
         event = "Question"
     normalized = {"session": session, "event": event, "key": str(uuid.uuid4()),
                   "continuation": payload.get("stop_hook_active", False) is True}
+    turn = payload.get("turn_id")
+    if agent == "codex" and event in {"UserPromptSubmit", "Stop"} and isinstance(turn, str) and turn:
+        # These events occur once per turn/continuation. Preserve the provider
+        # identity across repeated hook invocations, including after resume.
+        normalized["key"] = "codex-turn-" + digest(json.dumps(
+            [session, event, turn, normalized["continuation"]], separators=(",", ":")))
+    # Without a native event/turn identity, equal payloads can be distinct human
+    # prompts. Do not collapse them by hashing their text or wall-clock buckets.
     if event == "UserPromptSubmit" and isinstance(payload.get("prompt"), str):
         normalized["prompt_hash"] = digest(payload["prompt"])
     return normalized

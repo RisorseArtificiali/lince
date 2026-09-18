@@ -1,0 +1,29 @@
+{
+  "source": "Captured from a real Codex 0.154.0 exec session on Linux, 2026-09-18. Only lifecycle fields retained.",
+  "result": "LINCE_HOOK_PROBE",
+  "events": [
+    {
+      "hook_event_name": "SessionStart",
+      "session_id": "01a0b59c-64a9-7c30-8aa5-7c9cc4d9a1c9",
+      "permission_mode": "bypassPermissions",
+      "source": "startup"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "01a0b59c-64a9-7c30-8aa5-7c9cc4d9a1c9",
+      "turn_id": "01a0b59c-6515-72e0-839e-bbc4c04e9214",
+      "permission_mode": "bypassPermissions"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "01a0b59c-64a9-7c30-8aa5-7c9cc4d9a1c9",
+      "turn_id": "01a0b59c-6515-72e0-839e-bbc4c04e9214",
+      "stop_hook_active": false,
+      "permission_mode": "bypassPermissions"
+    },
+    {
+      "hook_event_name": "SessionEnd",
+      "session_id": "01a0b59c-64a9-7c30-8aa5-7c9cc4d9a1c9"
+    }
+  ]
+}

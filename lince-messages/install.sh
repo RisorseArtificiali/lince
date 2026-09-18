@@ -16,4 +16,8 @@ ln -sfn "$DEST/lince-msg-hook" "$BIN/lince-msg-hook"
 if [[ "${1:-}" == "--configure-claude" ]]; then
     python3 "$DEST/hook_config.py" claude "${2:-$HOME/.claude/settings.json}"
 fi
+if [[ "${1:-}" == "--configure-codex" ]]; then
+    python3 "$DEST/hook_config.py" codex "${2:-$HOME/.codex/hooks.json}"
+    echo "Codex: review the installed hooks with /hooks; LINCE does not bypass hook trust."
+fi
 echo "Installed lince-msg. Agent instructions: $DEST/instructions.md"

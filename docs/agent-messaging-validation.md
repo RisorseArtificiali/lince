@@ -30,7 +30,7 @@ sub-issue; subsequent corrections will be folded into the relevant commits.
 | Agent / platform | Evidence | Still required |
 | --- | --- | --- |
 | Claude 2.1.272 / Linux | Actual basic lifecycle payloads; deterministic adapter tests | Live questions/tasks in both directions; cross-agent flow; Stop continuation; TUI/bwrap and permission/human intervention checks |
-| Codex 0.154.0 / Linux | Installed version observed; current primary hook documentation read | Adapter, captured payloads, live flows and TUI/bwrap checks |
+| Codex 0.154.0 / Linux | Actual basic lifecycle payloads; deterministic adapter tests | Live questions/tasks and cross-agent flows; native continuation; TUI/bwrap checks |
 | Bob 2.0.4 (01dddf684) / Linux | Installed version observed; current Shell documentation read | Adapter, actual payloads, explicit inbox/context intake and live flows |
 | macOS / Seatbelt | Generated rules tested only | Real transport and UI validation before any macOS support claim |
 | Dashboard | Existing architecture inspected | Status line, Alt+d, disposable Zellij smoke and regressions |
@@ -59,3 +59,10 @@ Basic native Claude capture command (temporary hook settings, no tools enabled):
 The temporary capture handler retained only event/session/source/permission/turn
 metadata and called the messaging adapter; no prompt, transcript or credential
 contents are included in the fixture.
+
+Codex basic native probe: `codex exec --skip-git-repo-check --ignore-user-config
+--disable plugins --sandbox read-only`, with temporary inline hooks and a no-tools
+prompt. The probe used `--dangerously-bypass-hook-trust` for that invocation only
+after verifying that existing user hooks were exclusively LINCE status handlers;
+plugins were disabled. Product installation does not bypass trust. The retained
+fixture is `lince-messages/tests/fixtures/codex-0.154.0-lifecycle.json`.

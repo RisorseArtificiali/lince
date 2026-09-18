@@ -1,0 +1,48 @@
+{
+  "source": "Real native headless agent inside Linux bwrap using production messaging_bwrap_args. Preflight checked own identity, absent administrative credential and Zellij socket, and denied administrative RPC. Native agent explicitly accepted and completed the task.",
+  "preflight": {
+    "own_identity": true,
+    "host_credential_absent": true,
+    "zellij_socket_absent": true,
+    "administrative_rpc_denied": true
+  },
+  "agent": "codex",
+  "version": "0.154.0",
+  "platform": "Linux bwrap",
+  "exit_code": 0,
+  "request": "0d4f814f-348f-4a96-8f52-de54453839c8",
+  "work": "completed",
+  "delivery": "read",
+  "events": [
+    {
+      "actor": "b81f7d59-7d11-493a-b649-08ed448ada10",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "actor": "473e2b0d-bba3-4065-86d7-88eb0f79621c",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "actor": "473e2b0d-bba3-4065-86d7-88eb0f79621c",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "actor": "473e2b0d-bba3-4065-86d7-88eb0f79621c",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "actor": "473e2b0d-bba3-4065-86d7-88eb0f79621c",
+      "type": "complete",
+      "text": "42"
+    },
+    {
+      "actor": "473e2b0d-bba3-4065-86d7-88eb0f79621c",
+      "type": "work",
+      "text": "completed"
+    }
+  ]
+}

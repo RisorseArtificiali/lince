@@ -13,6 +13,7 @@ if [[ -L "$BIN/lince-msg-hook" && "$(readlink "$BIN/lince-msg-hook")" == "$DEST/
 fi
 if [[ -f "$DEST/hook_config.py" ]]; then
     python3 "$DEST/hook_config.py" claude "$HOME/.claude/settings.json" --remove
+    python3 "$DEST/hook_config.py" codex "$HOME/.codex/hooks.json" --remove
 fi
 for file in protocol.py store.py service.py host.py adapters.py hook_config.py instructions.md lince-msg lince-msg-host lince-msg-hook; do
     rm -f -- "$DEST/$file"

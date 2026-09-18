@@ -46,3 +46,8 @@ Exit codes: 0 success; 2 invalid request; 3 denied; 4 wait timed out; 5 service 
 instance unavailable/interrupted; 6 failed/cancelled work; 7 conflict/busy/wait
 cycle; 8 rate/queue limit. A successful send reports queuing, not acceptance or
 completion. Unsupported automatic intake is visible; use the explicit inbox.
+
+Codex setup: after installation, review the LINCE handlers in `/hooks`. Codex
+may skip new or changed handlers until trusted. LINCE preserves this policy and
+does not add a hook-trust bypass flag. If hooks do not run, use the explicit inbox;
+the dashboard must not infer readiness from the lack of events.
