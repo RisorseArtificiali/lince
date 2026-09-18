@@ -17,7 +17,7 @@ keybinds clear-defaults=true {
         bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }
         bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }
         bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }
-        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }
         bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
@@ -246,7 +246,7 @@ keybinds clear-defaults=true {
         bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }
         bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }
         bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }
-        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }
         bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }

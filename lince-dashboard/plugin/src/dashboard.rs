@@ -1220,7 +1220,7 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
     if rows == 0 || cols == 0 { return; }
     let hints = ["LINCE — Keybindings", "Alt+d        Detailed agent list",
         "Alt+v        VoxCode settings / start / mute / stop", "Alt+m          Mute/unmute VoxCode",
-        "Alt+t / Ctrl+Space  Toggle PTT recording", "Alt+i/h/?    Info / help", "Alt+s        Toggle sidebar",
+        "Alt+t / Ctrl+Space  PTT: insert / insert + Enter", "Alt+i/h/?    Info / help", "Alt+s        Toggle sidebar",
         "Alt+b        Bar: hidden / left / full / right", "Alt+n        New agent wizard",
         "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
         "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "Alt+r        Rename focused agent", "Alt+x        Kill focused agent", "i            Info (PgUp/Dn scroll)",

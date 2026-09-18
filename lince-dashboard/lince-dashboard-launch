@@ -39,6 +39,7 @@ def presentation_layout(text: str, preset: str, compact: bool, tiled: bool, voxc
         'config_path "~/.config/lince-dashboard/config.toml"\n'
         f'                    compact "{str(compact).lower()}"\n'
         f'                    presentation "{"managed" if managed else "classic"}"\n'
+        f'                    agent_borderless "{str(preset == "minimal").lower()}"\n'
         f'                    sidebar_visible "{str(preset != "statusline").lower()}"\n'
         f'                    agent_layout "{"tiled" if tiled else "floating"}"')
     closing = text.rfind("    }\n}")
@@ -101,6 +102,8 @@ def main() -> int:
     frames = args.frames if args.frames is not None else config.get("pane_frames", preset == "classic")
     if not isinstance(frames, bool):
         raise ValueError("pane_frames must be a boolean")
+    if frames:
+        text = text.replace('agent_borderless "true"', 'agent_borderless "false"')
     text += f"\npane_frames {str(frames).lower()}\nauto_layout false\n"
     if preset != "classic":
         text += "simplified_ui true\n"

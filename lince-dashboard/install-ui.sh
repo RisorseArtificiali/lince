@@ -42,6 +42,7 @@ import re
 path = Path(sys.argv[1])
 text = path.read_text()
 replacements = {
+    'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }': 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }',
     'bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }': 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }',
     'bind "Alt j" { MoveFocus "down"; }': 'bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }',
     'bind "Alt k" { MoveFocus "up"; }': 'bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }',
@@ -80,7 +81,7 @@ for key, binding in [
     ('Alt x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
     ('Alt r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
     ('Alt ?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
-    ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+    ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'),
 ]:
     if f'bind "{key}"' not in updated:
         updated = re.sub(r'(?m)^([ \t]*)(bind "Alt n" \{ MessagePlugin \{ name "lince-ui-open"; payload "wizard"; \}; \})$',
@@ -95,7 +96,7 @@ def add_shared_shortcuts(match):
         ('Alt x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
         ('Alt r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
         ('Alt ?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
-        ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+        ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'),
     ]:
         if f'bind "{key}"' not in body:
             body += f'        {binding}\n'
@@ -115,7 +116,7 @@ def add_locked_shortcuts(match):
         ('x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
         ('r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
         ('?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
-        ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+        ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'),
     ]:
         binding_key = key if key == 'Ctrl Space' else f'Alt {key}'
         if f'bind "{binding_key}"' not in body:

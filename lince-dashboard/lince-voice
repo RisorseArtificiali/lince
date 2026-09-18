@@ -110,16 +110,17 @@ class Session:
         self.active = False
         self.muted = False
         self.recording = False
+        self.ptt_delivery = None
         self.shutdown = False
         self.thread = None
         self.probing = False
 
-    def emit(self, text):
+    def emit(self, text, delivery=None):
         if text:
             if len(self.events) >= 128:
                 raise ValueError("Too many undelivered voice messages; focus a terminal before continuing")
             self.sequence += 1
-            self.events.append({"sequence": self.sequence, "text": text})
+            self.events.append({"sequence": self.sequence, "text": text, **(delivery or {})})
 
     def fail(self, error):
         self.error = str(error)
@@ -171,6 +172,9 @@ class Session:
                         self.thread.start()
                     elif action == "ptt" and not self.muted:
                         self.recording = not self.recording
+                        if not self.recording:
+                            self.ptt_delivery = dict(pinned=True, target=message.get("target"),
+                                                     submit=bool(message.get("submit", False)))
                 elif action in ("mute", "pause"):
                     if self.active:
                         self.muted = not self.muted
@@ -274,13 +278,13 @@ class Session:
             def transcribe():
                 while not done.is_set():
                     try:
-                        epoch, samples = work.get(timeout=0.1)
+                        epoch, samples, delivery = work.get(timeout=0.1)
                     except queue.Empty:
                         continue
                     try:
-                        results.put((epoch, model.transcribe(samples, settings["language"]), None))
+                        results.put((epoch, model.transcribe(samples, settings["language"]), None, delivery))
                     except Exception as error:
-                        results.put((epoch, None, error))
+                        results.put((epoch, None, error, delivery))
 
             threading.Thread(target=transcribe, daemon=True).start()
             frames = []
@@ -316,6 +320,7 @@ class Session:
                     if self.muted or epoch != self.epoch:
                         continue
                     recording = self.recording
+                    delivery = self.ptt_delivery if settings["mode"] == "ptt" else None
                     self.level = min(6, max(0, round(AudioCapture.get_level(frame) * 60)))
                     self.status = "recording" if recording else ("transcribing" if outstanding else "listening")
                 if settings["mode"] == "ptt":
@@ -331,11 +336,11 @@ class Session:
                     if vad.state == VADState.SPEECH:
                         self.status = "recording"
                 if samples is not None and len(samples):
-                    work.put_nowait((epoch, samples))
+                    work.put_nowait((epoch, samples, delivery))
                     outstanding += 1
                     self.status = "transcribing"
                 while not results.empty():
-                    result_epoch, result, error = results.get_nowait()
+                    result_epoch, result, error, delivery = results.get_nowait()
                     outstanding = max(0, outstanding - 1)
                     with self.lock:
                         if result_epoch != self.epoch or not self.active or self.muted:
@@ -347,7 +352,7 @@ class Session:
                         )
                         if parsed.is_command:
                             if parsed.command == CommandType.SEND:
-                                self.emit(self.buffer.strip())
+                                self.emit(self.buffer.strip(), delivery)
                                 self.buffer = ""
                             elif parsed.command == CommandType.CANCEL:
                                 self.buffer = ""
@@ -357,8 +362,8 @@ class Session:
                             if len(self.buffer) + len(parsed.text) > 65536:
                                 raise ValueError("Voice buffer is full; insert or clear it")
                             self.buffer += (" " if self.buffer else "") + parsed.text
-                            if settings["auto_send"]:
-                                self.emit(self.buffer.strip())
+                            if settings["auto_send"] or delivery is not None:
+                                self.emit(self.buffer.strip(), delivery)
                                 self.buffer = ""
             done.set()
         except Exception as error:

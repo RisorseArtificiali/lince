@@ -270,6 +270,8 @@ pub struct DashboardConfig {
     /// Runtime geometry of the named viewport in our own tab.
     #[serde(skip)]
     pub viewport: Option<crate::pane_manager::Viewport>,
+    #[serde(skip)]
+    pub agent_borderless: bool,
     /// Default provider (env-var bundle) name. Was `default_profile` pre-#81;
     /// the legacy spelling is still accepted as a serde alias.
     #[serde(default, alias = "default_profile")]
@@ -369,6 +371,7 @@ impl Default for DashboardConfig {
             attention_blink: false,
             voxcode_enabled: true,
             viewport: None,
+            agent_borderless: false,
             default_provider: None,
             providers_by_agent: HashMap::new(),
             provider_details_by_agent: HashMap::new(),
