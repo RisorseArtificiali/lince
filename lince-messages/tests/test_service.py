@@ -14,7 +14,7 @@ from service import Server
 from store import Store
 
 
-class MailboxTests(unittest.TestCase):
+class MailboxFixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name)
@@ -50,6 +50,8 @@ class MailboxTests(unittest.TestCase):
             fn(*args, **kwargs)
         self.assertEqual(caught.exception.code, code)
 
+
+class MailboxTests(MailboxFixture):
     def test_maximum_escaped_request_and_result_remain_readable(self):
         body = '\n' * 16384
         request = self.send(text=body)['id']
