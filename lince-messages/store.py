@@ -422,6 +422,26 @@ class Store:
             after = args.get("after", 0)
             require(type(after) is int and after >= 0)
             return self._view(self._request(args["request"], "host"), after)
+        if op == "list":
+            fields(args, optional=("filter", "before", "limit"))
+            predicates = {
+                "all": "1",
+                "unread": "work='pending' AND delivery IN ('queued','delivered')",
+                "waiting": "work IN ('pending','active','paused')",
+                "active": "work IN ('active','paused')",
+                "errors": "work IN ('failed','interrupted') OR delivery='uncertain'",
+                "completed": "work IN ('completed','cancelled')",
+            }
+            selected = args.get("filter", "all")
+            require(isinstance(selected, str) and selected in predicates)
+            before, limit = args.get("before", 9223372036854775807), args.get("limit", 20)
+            require(type(before) is int and 0 < before <= 9223372036854775807)
+            require(type(limit) is int and 1 <= limit <= 50)
+            rows = self.db.execute("SELECT rowid AS ordinal,* FROM requests WHERE rowid<? AND (" +
+                predicates[selected] + ") ORDER BY rowid DESC LIMIT ?", (before, limit + 1)).fetchall()
+            page = rows[:limit]
+            return {"requests": [self._preview(row) for row in page],
+                    "cursor": page[-1]["ordinal"] if page else before, "more": len(rows) > limit}
         if op == "snapshot":
             fields(args, optional=("before", "limit"))
             limit = args.get("limit", 20)

@@ -33,7 +33,7 @@ sub-issue; subsequent corrections will be folded into the relevant commits.
 | Codex 0.154.0 / Linux | Actual basic lifecycle payloads; deterministic adapter tests | Live questions/tasks and cross-agent flows; native continuation; TUI/bwrap checks |
 | Bob 2.0.4 (01dddf684) / Linux | Explicit-inbox adapter and deterministic tests; current Shell docs | Actual payloads and live flows: headless mode requires BOB_API_KEY; TUI probe remains in session restoration |
 | macOS / Seatbelt | Generated rules tested only | Real transport and UI validation before any macOS support claim |
-| Dashboard | Three-area status line implemented; WASI suite: 106 passed, one existing preview ignored | Alt+d, disposable Zellij smoke and final regressions |
+| Dashboard | Status line and Alt+d mailbox implemented; WASI suite: 111 passed, one existing preview ignored | Disposable Zellij smoke and final regressions |
 
 The documented Stop continuation contract for Claude/Codex does not establish a
 safe external wakeup of an already idle TUI. Keep those capabilities separate.
@@ -78,3 +78,10 @@ The WASI toolchain was installed through `lince-dashboard/tests/setup-wasm-toolc
 `bash lince-dashboard/tests/run-plugin-tests.sh` executes the Rust tests under
 wasmtime (106 passed, one pre-existing preview ignored at this checkpoint).
 This is stronger than a host `cargo check`, but is not a real Zellij UI smoke.
+
+Alt+d mailbox implementation: `m` opens messages, `1`–`6` filter durable history,
+Enter opens full paginated threads, and `g` opens host-controlled membership and
+automatic-intake settings. Tests cover pinned IDs, stale asynchronous responses,
+selection preservation, explicit navigation, cancellation acknowledgement, late
+results and Unicode wrapping. Host API tests cover equal-timestamp pagination,
+filter validation/authorization and deliberate uncertain-delivery reconciliation.

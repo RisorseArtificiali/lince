@@ -12,6 +12,40 @@ mod voice;
 mod render_output;
 mod messaging;
 
+#[cfg(test)]
+mod messaging_ui_tests {
+    use super::*;
+
+    #[test]
+    fn mailbox_open_and_back_preserve_agent_focus() {
+        let mut state = State::default();
+        state.menu_open = true;
+        state.focused_agent = Some("original".into());
+        state.handle_key(KeyWithModifier::new(BareKey::Char('m')));
+        assert!(state.messages_browser.open);
+        assert_eq!(state.focused_agent.as_deref(), Some("original"));
+        state.handle_key(KeyWithModifier::new(BareKey::Esc));
+        assert!(!state.messages_browser.open);
+        assert!(state.menu_open);
+        assert_eq!(state.focused_agent.as_deref(), Some("original"));
+    }
+
+    #[test]
+    fn closed_instance_navigation_does_not_target_a_replacement() {
+        let mut state = State::default();
+        state.focused_agent = Some("original".into());
+        let mut data = messaging::Snapshot::default();
+        data.instances.push(messaging::Instance { id: "old".into(), pane_ref: "42".into(), live: 0,
+            ..messaging::Instance::default() });
+        data.instances.push(messaging::Instance { id: "new".into(), pane_ref: "42".into(), live: 1,
+            ..messaging::Instance::default() });
+        state.messages = Some(data);
+        state.apply_message_action(messaging::Action::Navigate("old".into()));
+        assert_eq!(state.focused_agent.as_deref(), Some("original"));
+        assert!(state.messages_browser.error.as_ref().is_some_and(|e| e.contains("closed")));
+    }
+}
+
 use crate::types::{SavedView, StatusBarMode};
 use std::collections::BTreeMap;
 use zellij_tile::prelude::*;
@@ -50,6 +84,7 @@ struct State {
     messages: Option<messaging::Snapshot>,
     messages_pending: bool,
     messages_error: Option<String>,
+    messages_browser: messaging::Browser,
     voice: voice::Voice,
     own_id: u32,
     passive_bar: bool,
@@ -134,6 +169,7 @@ impl Default for State {
             messages: None,
             messages_pending: false,
             messages_error: None,
+            messages_browser: messaging::Browser::default(),
             voice: voice::Voice::default(),
             own_id: 0,
             passive_bar: false,
@@ -413,6 +449,7 @@ impl ZellijPlugin for State {
                 false
             }
             Event::Timer(_elapsed) => {
+                self.apply_message_action(self.messages_browser.refresh_visible());
                 if !self.messages_pending {
                     self.messages_pending = true;
                     messaging::poll();
@@ -478,6 +515,17 @@ impl ZellijPlugin for State {
             Event::RunCommandResult(exit_code, stdout, stderr, context) => {
                 let cmd_type = context.get(config::CMD_TYPE_KEY).map(|s| s.as_str());
                 match cmd_type {
+                    Some(messaging::BROWSER_COMMAND) => {
+                        let revision = context.get("revision").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+                        let operation = context.get("operation").map(String::as_str).unwrap_or("");
+                        let action = self.messages_browser.response(revision, operation, exit_code == Some(0), &stdout);
+                        if revision == self.messages_browser.revision && !matches!(operation, "list" | "get") {
+                            self.messages_pending = true;
+                            messaging::poll();
+                        }
+                        self.apply_message_action(action);
+                        return true;
+                    }
                     Some(messaging::SNAPSHOT_COMMAND) => {
                         self.messages_pending = false;
                         match serde_json::from_slice::<messaging::Snapshot>(&stdout) {
@@ -1158,6 +1206,13 @@ impl State {
 
     fn handle_key(&mut self, key: KeyWithModifier) -> bool {
         if self.voice.open { return self.handle_voice_key(key); }
+        if self.messages_browser.open {
+            if !key.key_modifiers.is_empty() { return false; }
+            if self.messages_browser.groups_open && self.messages_pending && key.bare_key != BareKey::Esc { return false; }
+            let action = self.messages_browser.key(&key.bare_key, self.messages.as_ref());
+            self.apply_message_action(action);
+            return true;
+        }
         // If wizard is active, route all keys there
         if self.wizard.is_some() {
             return self.handle_wizard_key(key);
@@ -1181,6 +1236,14 @@ impl State {
         }
 
         match bare {
+            BareKey::Char('m') if self.menu_open && !self.show_detail => {
+                self.messages_browser.open = true;
+                self.messages_browser.groups_open = false;
+                self.messages_browser.thread = None;
+                self.messages_browser.scroll = 0;
+                self.apply_message_action(self.messages_browser.refresh());
+                true
+            }
             BareKey::PageDown if self.show_detail => {
                 self.info_scroll = self.info_scroll.saturating_add(8);
                 true
@@ -2698,6 +2761,7 @@ impl State {
     fn render_controller(&mut self, rows: usize, cols: usize) {
         theme::set(&self.config.theme, self.inherited_style);
         if self.voice.open { self.voice.render(rows, cols, self.config.voxcode_enabled); return; }
+        if self.messages_browser.open { self.messages_browser.render(self.messages.as_ref(), rows, cols); return; }
         // If help overlay is active, render it and return
         if self.show_help {
             dashboard::render_help_overlay(rows, cols);
@@ -2727,7 +2791,8 @@ impl State {
         }
 
         let config_warning = self.config_error.as_deref();
-        let effective_status = self.status_message.as_deref().or(config_warning);
+        let effective_status = self.status_message.as_deref().or(config_warning)
+            .or(if self.menu_open { Some("m: Messages and tasks") } else { None });
 
         let detail_id = if self.show_detail {
             self.agents.get(self.selected_index).map(|a| a.id.as_str())
@@ -2754,14 +2819,35 @@ impl State {
 }
 
 impl State {
+    fn apply_message_action(&mut self, action: messaging::Action) {
+        match action {
+            messaging::Action::None => {},
+            messaging::Action::Close => { self.menu_open = true; },
+            messaging::Action::Rpc(operation, args) => self.messages_browser.command(operation, args),
+            messaging::Action::Navigate(instance_id) => {
+                let pane = self.messages.as_ref().and_then(|snapshot| snapshot.instances.iter()
+                    .find(|instance| instance.id == instance_id && instance.live == 1))
+                    .and_then(|instance| instance.pane_ref.parse::<u32>().ok());
+                let index = pane.and_then(|pane| self.agents.iter().position(|agent| agent.pane_id == Some(pane)));
+                if let Some(index) = index {
+                    self.messages_browser.open = false;
+                    self.menu_open = false;
+                    self.focus_agent_by_index(index);
+                } else {
+                    self.messages_browser.error = Some("The original instance has closed; no replacement pane was selected".into());
+                }
+            }
+        }
+    }
+
     fn has_dialog(&self) -> bool {
-        self.voice.open || self.menu_open || self.show_detail || self.show_help || self.wizard.is_some()
+        self.messages_browser.open || self.voice.open || self.menu_open || self.show_detail || self.show_help || self.wizard.is_some()
             || self.name_prompt.is_some() || self.relay_state.is_some()
     }
     fn sync_dialog(&mut self) {
         let Some(id) = self.dialog_id else { return; };
         let frame = if self.has_dialog() {
-            let title = if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
+            let title = if self.messages_browser.open { "LINCE — Messages and tasks" } else if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
                 else if self.rename_target.is_some() && self.name_prompt.is_some() { "LINCE — Rename agent" }
                 else if self.wizard.is_some() || self.name_prompt.is_some() { "LINCE — New agent" } else { "LINCE — Agents" };
             Some(render_output::bordered(self.dialog_size.0, self.dialog_size.1, title,
@@ -2780,6 +2866,7 @@ impl State {
 
 impl State {
     fn open_ui(&mut self, action: &str) {
+        self.messages_browser.open = false;
         self.voice.open = false;
         if self.dialog_frame.is_some() {
             if let Some(id) = self.dialog_id { focus_plugin_pane(id, true, false); }
