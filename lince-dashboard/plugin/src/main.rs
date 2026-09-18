@@ -10,6 +10,7 @@ mod theme;
 mod attention;
 mod voice;
 mod render_output;
+mod messaging;
 
 use crate::types::{SavedView, StatusBarMode};
 use std::collections::BTreeMap;
@@ -46,6 +47,9 @@ use crate::types::{
 };
 
 struct State {
+    messages: Option<messaging::Snapshot>,
+    messages_pending: bool,
+    messages_error: Option<String>,
     voice: voice::Voice,
     own_id: u32,
     passive_bar: bool,
@@ -127,6 +131,9 @@ struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            messages: None,
+            messages_pending: false,
+            messages_error: None,
             voice: voice::Voice::default(),
             own_id: 0,
             passive_bar: false,
@@ -406,6 +413,10 @@ impl ZellijPlugin for State {
                 false
             }
             Event::Timer(_elapsed) => {
+                if !self.messages_pending {
+                    self.messages_pending = true;
+                    messaging::poll();
+                }
                 if self.voice.snapshot.installed && self.config.voxcode_enabled && !self.voice.pending {
                     self.voice_request(serde_json::json!({"action": "status"}));
                 }
@@ -467,6 +478,17 @@ impl ZellijPlugin for State {
             Event::RunCommandResult(exit_code, stdout, stderr, context) => {
                 let cmd_type = context.get(config::CMD_TYPE_KEY).map(|s| s.as_str());
                 match cmd_type {
+                    Some(messaging::SNAPSHOT_COMMAND) => {
+                        self.messages_pending = false;
+                        match serde_json::from_slice::<messaging::Snapshot>(&stdout) {
+                            Ok(snapshot) if exit_code == Some(0) => {
+                                self.messages = Some(snapshot);
+                                self.messages_error = None;
+                            }
+                            _ => { self.messages_error = Some("Mailbox unavailable".into()); }
+                        }
+                        return true;
+                    }
                     Some("voice") => {
                         return self.voice_response(exit_code, &stdout, &stderr);
                     }
@@ -2582,6 +2604,11 @@ impl State {
         if self.bar_ids.is_empty() { return; }
         let mut snapshot = attention::Snapshot::from_agents(&self.agents,
             self.focused_agent.as_deref(), &self.config, self.config_error.as_deref());
+        if self.messages_error.is_some() {
+            snapshot.mailbox = "Mailbox unavailable".into();
+        } else if let Some(messages) = &self.messages {
+            messages.decorate(&mut snapshot, &self.agents, self.config.messaging_ascii);
+        }
         if self.config.voxcode_enabled && self.voice.snapshot.installed {
             snapshot.voice = Some(self.voice.snapshot.indicator());
         }

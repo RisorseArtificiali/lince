@@ -33,7 +33,7 @@ sub-issue; subsequent corrections will be folded into the relevant commits.
 | Codex 0.154.0 / Linux | Actual basic lifecycle payloads; deterministic adapter tests | Live questions/tasks and cross-agent flows; native continuation; TUI/bwrap checks |
 | Bob 2.0.4 (01dddf684) / Linux | Explicit-inbox adapter and deterministic tests; current Shell docs | Actual payloads and live flows: headless mode requires BOB_API_KEY; TUI probe remains in session restoration |
 | macOS / Seatbelt | Generated rules tested only | Real transport and UI validation before any macOS support claim |
-| Dashboard | Existing architecture inspected | Status line, Alt+d, disposable Zellij smoke and regressions |
+| Dashboard | Three-area status line implemented; WASI suite: 106 passed, one existing preview ignored | Alt+d, disposable Zellij smoke and final regressions |
 
 The documented Stop continuation contract for Claude/Codex does not establish a
 safe external wakeup of an already idle TUI. Keep those capabilities separate.
@@ -73,3 +73,8 @@ is required”. A separate original-TUI `bob chat` probe remained in “Restorin
 session…” and was interrupted. Neither counts as a successful model or hook
 validation. The installed adapter accepts both documented `event` and bundled
 `hook_event_name` payload spellings, and never attempts automatic wakeup.
+
+The WASI toolchain was installed through `lince-dashboard/tests/setup-wasm-toolchain.sh`.
+`bash lince-dashboard/tests/run-plugin-tests.sh` executes the Rust tests under
+wasmtime (106 passed, one pre-existing preview ignored at this checkpoint).
+This is stronger than a host `cargo check`, but is not a real Zellij UI smoke.

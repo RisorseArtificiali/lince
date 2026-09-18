@@ -64,7 +64,8 @@ class Supervisor:
                 capabilities = agent_capabilities(agent, version.group(0) if version else "unknown")
             except (OSError, subprocess.TimeoutExpired):
                 capabilities = agent_capabilities(agent, "unknown")
-        instance = self.rpc("register", alias=alias, agent=agent, capabilities=capabilities or {}, leased=True)
+        instance = self.rpc("register", alias=alias, agent=agent, capabilities=capabilities or {}, leased=True,
+                            pane_ref=os.environ.get("ZELLIJ_PANE_ID", ""))
         credential = self.root / "credentials" / (instance["instance"] + ".token")
         fd = os.open(credential, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as output:
@@ -111,6 +112,7 @@ def main():
     sub.add_parser("ensure")
     request = sub.add_parser("request", help="Host-only typed operation; JSON arguments read from stdin")
     request.add_argument("operation")
+    request.add_argument("--json", dest="json_args", help="Structured arguments for controllers without stdin")
     run = sub.add_parser("run", help="Launch an original agent TUI with a fresh messaging identity")
     run.add_argument("--alias", required=True)
     run.add_argument("--agent", required=True)
@@ -123,7 +125,8 @@ def main():
             require(bool(command), message="Missing agent command")
             return supervisor.run(args.alias, args.agent, command)
         supervisor.ensure()
-        result = supervisor.rpc(args.operation, **json.load(sys.stdin)) if args.op == "request" else {"ready": True}
+        result = (supervisor.rpc(args.operation, **(json.loads(args.json_args) if args.json_args else json.load(sys.stdin)))
+                  if args.op == "request" else {"ready": True})
         print(json.dumps(result))
         return 0
     except (OSError, ValueError, ProtocolError) as exc:

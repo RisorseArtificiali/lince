@@ -71,7 +71,7 @@ class Store:
         for column, definition in {"readiness": "TEXT NOT NULL DEFAULT 'unknown'",
                                    "last_delivery": "REAL NOT NULL DEFAULT 0",
                                    "broker_prompt_hash": "TEXT",
-                                   "lease_expires": "REAL"}.items():
+                                   "lease_expires": "REAL", "pane_ref": "TEXT NOT NULL DEFAULT ''"}.items():
             if column not in columns:
                 self.db.execute(f"ALTER TABLE instances ADD COLUMN {column} {definition}")
         self.db.execute("INSERT OR IGNORE INTO meta VALUES('session',?)", (identifier(),))
@@ -368,7 +368,7 @@ class Store:
             self.db.execute("UPDATE instances SET automatic=? WHERE id=?", (int(args["enabled"]), instance["id"]))
             return {"automatic": args["enabled"]}
         if op == "register":
-            fields(args, ("alias", "agent"), ("capabilities", "leased"))
+            fields(args, ("alias", "agent"), ("capabilities", "leased", "pane_ref"))
             alias, agent = text(args["alias"], limit=128), text(args["agent"], limit=64)
             caps = args.get("capabilities", {})
             require(isinstance(caps, dict) and len(json.dumps(caps)) <= 2048)
@@ -380,6 +380,8 @@ class Store:
                             (instance, alias, agent, digest(token), json.dumps(caps), time.time()))
             if args.get("leased"):
                 self.db.execute("UPDATE instances SET lease_expires=? WHERE id=?", (time.time() + 15, instance))
+            if args.get("pane_ref"):
+                self.db.execute("UPDATE instances SET pane_ref=? WHERE id=?", (text(args["pane_ref"], limit=128), instance))
             return {"instance": instance, "token": token, "session": self.session}
         if op == "group":
             fields(args, ("name", "members"), ("group",))
@@ -425,9 +427,23 @@ class Store:
             limit = args.get("limit", 20)
             before = args.get("before", time.time() + 1)
             require(type(limit) is int and 1 <= limit <= 50 and type(before) in {int, float})
-            return {"session": self.session,
-                    "instances": [dict(row) for row in self.db.execute(
-                        "SELECT id,alias,agent,live,capabilities,provenance,automatic,readiness FROM instances ORDER BY created")],
+            instances = [dict(row) for row in self.db.execute(
+                "SELECT id,alias,agent,live,capabilities,provenance,automatic,readiness,pane_ref FROM instances ORDER BY created")]
+            for instance in instances:
+                current = self.db.execute("""SELECT r.id,r.sender,r.kind,r.work,i.alias AS requester FROM requests r
+                    JOIN instances i ON i.id=r.sender WHERE r.recipient=? AND r.work IN ('active','paused')""",
+                    (instance["id"],)).fetchone()
+                instance["current"] = dict(current) if current else None
+            summary = {"unread": 0, "waiting": 0, "errors": 0}
+            for row in self.db.execute("SELECT work,delivery FROM requests"):
+                if row["work"] in {"failed", "interrupted"} or row["delivery"] == "uncertain":
+                    summary["errors"] += 1
+                elif row["work"] == "pending" and row["delivery"] != "read":
+                    summary["unread"] += 1
+                elif row["work"] in {"pending", "active", "paused"}:
+                    summary["waiting"] += 1
+            return {"session": self.session, "summary": summary,
+                    "instances": instances,
                     "groups": [dict(row) for row in self.db.execute("SELECT * FROM groups")],
                     "members": [dict(row) for row in self.db.execute("SELECT * FROM members")],
                     "requests": [self._preview(row) for row in self.db.execute(

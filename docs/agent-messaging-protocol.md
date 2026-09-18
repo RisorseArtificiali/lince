@@ -12,6 +12,9 @@ credential outside project directories. It creates a fresh instance UUID and
 are stored in the database. Agent aliases and pane IDs are display/routing metadata,
 never authentication. Rename, reorder and focus cannot change an instance UUID.
 An exited instance is revoked; its replacement requires an explicit new assignment.
+The launch supervisor renews a 15-second host-only lease every five seconds;
+normal exit revokes immediately, and an abruptly killed supervisor loses access
+when the lease expires. Agent credentials cannot renew this lease.
 
 The stdlib Python service uses newline-framed UTF-8 JSON over an AF_UNIX socket.
 Each connection serves one request. The public socket exposes messaging only;
@@ -214,3 +217,9 @@ The status line reserves left VoxCode/mailbox, center agent states with provenan
 and right `Alt+d details`/focused provenance. Alt+d exposes threads, filters,
 membership, delivery suspension, cancellation, resume and reconciliation. Existing
 VoxCode, Alt+N focus and manual agent actions remain regression gates.
+
+Visible bar modes retain the right-hand details/provenance column. Summary mode
+hides center names; agents mode hides the left column. Hidden mode hides the bar.
+At narrow widths the 13-cell `Alt+d details` hint has priority, then remaining
+space is shared by the left and center. Below 13 cells even the hint is clipped.
+`[dashboard].messaging_ascii = true` selects `U`/`<` provenance markers.
