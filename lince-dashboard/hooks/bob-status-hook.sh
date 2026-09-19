@@ -76,6 +76,21 @@ fi
 
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${AGENT_ID} ${HOOK_EVENT}" >> "$LOG_FILE" 2>/dev/null || true
 
+# Write state before the best-effort pipe; the startup observer and dashboard poll
+# /tmp/lince-dashboard/*.state and matches the bare `{agent_id}` basename.
+mkdir -p "${STATUS_DIR}" 2>/dev/null || true
+STATUS_LOCK="${STATUS_DIR}/${AGENT_ID}.startup-lock"
+# Serialize with the one-time initial-composer observer. Bound the wait so a
+# crashed observer never prevents Bob from continuing; then write regardless.
+LOCKED=false
+for _ in {1..20}; do
+    if mkdir "$STATUS_LOCK" 2>/dev/null; then LOCKED=true; break; fi
+    sleep 0.01
+done
+echo "$HOOK_EVENT" > "${STATUS_DIR}/${AGENT_ID}.state" 2>/dev/null || true
+if $LOCKED; then rmdir "$STATUS_LOCK" 2>/dev/null || true; fi
+
+
 # Primary: send via zellij pipe (if inside a Zellij session).
 # Use whatever `timeout` is available (GNU `timeout` on Linux, `gtimeout` on
 # macOS with `brew install coreutils`); fall back to running zellij directly
@@ -93,9 +108,5 @@ if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     echo "$PAYLOAD" | _lince_send_pipe "lince-status" >/dev/null 2>&1 || true
 fi
 
-# Fallback: write status to file (always, as backup). The dashboard polls
-# /tmp/lince-dashboard/*.state and matches the bare `{agent_id}` basename.
-mkdir -p "${STATUS_DIR}" 2>/dev/null || true
-echo "$HOOK_EVENT" > "${STATUS_DIR}/${AGENT_ID}.state" 2>/dev/null || true
 
 exit 0

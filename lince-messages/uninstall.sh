@@ -24,6 +24,9 @@ done
 if [[ -f "$DEST/maintenance.py" ]]; then
     python3 "$DEST/maintenance.py"
 fi
+if [[ -f "$DEST/skill_config.py" ]]; then
+    python3 "$DEST/skill_config.py" --disable-all
+fi
 if [[ -f "$DEST/hook_config.py" ]]; then
     python3 "$DEST/hook_config.py" claude "$HOME/.claude/settings.json" --remove
     python3 "$DEST/hook_config.py" codex "${CODEX_HOME:-$HOME/.codex}/hooks.json" --remove
@@ -41,7 +44,8 @@ fi
 if [[ -L "$BIN/lince-msg-hook" && "$(readlink "$BIN/lince-msg-hook")" == "$DEST/lince-msg-hook" ]]; then
     rm -- "$BIN/lince-msg-hook"
 fi
-for file in protocol.py store.py service.py host.py adapters.py hook_config.py maintenance.py instructions.md lince-msg lince-msg-host lince-msg-hook; do
+for file in transport.py skill_config.py protocol.py store.py service.py host.py adapters.py hook_config.py maintenance.py instructions.md lince-msg lince-msg-host lince-msg-hook; do
     rm -f -- "$DEST/$file"
 done
-echo "Removed messaging executables; user settings and mailbox history preserved."
+rm -f "$DEST/skills/lince-converse/SKILL.md"
+echo "Removed communication runtime and unmodified LINCE skills; user hooks and legacy history preserved."

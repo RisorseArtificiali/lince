@@ -111,11 +111,12 @@ Documentation: [Usage Guide](https://lince.sh/documentation/#/dashboard/usage-gu
 
 ### [lince-messages/](lince-messages/)
 
-Host-controlled peer messaging and delegation for existing agent panes, with a
-durable mailbox, restricted `lince-msg` CLI, status-line provenance and Alt+d
-controls. Original agent TUIs are preserved. See the [operator guide](docs/agent-messaging.md)
-and [validation ledger](docs/agent-messaging-validation.md) for version-specific
-capabilities and outstanding real-agent/platform checks.
+Optional skill-based conversations for Claude, Codex, Bob, Pi and OpenCode in their original
+terminal panes. Agents use `lince-msg peers` and `lince-msg send` for questions
+and replies, with a conversation reference and a lightweight delivery log in
+Alt+d. No groups or task lifecycle. Enable the skill separately for each agent;
+see the [operator guide](docs/agent-messaging.md) and
+[validation limits](docs/agent-messaging-validation.md).
 
 ### [lince-config/](lince-config/)
 

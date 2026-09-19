@@ -70,7 +70,10 @@ def hook_for(name: str) -> str | None:
         return "opencode-status-hook.js"
     if base.startswith("pi"):
         return "pi/lince-pi-hook.ts"
-    # gemini, bash, zsh, fish: has_native_hooks=false, no hook expected.
+    if base in {"gemini", "goose"}:
+        return "native-status-hook.py"
+    if base == "amp":
+        return "amp-status-hook.js"
     return None
 
 violations: list[str] = []

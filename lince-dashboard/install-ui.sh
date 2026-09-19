@@ -2,7 +2,7 @@
 # Shared by install.sh and update.sh: presentation assets have identical coverage.
 set -euo pipefail
 UI_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-bash "$UI_SOURCE/../lince-messages/install.sh" --configure-all
+bash "$UI_SOURCE/../lince-messages/install.sh" --runtime-only
 mkdir -p "$HOME/.config/zellij/layouts" "$HOME/.config/lince-dashboard" "$HOME/.local/bin"
 for layout in "$UI_SOURCE"/layouts/*.kdl; do
     cp "$layout" "$HOME/.config/zellij/layouts/"
@@ -67,6 +67,9 @@ new_locked = '    locked {\n' + '\n'.join('        ' + binding for binding in [
 updated = text.replace(old_locked, new_locked)
 for old, new in replacements.items():
     updated = updated.replace(old, new)
+# Release only the old shipped vertical focus shortcuts. Custom actions stay
+# user-owned; clear-defaults=true lets unbound keys reach the focused terminal.
+updated = re.sub(r'(?m)^[ \t]*bind "Alt (up|down)" \{ MoveFocus "\1"; \}[ \t]*\n', '', updated)
 # Add Alt+q alongside known LINCE wizard bindings in each mode. Preserve an
 # existing custom Alt+q binding instead of silently replacing it.
 if 'bind "Alt q"' not in updated:

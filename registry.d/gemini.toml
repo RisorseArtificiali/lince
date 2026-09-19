@@ -44,9 +44,20 @@ home_rw_dirs = [".m2"]
 passthrough = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"]
 
 [dashboard]
-has_native_hooks = false
+has_native_hooks = true
 providers = ["__discover__"]
 
 [env]
 GEMINI_API_KEY = "$GEMINI_API_KEY"
 GEMINI_FORCE_FILE_STORAGE = "true"
+
+# Once per agent; all variants inherit (design §3.5).
+[event_map]
+"gemini.SessionStart" = "input"
+"gemini.SessionEnd" = "stopped"
+"gemini.BeforeAgent" = "running"
+"gemini.AfterAgent" = "input"
+"gemini.BeforeModel" = "running"
+"gemini.BeforeTool" = "running"
+"gemini.AfterTool" = "running"
+"gemini.ToolPermission" = "permission"

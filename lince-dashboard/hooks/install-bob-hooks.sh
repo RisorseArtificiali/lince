@@ -42,6 +42,7 @@ echo -e "${GREEN}[1/3] Installing Bob hook script...${NC}"
 mkdir -p "$HOME/.local/bin"
 cp "$HOOK_SRC" "$HOOK_DEST"
 chmod +x "$HOOK_DEST"
+install -m 755 "$SCRIPT_DIR/lince-bob-startup" "$HOME/.local/bin/lince-bob-startup"
 echo -e "${GREEN}  Installed: $HOOK_DEST${NC}"
 
 echo ""

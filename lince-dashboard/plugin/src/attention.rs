@@ -47,7 +47,7 @@ impl Snapshot {
             suppress_attention_blink: !config.attention_blink,
             agents_only: false,
             voice: None,
-            mailbox: "Mailbox off".into(),
+            mailbox: "Chat off".into(),
             provenance: "—".into(),
             theme: config.theme.clone(), warning: warning.map(str::to_owned),
             agents: agents.iter().enumerate().map(|(i, a)| Entry {
@@ -63,7 +63,7 @@ impl Snapshot {
     }
 
     fn summary(&self, _down: bool, lower_row: bool, _single_row: bool) -> Vec<(String, String)> {
-        vec![(if lower_row { self.mailbox.clone() } else { self.voice.clone().unwrap_or_default() },
+        vec![(if lower_row { self.provenance.clone() } else { self.voice.clone().unwrap_or_default() },
               if lower_row { theme::attention_count() } else { theme::color("cyan") })]
     }
     fn groups(&self, dot: bool) -> Vec<Vec<(String, String)>> {
@@ -106,17 +106,16 @@ impl Snapshot {
             }
             initial - space
         };
-        // Deterministic narrow layout: keep the details hint first, then split
-        // remaining width between mailbox/voice and agent entries. Both fixed
-        // side columns keep their position while names and voice levels change.
-        let right_width = if cols >= 72 { 28.min(cols / 3) } else { 13.min(cols) };
-        let left_width = if self.agents_only { 0 } else { 24.min((cols - right_width) / 2) };
-        let center_width = cols - right_width - left_width;
+        let left_width = if self.agents_only { 0 } else { 18.min(cols / 2) };
+        let center_width = cols - left_width;
         let mut center = vec![String::new(); rows.min(2)];
         let mut used = vec![0; center.len()];
-        if !self.summary_only && center_width > 0 {
+        if center_width > 0 {
             let mut row = 0;
-            for group in self.groups(down).iter().skip(1) {
+            let mut groups: Vec<_> = if self.summary_only { Vec::new() } else { self.groups(down).into_iter().skip(1).collect() };
+            groups.push(vec![("  Alt+d details".into(), theme::color("cyan"))]);
+            groups.push(vec![("  Alt+h help".into(), theme::color("cyan"))]);
+            for group in &groups {
                 let cells = cell_width(group);
                 if cells > center_width.saturating_sub(used[row]) && used[row] > 0 && row + 1 < center.len() {
                     row += 1;
@@ -133,8 +132,6 @@ impl Snapshot {
             line.push_str(&" ".repeat(left_width.saturating_sub(taken)));
             line.push_str(&center[row]);
             line.push_str(&" ".repeat(center_width.saturating_sub(used[row])));
-            let right = if row == 0 { "Alt+d details" } else if self.provenance.is_empty() { "—" } else { &self.provenance };
-            append(&mut line, &vec![(right.into(), theme::color("cyan"))], right_width);
             lines.push(line);
         }
         lines
@@ -194,18 +191,19 @@ mod tests {
         let mut snapshot = Snapshot::from_agents(&agents, Some("reviewer"), &DashboardConfig::default(), None);
         snapshot.mailbox = "Mail 2  Work 1  !0".into();
         snapshot.voice = Some("VP-###···".into());
-        snapshot.provenance = "← coder · ask #abcd1234".into();
+        snapshot.provenance = "← coder ask #abcd1234".into();
         snapshot.agents[0].provenance = "←".into();
         snapshot
     }
     #[test]
-    fn three_areas_preserve_voice_mailbox_and_focused_provenance() {
+    fn left_area_shows_provenance_and_hints_follow_tabs() {
         let snapshot = sample();
         let lines: Vec<_> = snapshot.styled_lines(2, 120, false).iter().map(|s| plain(s)).collect();
         assert!(lines[0].starts_with("VP-###···"));
-        assert!(lines[1].starts_with("Mail 2  Work 1  !0"));
-        assert!(lines[0].ends_with("Alt+d details"));
-        assert!(lines[1].ends_with("← coder · ask #abcd1234"));
+        assert!(lines[1].starts_with("← coder ask #abcd"));
+        assert!(lines[0].contains("Alt+d details"));
+        assert!(lines[0].contains("Alt+h help"));
+        assert!(!lines.join("").contains("Mail 2"));
         assert!(lines.join("").contains("←R"));
         assert!(!lines.join("").contains("!1 1"));
     }
@@ -224,20 +222,19 @@ mod tests {
         }
     }
     #[test]
-    fn details_hint_survives_narrow_width_and_empty_mailbox() {
-        for cols in 13..80 {
-            let lines = sample().styled_lines(2, cols, false);
-            assert!(plain(&lines[0]).ends_with("Alt+d details"));
-        }
-        assert!(plain(&Snapshot::default().styled_lines(2, 80, false)[0]).contains("Alt+d details"));
+    fn hints_follow_tabs_without_a_reserved_right_column() {
+        let line = plain(&sample().styled_lines(2, 120, false)[0]);
+        assert!(line.find("Alt+d details").unwrap() > line.find("coder").unwrap());
+        assert!(line.find("Alt+h help").unwrap() > line.find("Alt+d details").unwrap());
+        assert!(line.trim_end().ends_with("Alt+h help"));
     }
     #[test]
-    fn all_visible_modes_keep_reserved_right_area() {
+    fn all_visible_modes_keep_inline_hints() {
         let mut snapshot = sample();
         snapshot.summary_only = true;
         let lines = snapshot.styled_lines(2, 120, false).join("");
         assert!(lines.contains("VP-"));
-        assert!(lines.contains("Mail 2"));
+        assert!(lines.contains("← coder ask"));
         assert!(!lines.contains("reviewer"));
         assert!(lines.contains("Alt+d details"));
         snapshot.summary_only = false;

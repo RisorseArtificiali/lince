@@ -503,12 +503,16 @@ fn spawn_inner(
         }
 
         expanded.push(format!("LINCE_AGENT_ID={}", id));
+        expanded.push(format!("LINCE_STATUS_DIR={}", config.status_file_dir));
         // Host wrapper owns credentials/lifetime; the original agent TUI remains
-        // the child process. Group membership still requires explicit human opt-in.
-        if matches!(base, "claude" | "codex" | "bob") && (!type_config.sandboxed
-            || backend_rides_agent_sandbox(sandbox_backend_override.as_ref().unwrap_or(&type_config.sandbox_backend))) {
+        // the child process. The wrapper starts without communication unless its skill was enabled.
+        if !type_config.sandboxed
+            || backend_rides_agent_sandbox(sandbox_backend_override.as_ref().unwrap_or(&type_config.sandbox_backend)) {
             expanded.extend(["lince-msg-host".into(), "run".into(), "--alias".into(), name.clone(),
                 "--agent".into(), base.into(), "--".into()]);
+        }
+        if base == "bob" {
+            expanded.extend(["lince-bob-startup".into(), "--".into()]);
         }
         // If agent doesn't have native hooks, wrap with lince-agent-wrapper
         if !type_config.has_native_hooks {

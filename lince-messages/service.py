@@ -12,6 +12,7 @@ import threading
 
 from protocol import MAX_RESPONSE_FRAME, ProtocolError, encode, receive, require
 from store import Store
+from transport import TerminalTransport
 
 
 class Handler(socketserver.StreamRequestHandler):
@@ -75,7 +76,7 @@ def private_directory(path):
             "unsafe_directory", "Messaging directory must be owned by the current user with mode 0700")
 
 
-def serve(private: Path, public: Path):
+def serve(private: Path, public: Path, session: str):
     os.umask(0o077)
     private_directory(private)
     private_directory(public)
@@ -89,9 +90,7 @@ def serve(private: Path, public: Path):
             with os.fdopen(fd, "w") as stream:
                 stream.write(secrets.token_urlsafe(32))
         require(not credential.is_symlink(), "unsafe_path", "Credential must not be a symlink")
-        database = private / "mailbox.sqlite3"
-        require(not database.is_symlink(), "unsafe_path", "Database must not be a symlink")
-        store = Store(database, credential.read_text())
+        store = Store(None, credential.read_text(), TerminalTransport(session))
         endpoint = public / "mailbox.sock"
         if endpoint.exists():
             require(endpoint.is_socket(), "unsafe_path", "Endpoint is not a socket")
@@ -99,7 +98,17 @@ def serve(private: Path, public: Path):
         try:
             with Server(endpoint, store) as server:
                 os.chmod(endpoint, 0o600)
-                server.serve_forever(poll_interval=0.2)
+                stop = threading.Event()
+                def deliver():
+                    while not stop.wait(0.5):
+                        store.flush()
+                worker = threading.Thread(target=deliver, daemon=True)
+                worker.start()
+                try:
+                    server.serve_forever(poll_interval=0.2)
+                finally:
+                    stop.set()
+                    worker.join(timeout=5)
         finally:
             store.close()
             endpoint.unlink(missing_ok=True)
@@ -109,10 +118,11 @@ def serve(private: Path, public: Path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--session", required=True)
     parser.add_argument("--private", required=True, type=Path)
     parser.add_argument("--public", required=True, type=Path)
     args = parser.parse_args()
-    serve(args.private, args.public)
+    serve(args.private, args.public, args.session)
 
 
 if __name__ == "__main__":

@@ -1,101 +1,85 @@
-import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
-import unittest
+import sys
 import uuid
+import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from protocol import call
+ROOT = Path(__file__).resolve().parents[1]
 
 
-class PackagingTests(unittest.TestCase):
-    def test_custom_hook_paths_are_explicitly_removed_without_touching_user_handlers(self):
-        source = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory(prefix="lince-custom-hooks-") as directory:
+class Packaging(unittest.TestCase):
+    def test_optional_install_update_migration_disable_and_uninstall(self):
+        with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
-            env = {k: v for k, v in os.environ.items() if k != "CODEX_HOME" and not k.startswith("LINCE_MSG_")}
-            env.update(HOME=directory, LINCE_MESSAGES_INSTALL_DIR=str(home / "module"),
-                       LINCE_MESSAGES_BIN_DIR=str(home / "bin"))
-            original = {"theme": "user", "hooks": {"Stop": [{"hooks": [
-                {"type": "command", "command": "user-owned-handler"}]}]}}
-            arguments = []
-            paths = []
-            for agent in ("claude", "codex", "bob"):
-                settings = home / f"custom {agent}.json"
-                settings.write_text(json.dumps(original))
-                subprocess.run(["bash", str(source / "install.sh"), f"--configure-{agent}", str(settings)],
-                               env=env, capture_output=True, check=True, timeout=15)
-                self.assertIn("lince-msg-hook", settings.read_text())
-                arguments.extend(["--settings", agent, str(settings)])
-                paths.append(settings)
-            invalid = subprocess.run(["bash", str(source / "uninstall.sh"), "--settings", "unknown", "file"],
-                                     env=env, capture_output=True, timeout=15)
-            self.assertEqual(invalid.returncode, 2)
-            self.assertTrue((home / "bin/lince-msg").exists())
-            configured = paths[0].read_text()
-            paths[0].write_text("{")
-            malformed = subprocess.run(["bash", str(source / "uninstall.sh"), *arguments], env=env,
-                                       capture_output=True, timeout=15)
-            self.assertNotEqual(malformed.returncode, 0)
-            self.assertTrue((home / "bin/lince-msg-hook").exists())
-            self.assertEqual(paths[0].read_text(), "{")
-            paths[0].write_text(configured)
-            for _ in range(2):
-                subprocess.run(["bash", str(source / "uninstall.sh"), *arguments], env=env,
-                               capture_output=True, check=True, timeout=15)
-                for settings in paths:
-                    self.assertEqual(json.loads(settings.read_text()), original)
+            env = {k: v for k, v in os.environ.items() if k != 'CODEX_HOME'}
+            env.update(HOME=directory, XDG_CONFIG_HOME=str(home/'.config'), PI_CODING_AGENT_DIR=str(home/'.pi/agent'), LINCE_MESSAGES_INSTALL_DIR=str(home / 'lib'),
+                       LINCE_MESSAGES_BIN_DIR=str(home / 'bin'))
+            settings = home / '.claude/settings.json'
+            settings.parent.mkdir()
+            other = {'type': 'command', 'command': 'user-hook'}
+            settings.write_text(json.dumps({'other': 42, 'hooks': {'Stop': [{'hooks': [other,
+                {'type': 'command', 'command': 'lince-msg-hook claude'}]}]}}))
+            def run(script, *args, check=True):
+                return subprocess.run(['bash', str(ROOT / script), *args], env=env, capture_output=True,
+                                      text=True, timeout=15, check=check)
+            run('install.sh', '--runtime-only')
+            self.assertFalse((home / '.config/lince-dashboard/communication.json').exists())
+            self.assertEqual(json.loads(settings.read_text()), {'other': 42, 'hooks': {'Stop': [{'hooks': [other]}]}})
+            run('install.sh', '--enable', 'claude', 'codex', 'bob', 'pi', 'opencode', 'amp', 'gemini', 'goose')
+            for agent in ('claude', 'codex', 'bob'):
+                self.assertTrue((home / f'.{agent}/skills/lince-converse/SKILL.md').exists())
+            for directory in ('.pi/agent', '.config/opencode', '.config/amp', '.gemini', '.config/goose'):
+                self.assertTrue((home / directory / 'skills/lince-converse/SKILL.md').exists())
+            run('update.sh', '--runtime-only')
+            self.assertNotIn('lince-msg-hook', settings.read_text())
+            run('install.sh', '--disable', 'bob')
+            self.assertFalse((home / '.bob/skills/lince-converse/SKILL.md').exists())
+            edited = home / '.codex/skills/lince-converse/SKILL.md'
+            edited.write_text('user-modified')
+            run('uninstall.sh')
+            run('uninstall.sh')
+            self.assertEqual(edited.read_text(), 'user-modified')
+            self.assertFalse((home / '.claude/skills/lince-converse/SKILL.md').exists())
+            self.assertFalse((home / 'bin/lince-msg').exists())
+            for directory in ('.pi/agent', '.config/opencode', '.config/amp', '.gemini', '.config/goose'):
+                self.assertFalse((home / directory / 'skills/lince-converse/SKILL.md').exists())
 
-    def test_supervised_identity_upgrade_recovery_and_uninstall(self):
-        source = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory(prefix="lince-package-test-") as directory:
+    def test_wrapper_opt_in_identity_and_revocation(self):
+        with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
-            env = {k: v for k, v in os.environ.items() if k != "CODEX_HOME" and not k.startswith("LINCE_MSG_")}
-            env.update(HOME=directory, LINCE_MESSAGES_INSTALL_DIR=str(home / ".local/lib/lince-messages"),
-                       LINCE_MESSAGES_BIN_DIR=str(home / ".local/bin"))
-            env["PATH"] = str(home / ".local/bin") + os.pathsep + env["PATH"]
-            session = "package-test-" + uuid.uuid4().hex
-            key = hashlib.sha256(session.encode()).hexdigest()[:24]
-            private = home / ".local/state/lince-messages/sessions" / key
-            endpoint = Path(f"/tmp/lince-msg-{os.getuid()}") / key / "mailbox.sock"
-
+            env = {k: v for k, v in os.environ.items() if k != 'CODEX_HOME' and not k.startswith('LINCE_MSG_')}
+            env.update(HOME=directory, ZELLIJ_SESSION_NAME='converse-package-' + uuid.uuid4().hex,
+                       LINCE_MESSAGES_INSTALL_DIR=str(home/'lib'), LINCE_MESSAGES_BIN_DIR=str(home/'bin'))
             def run(*command):
-                result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                return result.stdout
-
-            def host(op, **args):
-                return call(endpoint, (private / "admin.token").read_text(), "host." + op, args)
-
+                return subprocess.run(command, env=env, capture_output=True, text=True, timeout=15, check=True)
+            run('bash', str(ROOT/'install.sh'), '--runtime-only')
+            wrapper = str(home/'bin/lince-msg-host')
+            probe = [sys.executable, '-c', "import os; print(bool(os.environ.get('LINCE_MSG_CREDENTIAL')))" ]
             try:
-                run("bash", str(source / "install.sh"), "--configure-all")
-                run("lince-msg-host", "--session", session, "ensure")
-                child = run("lince-msg-host", "--session", session, "run", "--alias", "fixture", "--agent", "claude",
-                            "--", sys.executable, "-c", "import subprocess; subprocess.run(['lince-msg','peers'],check=True)")
-                instance = json.loads(child)["result"]["instance"]
-                self.assertEqual(next(i for i in host("snapshot")["instances"] if i["id"] == instance)["live"], 0)
-                self.assertEqual(list((home / ".local/state/lince-messages/credentials").glob("*.token")), [])
-                a = host("register", alias="sender", agent="claude")
-                b = host("register", alias="recipient", agent="codex")
-                group = host("group", name="test", members=[a["instance"], b["instance"]])["group"]
-                request = call(endpoint, a["token"], "delegate", {"recipient": b["instance"], "group": group,
-                    "text": "test work", "key": "work"})["id"]
-                call(endpoint, b["token"], "accept", {"request": request})
-                run("bash", str(source / "update.sh"))
-                self.assertFalse(endpoint.exists())
-                run("lince-msg-host", "--session", session, "ensure")
-                self.assertEqual(host("get", request=request)["work"], "interrupted")
-                run("bash", str(source / "uninstall.sh"))
-                self.assertFalse(endpoint.exists())
-                self.assertTrue((private / "mailbox.sqlite3").exists())
-                self.assertFalse((home / ".local/bin/lince-msg").exists())
-                for file in (home / ".claude/settings.json", home / ".codex/hooks.json", home / ".bob/settings/settings.json"):
-                    if file.exists():
-                        self.assertNotIn("lince-msg-hook", file.read_text())
+                self.assertEqual(run(wrapper, 'run', '--alias', 'A', '--agent', 'claude', '--', *probe).stdout.strip(), 'False')
+                run('bash', str(ROOT/'install.sh'), '--enable', 'claude')
+                self.assertEqual(run(wrapper, 'run', '--alias', 'A', '--agent', 'claude', '--', *probe).stdout.strip(), 'True')
+                snapshot = json.loads(run(wrapper, 'request', 'snapshot', '--json', '{}').stdout)
+                self.assertEqual(snapshot['instances'][0]['live'], 0)
+                self.assertEqual(list((home/'.local/state/lince-messages/credentials').glob('*.token')), [])
             finally:
-                subprocess.run([sys.executable, str(source / "maintenance.py")], env=env,
-                               capture_output=True, timeout=15)
+                run('bash', str(ROOT/'uninstall.sh'))
+
+    def test_unowned_skill_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            skill = home / '.claude/skills/lince-converse/SKILL.md'
+            skill.parent.mkdir(parents=True)
+            skill.write_text('mine')
+            env = {**os.environ, 'HOME': directory, 'LINCE_MESSAGES_INSTALL_DIR': str(home/'lib'),
+                   'LINCE_MESSAGES_BIN_DIR': str(home/'bin')}
+            result = subprocess.run(['bash', str(ROOT/'install.sh'), '--enable', 'claude'], env=env,
+                                    capture_output=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(skill.read_text(), 'mine')
+
+
+if __name__ == '__main__': unittest.main()

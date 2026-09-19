@@ -9,13 +9,21 @@
 // LINCE-118 / LINCE-122.
 
 import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-export default function (pi: { on: (ev: string, h: (e: any) => void) => void }) {
+export default function (pi: { on: (ev: string, h: (e: any, ctx: { isIdle: () => boolean }) => void) => void }) {
   const agentId = process.env.LINCE_AGENT_ID;
   const session = process.env.ZELLIJ_SESSION_NAME;
-  if (!agentId || !session) return;
+  if (!agentId) return;
+  const statusDir = process.env.LINCE_STATUS_DIR || "/tmp/lince-dashboard";
 
   const send = (event: string) => {
+    try {
+      mkdirSync(statusDir, { recursive: true });
+      writeFileSync(join(statusDir, `${agentId}.state`), event);
+    } catch {}
+    if (!session) return;
     const payload = JSON.stringify({ agent_id: agentId, event });
     try {
       const child = spawn(
@@ -24,13 +32,33 @@ export default function (pi: { on: (ev: string, h: (e: any) => void) => void }) 
         { stdio: ["pipe", "ignore", "ignore"] },
       );
       child.on("error", () => {});
+      child.stdin.on("error", () => {});
       child.stdin.end(payload);
     } catch {}
   };
 
-  pi.on("session_start", () => send("session_start"));
-  pi.on("turn_start", () => send("turn_start"));
-  pi.on("tool_call", () => send("tool_call"));
-  pi.on("turn_end", () => send("turn_end"));
-  pi.on("session_shutdown", () => send("session_shutdown"));
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const cancelIdle = () => { if (idleTimer) clearTimeout(idleTimer); idleTimer = undefined; };
+  const active = (event: string) => { cancelIdle(); send(event); };
+  const settled = (event: string, ctx: { isIdle: () => boolean }) => {
+    cancelIdle();
+    let remaining = 100;
+    const check = () => {
+      idleTimer = undefined;
+      if (ctx.isIdle()) send(event);
+      else if (--remaining > 0) idleTimer = setTimeout(check, 50);
+    };
+    // Pi 0.79 clears isStreaming only after agent_end handlers return.
+    // Never await idle inside that callback: it would block settlement itself.
+    idleTimer = setTimeout(check, 50);
+  };
+  pi.on("session_start", () => active("session_start"));
+  pi.on("agent_start", () => active("turn_start"));
+  pi.on("turn_start", () => active("turn_start"));
+  pi.on("tool_call", () => active("tool_call"));
+  // turn_end is also emitted between tool iterations, not just at the prompt.
+  pi.on("turn_end", () => active("turn_end"));
+  pi.on("agent_end", (_event, ctx) => settled("agent_end", ctx));
+  pi.on("agent_settled", (_event, ctx) => settled("agent_settled", ctx));
+  pi.on("session_shutdown", () => active("session_shutdown"));
 }
