@@ -1,0 +1,42 @@
+name: Dashboard plugin CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust with the WASI target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - name: Install Wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "47.0.3"
+
+      - name: Build dashboard plugin
+        working-directory: lince-dashboard/plugin
+        run: PATH="$HOME/.cargo/bin:$PATH" "$HOME/.cargo/bin/cargo" build --target wasm32-wasip1
+
+      - name: Compile and run dashboard plugin tests
+        working-directory: lince-dashboard/plugin
+        run: |
+          set -euo pipefail
+          test_wasm="$(
+            PATH="$HOME/.cargo/bin:$PATH" "$HOME/.cargo/bin/cargo" test --target wasm32-wasip1 --no-run --message-format=json |
+              jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .target.name == "lince-dashboard") | .filenames[] | select(endswith(".wasm"))' |
+              tail -n 1
+          )"
+          test -f "$test_wasm"
+          wasmtime run \
+            --preload "zellij=${{ github.workspace }}/lince-dashboard/tests/zellij-host-stub.wat" \
+            "$test_wasm"

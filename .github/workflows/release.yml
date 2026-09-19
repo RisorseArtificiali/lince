@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  WASMTIME_VERSION: "47.0.3"
+  ZELLIJ_SMOKE_TEST_VERSION: "0.45.1"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust with the WASI target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - name: Install Wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "47.0.3"
+
+      - name: Build release plugin
+        working-directory: lince-dashboard/plugin
+        run: PATH="$HOME/.cargo/bin:$PATH" "$HOME/.cargo/bin/cargo" build --release --target wasm32-wasip1
+
+      - name: Stage release artifact
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp lince-dashboard/plugin/target/wasm32-wasip1/release/lince-dashboard.wasm dist/lince-dashboard.wasm
+
+      - name: Validate release artifact with Wasmtime
+        run: |
+          set -euo pipefail
+          wasmtime run \
+            --preload "zellij=${{ github.workspace }}/lince-dashboard/tests/zellij-host-stub.wat" \
+            dist/lince-dashboard.wasm
+
+      - name: Generate and verify checksum
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum lince-dashboard.wasm > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Write release notes
+        run: |
+          cat > dist/RELEASE_NOTES.md <<EOF
+          Prebuilt, platform-independent LINCE dashboard plugin.
+
+          Smoke test: the artifact was instantiated by Wasmtime ${WASMTIME_VERSION}
+          with the Zellij host ABI stub at the minimum supported Zellij version,
+          ${ZELLIJ_SMOKE_TEST_VERSION}.
+          EOF
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/lince-dashboard.wasm \
+            dist/SHA256SUMS \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file dist/RELEASE_NOTES.md
