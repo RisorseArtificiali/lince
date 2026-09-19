@@ -353,14 +353,17 @@ echo ""
 # ── Step 13: Shell aliases ────────────────────────────────────────────
 echo -e "${GREEN}[13/14] Setting up shell aliases...${NC}"
 
-ALIAS_LINES='alias lince-classic="lince-dashboard-launch --preset classic"
+ALIAS_LINES="$(cat <<'ALIASES'
+alias lince-classic="lince-dashboard-launch --preset classic"
 alias lince-minimal="lince-dashboard-launch --preset minimal"
 alias lince-statusline="lince-dashboard-launch --preset statusline"
-alias lince="lince-dashboard-launch"
+alias lince='"$HOME/.local/bin/lince"'
 alias lince-floating="lince-dashboard-launch --layout dashboard"
 alias zd="lince-dashboard-launch"
 alias z="zellij"
-alias zn="zellij attach -c"'
+alias zn="zellij attach -c"
+ALIASES
+)"
 ALIAS_COMMENT="# LINCE aliases"
 
 for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do

@@ -923,6 +923,16 @@ do_install_dashboard() {
     fi
 }
 
+# ── Install standalone updater ───────────────────────────────────────
+do_install_updater() {
+    if bash "$SCRIPT_DIR/lince-updater/install.sh"; then
+        echo -e "${GREEN}✓ lince update installed${NC}"
+    else
+        echo -e "${RED}✗ LINCE updater installation failed${NC}"
+        exit 1
+    fi
+}
+
 # ── Check prerequisites ─────────────────────────────────────────────
 check_prerequisites() {
     echo -e "${BOLD}Checking prerequisites...${NC}"
@@ -1244,6 +1254,7 @@ print_separator
 do_install_sandbox
 do_install_voxcode        # before dashboard so optional voice integration can be offered
 do_install_dashboard
+do_install_updater
 do_install_lince_config   # CLI required by the lince-configure skill
 do_install_lince_lab      # optional disposable-VM substrate (opt-in)
 configure_agent_selection # selection becomes data in lince.toml (#207)

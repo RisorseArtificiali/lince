@@ -3,9 +3,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RELEASE_BASE_URL="${LINCE_RELEASE_BASE_URL:-https://github.com/RisorseArtificiali/lince/releases/latest/download}"
+RELEASE_BASE_URL="${LINCE_RELEASE_BASE_URL:-}"
+LATEST_RELEASE_URL="${LINCE_LATEST_RELEASE_URL:-https://github.com/RisorseArtificiali/lince/releases/latest}"
 PLUGIN_DIR="$HOME/.config/zellij/plugins"
 PLUGIN_DST="$PLUGIN_DIR/lince-dashboard.wasm"
+VERSION_FILE="$HOME/.local/share/lince/release-version"
 BUILD_FROM_SOURCE=false
 WORK_DIR=""
 STAGED=""
@@ -69,6 +71,32 @@ fetch_release_plugin() {
     fi
 }
 
+release_version() {
+    local effective version
+    if [ -n "${LINCE_RELEASE_VERSION:-}" ]; then
+        version="$LINCE_RELEASE_VERSION"
+    else
+        effective="$(curl --fail --location --silent --show-error \
+            --output /dev/null --write-out '%{url_effective}' "$LATEST_RELEASE_URL")"
+        version="${effective%/}"
+        version="${version##*/}"
+    fi
+    if printf '%s\n' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+        printf '%s\n' "$version"
+    else
+        echo "ERROR: invalid release version: $version" >&2
+        return 1
+    fi
+}
+
+INSTALLED_VERSION=""
+if [ "$BUILD_FROM_SOURCE" = false ]; then
+    INSTALLED_VERSION="$(release_version)"
+    if [ -z "$RELEASE_BASE_URL" ]; then
+        RELEASE_BASE_URL="https://github.com/RisorseArtificiali/lince/releases/download/$INSTALLED_VERSION"
+    fi
+fi
+
 unique_backup_path() {
     local base candidate suffix
     base="$PLUGIN_DST.bak.$(date +%Y%m%d-%H%M%S)"
@@ -113,4 +141,10 @@ if [ -f "$PLUGIN_DST" ]; then
 fi
 mv "$STAGED" "$PLUGIN_DST"
 STAGED=""
+if [ "$BUILD_FROM_SOURCE" = false ] && [ "${LINCE_RECORD_RELEASE:-1}" = "1" ]; then
+    mkdir -p "$(dirname "$VERSION_FILE")"
+    VERSION_NEW="${VERSION_FILE}.new.$$"
+    printf '%s\n' "$INSTALLED_VERSION" > "$VERSION_NEW"
+    mv "$VERSION_NEW" "$VERSION_FILE"
+fi
 echo "Installed dashboard plugin: $PLUGIN_DST"

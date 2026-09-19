@@ -342,13 +342,35 @@ BOOTSTRAP_DIR="$LINCE_DATA_DIR/bootstrap-source"
 
 echo -e "${BLUE}[2/2] Fetching LINCE...${NC}"
 
+RELEASE_VERSION="${LINCE_RELEASE_VERSION:-}"
+if [ -z "$RELEASE_VERSION" ]; then
+  LATEST_RELEASE_URL="${LINCE_LATEST_RELEASE_URL:-https://github.com/RisorseArtificiali/lince/releases/latest}"
+  EFFECTIVE_RELEASE_URL="$(curl --fail --location --silent --show-error \
+    --output /dev/null --write-out '%{url_effective}' "$LATEST_RELEASE_URL")"
+  RELEASE_VERSION="${EFFECTIVE_RELEASE_URL%/}"
+  RELEASE_VERSION="${RELEASE_VERSION##*/}"
+fi
+if ! printf '%s\n' "$RELEASE_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo -e "${RED}[!] Invalid latest LINCE release version: $RELEASE_VERSION${NC}" >&2
+  exit 1
+fi
+
 if [ -d "$BOOTSTRAP_DIR" ]; then
   echo -e "  ${DIM}Removing previous bootstrap clone at $BOOTSTRAP_DIR...${NC}"
   rm -rf "$BOOTSTRAP_DIR"
 fi
 mkdir -p "$LINCE_DATA_DIR"
-echo "  Cloning to $BOOTSTRAP_DIR..."
-git clone https://github.com/RisorseArtificiali/lince.git "$BOOTSTRAP_DIR"
+echo "  Fetching release $RELEASE_VERSION to $BOOTSTRAP_DIR..."
+git init --quiet "$BOOTSTRAP_DIR"
+git -C "$BOOTSTRAP_DIR" remote add origin https://github.com/RisorseArtificiali/lince.git
+git -C "$BOOTSTRAP_DIR" fetch --quiet --depth 1 origin \
+  "refs/tags/$RELEASE_VERSION:refs/tags/$RELEASE_VERSION"
+TAG_COMMIT="$(git -C "$BOOTSTRAP_DIR" rev-parse "refs/tags/$RELEASE_VERSION^{commit}")"
+git -C "$BOOTSTRAP_DIR" checkout --quiet --detach "$TAG_COMMIT"
+if [ "$(git -C "$BOOTSTRAP_DIR" rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+  echo -e "${RED}[!] Failed to check out release tag $RELEASE_VERSION.${NC}" >&2
+  exit 1
+fi
 echo ""
 
 # ── Delegate to quickstart.sh ────────────────────────────────────────
@@ -378,8 +400,8 @@ cleanup_clone() {
 
 if [ "$USE_DEFAULTS" = true ] || [ -t 0 ]; then
   # Already running in a terminal — just exec (can't cleanup after exec)
-  bash "$QUICKSTART" "$@" && cleanup_clone
+  LINCE_RELEASE_VERSION="$RELEASE_VERSION" bash "$QUICKSTART" "$@" && cleanup_clone
 else
   # Piped (curl | bash) — run quickstart with stdin from /dev/tty
-  bash "$QUICKSTART" "$@" < /dev/tty && cleanup_clone
+  LINCE_RELEASE_VERSION="$RELEASE_VERSION" bash "$QUICKSTART" "$@" < /dev/tty && cleanup_clone
 fi
