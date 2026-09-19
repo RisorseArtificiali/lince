@@ -6,19 +6,19 @@ import json
 import os
 from pathlib import Path
 import signal
-import re
 import subprocess
 import sys
 import time
 
 from protocol import ProtocolError, call, require
 from service import private_directory
-from adapters import capabilities as agent_capabilities
+from skill_config import enabled
 
 
 class Supervisor:
     def __init__(self, session: str):
-        require(bool(session), message="A host session name is required")
+        require(isinstance(session, str) and bool(session), message="A host session name is required")
+        self.session = session
         self.key = hashlib.sha256(session.encode()).hexdigest()[:24]
         self.root = Path.home() / ".local/state/lince-messages"
         self.private = self.root / "sessions" / self.key
@@ -40,7 +40,7 @@ class Supervisor:
         log = self.private / "service.log"
         with log.open("ab") as output:
             process = subprocess.Popen([sys.executable, str(Path(__file__).with_name("service.py")),
-                "--private", str(self.private), "--public", str(self.public)],
+                "--session", self.session, "--private", str(self.private), "--public", str(self.public)],
                 stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
@@ -54,18 +54,15 @@ class Supervisor:
             process.wait(timeout=5)
         raise ProtocolError("unavailable", "Messaging service did not start; inspect its private service.log")
 
-    def run(self, alias, agent, command, capabilities=None):
-        require(agent in {"claude", "codex", "bob"}, "unsupported", "Messaging v1 supports Claude, Codex and Bob")
+    def run(self, alias, agent, command):
+        # Optional per-agent opt-in. The ordinary TUI still starts when disabled.
+        if not enabled(agent):
+            os.execvpe(command[0], command, {k: v for k, v in os.environ.items() if not k.startswith("LINCE_MSG_")})
         self.ensure()
-        if capabilities is None:
-            try:
-                version_output = subprocess.run([agent, "--version"], capture_output=True, text=True, timeout=3)
-                version = re.search(r"\b\d+\.\d+\.\d+\b", version_output.stdout)
-                capabilities = agent_capabilities(agent, version.group(0) if version else "unknown")
-            except (OSError, subprocess.TimeoutExpired):
-                capabilities = agent_capabilities(agent, "unknown")
-        instance = self.rpc("register", alias=alias, agent=agent, capabilities=capabilities or {}, leased=True,
-                            pane_ref=os.environ.get("ZELLIJ_PANE_ID", ""))
+        instance = self.rpc("register", alias=alias, agent=agent, leased=True,
+                            pane_ref=os.environ.get("ZELLIJ_PANE_ID", ""),
+                            status_id=os.environ.get("LINCE_AGENT_ID", ""),
+                            status_dir=os.environ.get("LINCE_STATUS_DIR", "/tmp/lince-dashboard"))
         credential = self.root / "credentials" / (instance["instance"] + ".token")
         fd = os.open(credential, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as output:
@@ -83,6 +80,10 @@ class Supervisor:
             for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
                 previous[signum] = signal.signal(signum, forward)
             child = subprocess.Popen(command, env=env)
+            try:
+                self.rpc("heartbeat", instance=instance["instance"], pid=child.pid)
+            except (OSError, ProtocolError):
+                pass  # A failed transport must not terminate the original TUI.
             while True:
                 try:
                     returncode = child.wait(timeout=5)
@@ -124,6 +125,9 @@ def main():
             command = args.command[1:] if args.command[:1] == ["--"] else args.command
             require(bool(command), message="Missing agent command")
             return supervisor.run(args.alias, args.agent, command)
+        if args.op == "request" and args.operation == "snapshot" and not enabled():
+            print(json.dumps({"instances": [], "messages": []}))
+            return 0
         supervisor.ensure()
         result = (supervisor.rpc(args.operation, **(json.loads(args.json_args) if args.json_args else json.load(sys.stdin)))
                   if args.op == "request" else {"ready": True})

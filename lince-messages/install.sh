@@ -3,46 +3,47 @@ set -euo pipefail
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DEST="${LINCE_MESSAGES_INSTALL_DIR:-$HOME/.local/lib/lince-messages}"
 BIN="${LINCE_MESSAGES_BIN_DIR:-$HOME/.local/bin}"
+read -r -a AGENTS <<< "$(python3 "$SOURCE_DIR/skill_config.py" --list)"
 case "${1:-}" in
-    ""|--configure-all|--configure-claude|--configure-codex|--configure-bob) ;;
     --help|-h)
-        echo "Usage: install.sh [--configure-all | --configure-claude [PATH] | --configure-codex [PATH] | --configure-bob [PATH]]"
+        echo "Usage: install.sh [--enable AGENT... | --disable AGENT... | --runtime-only]"
+        echo "Agents: ${AGENTS[*]}"
+        echo "Communication is optional. --enable installs the lince-converse skill for each selected agent."
+        echo "No messaging hooks are installed. Existing opt-ins are preserved on update."
         exit 0 ;;
-    *) echo "Unknown option: $1" >&2; exit 2 ;;
+    ""|--runtime-only) [[ $# -le 1 ]] ;;
+    --enable|--disable)
+        [[ $# -ge 2 ]] || { echo 'Select at least one agent' >&2; exit 2; }
+        for agent in "${@:2}"; do
+            [[ " ${AGENTS[*]} " == *" $agent "* ]] || { echo "Unsupported agent: $agent" >&2; exit 2; }
+        done ;;
+    *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
 esac
-if [[ -f "$DEST/maintenance.py" ]]; then
-    python3 "$DEST/maintenance.py"
-fi
-mkdir -p "$DEST" "$BIN"
-for file in protocol.py store.py service.py host.py adapters.py hook_config.py maintenance.py instructions.md; do
+if [[ -f "$DEST/maintenance.py" ]]; then python3 "$DEST/maintenance.py"; fi
+mkdir -p "$DEST/skills/lince-converse" "$BIN"
+for file in protocol.py store.py service.py host.py transport.py skill_config.py hook_config.py maintenance.py; do
     install -m 644 "$SOURCE_DIR/$file" "$DEST/$file"
 done
-install -m 755 "$SOURCE_DIR/lince-msg" "$DEST/lince-msg"
-ln -sfn "$DEST/lince-msg" "$BIN/lince-msg"
-install -m 755 "$SOURCE_DIR/lince-msg-host" "$DEST/lince-msg-host"
-ln -sfn "$DEST/lince-msg-host" "$BIN/lince-msg-host"
-install -m 755 "$SOURCE_DIR/lince-msg-hook" "$DEST/lince-msg-hook"
-ln -sfn "$DEST/lince-msg-hook" "$BIN/lince-msg-hook"
-if [[ "${1:-}" == "--configure-claude" ]]; then
-    python3 "$DEST/hook_config.py" claude "${2:-$HOME/.claude/settings.json}"
+install -m 644 "$SOURCE_DIR/skills/lince-converse/SKILL.md" "$DEST/skills/lince-converse/SKILL.md"
+for file in lince-msg lince-msg-host; do
+    install -m 755 "$SOURCE_DIR/$file" "$DEST/$file"
+    ln -sfn "$DEST/$file" "$BIN/$file"
+done
+# The old mailbox hooks must not continue offering task instructions.
+python3 "$DEST/hook_config.py" claude "$HOME/.claude/settings.json" --remove
+python3 "$DEST/hook_config.py" codex "${CODEX_HOME:-$HOME/.codex}/hooks.json" --remove
+python3 "$DEST/hook_config.py" bob "$HOME/.bob/settings/settings.json" --remove
+if [[ -L "$BIN/lince-msg-hook" && "$(readlink "$BIN/lince-msg-hook")" == "$DEST/lince-msg-hook" ]]; then rm "$BIN/lince-msg-hook"; fi
+rm -f "$DEST/lince-msg-hook" "$DEST/adapters.py" "$DEST/instructions.md"
+if [[ "${1:-}" != --disable ]]; then python3 "$DEST/skill_config.py" --refresh; fi
+if [[ "${1:-}" == --enable || "${1:-}" == --disable ]]; then
+    python3 "$DEST/skill_config.py" "$@"
+elif [[ $# == 0 && -t 0 ]]; then
+    echo "Optional agent communication installs the lince-converse skill and permits text + Enter between enabled panes."
+    echo "No messaging hooks, groups or task setup. Existing dashboard status hooks are used for delivery."
+    for agent in "${AGENTS[@]}"; do
+        read -r -p "Enable communication and install the skill for $agent? [y/N] " answer
+        if [[ "$answer" =~ ^[Yy]$ ]]; then python3 "$DEST/skill_config.py" --enable "$agent"; fi
+    done
 fi
-if [[ "${1:-}" == "--configure-codex" ]]; then
-    python3 "$DEST/hook_config.py" codex "${2:-${CODEX_HOME:-$HOME/.codex}/hooks.json}"
-    echo "Codex: review the installed hooks with /hooks; LINCE does not bypass hook trust."
-fi
-if [[ "${1:-}" == "--configure-bob" ]]; then
-    python3 "$DEST/hook_config.py" bob "${2:-$HOME/.bob/settings/settings.json}"
-fi
-if [[ "${1:-}" == "--configure-all" ]]; then
-    if command -v claude >/dev/null 2>&1 || [[ -d "$HOME/.claude" ]]; then
-        python3 "$DEST/hook_config.py" claude "$HOME/.claude/settings.json"
-    fi
-    if command -v codex >/dev/null 2>&1 || [[ -d "${CODEX_HOME:-$HOME/.codex}" ]]; then
-        python3 "$DEST/hook_config.py" codex "${CODEX_HOME:-$HOME/.codex}/hooks.json"
-        echo "Codex: review LINCE handlers with /hooks. Hook trust is preserved."
-    fi
-    if command -v bob >/dev/null 2>&1 || [[ -d "$HOME/.bob" ]]; then
-        python3 "$DEST/hook_config.py" bob "$HOME/.bob/settings/settings.json"
-    fi
-fi
-echo "Installed lince-msg. Agent instructions: $DEST/instructions.md"
+echo "Communication runtime installed. Start fresh agent panes after changing opt-ins."

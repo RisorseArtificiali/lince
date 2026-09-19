@@ -1,159 +1,137 @@
-# Peer messaging in LINCE
+# Conversations between agent panes
 
-Agents keep their original terminal interfaces. Messaging adds a host-owned
-mailbox and the `lince-msg` command; it does not replace the TUI or use ACP.
-Claude Code, Codex and Bob are the v1 adapters. Pi/OpenCode are follow-ups.
+LINCE optionally installs the `lince-converse` skill for agents with native skill discovery.
+Agents exchange ordinary text prompts through their existing terminal panes.
+There are no communication groups, inboxes, task ownership or completion commands.
 
-## Enable a group
+## Enable and disable
 
-Install/update the dashboard normally. Its shared installer installs the message
-service, CLI and hooks while preserving existing agent settings and other hooks.
-The standalone equivalent is `bash lince-messages/install.sh --configure-all`.
-For Codex, review the new handlers in `/hooks`; installation does not bypass
-Codex's trust policy. Start fresh agent panes so their supervisors issue fresh
-instance credentials. Existing unsupervised panes cannot acquire identities by
-claiming a pane name.
+Dashboard installation offers a separate opt-in for each supported agent when
+run interactively. Noninteractive installation leaves communication disabled.
+Updates preserve the existing choices; an old mailbox installation does not
+implicitly opt in to terminal injection.
 
-Open **Alt+d**, then **m** for Messages and tasks. Press **g**, create a group
-with **n**, select it with **[**/**]**, and toggle membership with **Space**.
-Membership is explicitly controlled by the human, including cross-project
-sharing. New instances start without groups; replacing an agent does not inherit
-its membership or pending assignments. Removing membership interrupts outstanding
-work in that group and prevents further agent access to it.
+```sh
+bash lince-messages/install.sh --enable claude codex bob pi opencode gemini amp goose
+bash lince-messages/install.sh --disable bob
+```
 
-The group view separately toggles automatic native intake with **a**. A capability
-error explains when this is unavailable. Receiving a message never grants it
-human authority or accepts the work on the recipient's behalf.
+Enabling installs `skills/lince-converse/SKILL.md` in the selected agent's
+personal skill directory. It permits opted-in agents in this LINCE session to
+send text to each other. Start fresh agent panes after changing choices.
+The host wrapper provisions credentials only for opted-in agent types.
 
-## Ask and delegate
+| Agent | Default personal skill directory | Automatic reception in LINCE |
+| --- | --- | --- |
+| Claude | `~/.claude/skills` | Existing dashboard hooks |
+| Codex | `~/.codex/skills` (or `$CODEX_HOME/skills`) | Existing dashboard hooks |
+| Bob | `~/.bob/skills` | Existing dashboard hooks; dialog limitations below |
+| [Pi](https://pi.dev/docs/latest/skills) | `~/.pi/agent/skills` (or `$PI_CODING_AGENT_DIR/skills`) | Existing extension, updated to write status files and distinguish tool turns from agent completion |
+| [OpenCode](https://opencode.ai/docs/skills) | `~/.config/opencode/skills` | Existing dashboard plugin |
+| [Gemini](https://geminicli.com/docs/cli/skills/) | `~/.gemini/skills` | [Native hooks](https://geminicli.com/docs/hooks/reference/): `SessionStart` / `AfterAgent` |
+| [Amp](https://ampcode.com/docs/customize/skills) | `~/.config/amp/skills` | [Thread state plugin](https://ampcode.com/docs/plugin-api): `idle` |
+| [Goose](https://github.com/block/goose/blob/main/documentation/docs/guides/context-engineering/using-skills.md) | `~/.config/goose/skills` (compatible config location) | [Open Plugins hooks](https://github.com/block/goose/blob/main/documentation/docs/guides/context-engineering/hooks.md): `SessionStart` / `Stop` |
 
-Each agent receives collaboration instructions through its native startup hook.
-It can use these commands from its own sandbox:
+All eight agents have dashboard lifecycle integrations. Use current agent versions
+with the documented hook/plugin APIs; installing a skill alone does not provide
+an idle signal. Gemini 0.1.7 and Goose 1.20.1 from the development machine predate
+the integrations documented above; upgrade before testing these receivers.
+Amp requires the plugin API with `ctx.thread.state`. Its first session signal may
+arrive only after opening an existing thread or sending the first prompt.
+Bob Shell emits its first `SessionStart` only when processing input. Lince
+therefore observes the initial empty composer through Zellij once and emits
+`bob.PromptReady`. This also updates the dashboard to I before the first prompt.
+The observer runs outside the sandbox, stops at the first native hook, and
+requires the known empty placeholder, borders and mode footer. Login/team/trust
+dialogs, errors and busy screens do not qualify. Narrow panes or a changed Bob
+UI may remain unknown; native hooks still work after manual interaction.
+Messages remain pending and eventually expire if an integration is unavailable
+or disabled. The one-time Bob composer check above is the only screen-based
+readiness inference; subsequent states come from native lifecycle events.
+The `~/.config` skill paths follow `XDG_CONFIG_HOME` when set. Native skill discovery
+can expose compatible skills to other providers, but access remains gated by each
+agent's own opt-in and per-instance credential.
+
+No separate messaging hooks are installed. Delivery uses dashboard status
+integrations, installed/refreshed by `lince-dashboard/install.sh` / `update.sh`:
+Gemini settings handlers plus `~/.gemini/lince-status.py`, Amp's system plugin
+`~/.config/amp/plugins/lince-status.js`, and Goose's
+`~/.agents/plugins/lince-status/`. They only report state and do not approve tools
+or change agent prompts. Existing disabled-hook/plugin settings are preserved.
+Goose has no separate permission event in this integration: it stays non-idle
+while a tool is pending rather than claiming a P badge. These hooks must be working. On Codex, review existing dashboard handlers
+in `/hooks` if required by the installed version. Unsupported or unknown states
+leave delivery pending rather than guessing readiness. Existing bwrap/Seatbelt
+transport restrictions remain; other sandbox backends have no claimed support.
+
+For agents without automatic skill selection, explicitly ask them to use the
+`lince-converse` skill. The received prompt also identifies the skill and reply
+command. No system prompt or general project instructions are rewritten.
+
+## Conversation
 
 ```sh
 lince-msg peers
-lince-msg ask INSTANCE_UUID --group GROUP_UUID --text 'Review this API change' --key review-1
-lince-msg delegate INSTANCE_UUID --group GROUP_UUID --text 'Run the relevant regression checks' --key tests-1
-lince-msg inbox
-lince-msg get REQUEST_UUID
-lince-msg accept REQUEST_UUID
-lince-msg reply QUESTION_UUID --text 'Review result and evidence'
-lince-msg complete TASK_UUID --text 'Test result and evidence'
-lince-msg fail TASK_UUID --text 'What prevented completion'
+lince-msg send reviewer --text 'Review the permission check in auth.py and reply to me.'
+lince-msg send IMPLEMENTER_ID --conversation 12ab34cd --text 'Regarding auth.py: ...'
 ```
 
-`--stdin` and `--file PATH` supply longer text. The client reads files locally;
-the host never opens an arbitrary path supplied in a message. Output is JSON.
-`get` exposes full text and paginated events; follow its cursor with `--after`.
-`inbox --after CURSOR` exposes updates and previews without accepting work.
-`read REQUEST` acknowledges receipt; `accept REQUEST` claims ownership.
+Use a live ID or a unique name returned by `peers`. Renaming with `Alt+r`
+synchronizes that name with messaging; existing IDs and conversations stay valid. A new message gets an
+eight-character conversation ID. Use `--conversation` to reply or follow up;
+both peers must match the original exchange. Include a short recap in a reply.
+`--file PATH` and `--stdin` support longer text, read locally by the client.
 
-Use `--parent CURRENT_REQUEST` for a nested consultation. A caller can continue
-independent work and check the inbox later, or `wait REQUEST --timeout 30`.
-Waiting is bounded, does not block service for other clients, and rejects cyclic
-blocking dependencies. Timeout never cancels a task or resends a prompt. Reuse the
-same idempotency key and identical arguments for a retry after uncertain transport.
+`send` returns after accepting the text for delivery, without waiting for an
+answer. The receiving terminal gets the sender, conversation reference, reply
+command and full body. The agent can continue independent work or end its turn;
+a later reply becomes another prompt. Acknowledgements do not need replies.
 
-One inbound item may be active or paused per instance. Direct human input takes
-precedence and pauses peer work when its origin is known; resumption is explicit.
-Outgoing consultations retain the caller's original provenance. An idle terminal
-or a completed model turn is not a completed task.
+A small delivery queue waits for an idle signal, up to five minutes. This is only
+transport buffering: no read receipts, task states or inferred completion.
+Pending messages fail if either original peer closes. Closed pane IDs are never
+retargeted to a replacement agent.
 
-## Inspect and control
+## Dashboard
 
-The status line reserves left row 1 for VoxCode, left row 2 for mailbox counts,
-and the right column for `Alt+d details` and the focused agent's provenance.
-`Mail` counts unread pending requests; `Work` counts read pending/active/paused
-requests; `!` counts failed/interrupted requests and uncertain deliveries, without
-counting an uncertain request twice. `●` marks human work and `←` accepted peer
-work; unknown origin is unmarked. `[dashboard].messaging_ascii = true` uses ASCII
-markers. An unavailable broker clears provenance rather than presenting stale
-ownership as authoritative.
+`Alt+d` → `m` opens recent exchanges. Enter shows full text and delivery details;
+`s`/`f` explicitly navigate to the original sender/recipient; Escape goes back.
+There are no group or automatic-intake controls.
 
-The `classic` preset retains its original Zellij bars; messaging is available
-through Alt+d there. The three-area LINCE status line belongs to `minimal` and
-`statusline`, including their existing Alt+b visibility modes.
+- `pending`: waiting for an idle recipient.
+- `submitted`: text and Enter were sent, not proof of reading or completion.
+- `failed`: delivery was not attempted, or the destination/idle deadline expired.
+- `uncertain`: a write may have been partial; inspect the pane before resending.
 
-Inside Messages and tasks:
+The second line of the left status area shows `← name #reference` for the
+focused agent's last submitted peer message. `Alt+d details` and `Alt+h help`
+follow the agent tabs, with no reserved right column.
+This does not claim the agent is currently working on that message and is not
+attached to its R/I/P state.
 
-| Key | Action |
-| --- | --- |
-| 1–6 | All, unread, waiting, active/paused, errors, completed/cancelled |
-| j/k, arrows | Select a request or group member |
-| Enter | Open the full request and its event history |
-| Page Up / Page Down | Scroll long content |
-| n / r | Older history or more thread events / refresh latest |
-| c / p / u | Cancel / pause / explicitly resume |
-| t / d | Retry an uncertain delivery with the same ID / reconcile it as delivered/read |
-| s / f | Explicitly navigate to the original sender/recipient pane |
-| g | Group membership and automatic-intake controls |
-| D | Delete terminal history older than 30 days; retain live work and referenced parents |
-| Escape | Back to list/groups, then back to the agent menu |
+The service keeps the last 200 exchanges in memory for this session. It does not
+replay pending messages after a service restart. If a conversation reference is
+no longer available, start a new one with a recap. The terminal transcript remains
+the visible conversation; this log is only a delivery aid.
 
-Thread views show delivery separately from work, parent linkage, timestamps,
-results, and cancellation acknowledgement. Cancellation does not undo edits or
-forcibly terminate a tool; the recipient uses `cancel-ack` at a safe point. Late
-results remain visible for audit but cannot reopen cancelled work. Inspecting or
-refreshing messages never changes the focused agent pane.
+## Limits and migration
 
-## Capabilities and platforms
+Terminal injection is best effort. Existing hooks do not prove that the prompt
+editor is empty or eliminate a process/permission transition between checking
+readiness and writing. Do not leave partially typed prompts in enabled receiver
+panes. Normal human instructions and native permission policy still apply.
+Bob's dashboard hooks do not cover all permission/question transitions; this is
+not a guarantee of safe input into every possible native dialog. Original TUIs
+and their paste/Enter behavior must be checked on each platform/version.
 
-The capability matrix is version-specific; see the [validation ledger](agent-messaging-validation.md)
-for actual evidence and outstanding release gates. Claude 2.1.272 and Codex
-0.154.0 have a documented native Stop continuation path. That is distinct from
-externally waking a TUI which is already idle; no blind paste/Enter is used.
-Unverified versions retain explicit inbox access with automatic intake disabled.
-Bob 2.0.4 uses explicit inbox access and startup context because its documented
-Stop hook ignores output. Its original TUI has been validated with SSO for
-questions/tasks in both directions, startup context and human precedence.
-Permission-dialog detection is unavailable: messages remain queued and automatic
-intake cannot be enabled. `bob run` still requires an API key; SSO validation uses
-`bob chat`. These limitations are visible in the group view.
+Updates remove only the old `lince-msg-hook AGENT` handlers from standard settings;
+unrelated hooks are preserved. Custom legacy settings can be cleaned with
+`python3 lince-messages/hook_config.py AGENT PATH --remove`.
+Old mailbox data is left untouched but is no longer loaded. Existing instances
+must be restarted. Updating the communication runtime stops its services and
+discards pending deliveries and the in-memory log; inspect pending/uncertain
+messages before updating and resend intentionally after restarting panes.
+Uninstall removes only unmodified LINCE-owned skills; locally
+edited or unrelated files are preserved.
 
-Linux bwrap has a real transport test without Zellij IPC. Seatbelt has generated
-profile checks only at this checkpoint: macOS runtime/UI support is not yet
-validated. Nono is not enrolled by the dashboard messaging wrapper. Unsandboxed
-agents lack filesystem isolation from other same-user host processes.
-
-## Security, recovery and operations
-
-The service stores plaintext history under `~/.local/state/lince-messages`,
-outside project-controlled files. Per-instance credentials authenticate agents;
-the separate host credential controls groups and dashboard operations. Sandboxes
-receive only their own credential and the restricted mailbox socket. The API has
-no host execution, arbitrary host-file access, permission approval or Zellij
-control operation. Payload, queue, connection and rate limits bound usage.
-
-The launch supervisor renews a short lease. Normal exit revokes immediately;
-abrupt loss revokes within 15 seconds. A service restart preserves history,
-marks active/paused work interrupted and attempted unacknowledged deliveries
-uncertain, disables automatic intake, and never silently replays a prompt.
-Inspect/reconcile in Alt+d. Reassigning work to a replacement requires a new
-request. Deduplication does not promise exactly-once model execution.
-
-Updating stops authenticated service processes before replacing their code;
-the next dashboard poll or supervised launch starts the new version. Apply the
-same recovery rules to outstanding work. Uninstall removes message handlers and
-executables while retaining user settings, backups and history. Use the standalone
-`lince-messages/uninstall.sh` if removing messaging independently.
-
-If installation used a custom settings path, pass that path explicitly at removal:
-
-```sh
-bash lince-messages/install.sh --configure-claude /path/to/settings.json
-bash lince-messages/uninstall.sh --settings claude /path/to/settings.json
-```
-
-Repeat `--settings AGENT PATH` for additional Claude, Codex or Bob files. Standard
-settings paths are also cleaned. Other handlers/settings remain intact. If a
-settings file cannot be parsed, fix it and retry; executables are retained until
-hook removal succeeds.
-
-If the mailbox is unavailable, check installation/PATH and the session's private
-`service.log` under the state directory. For missing native events, verify hook
-registration, Codex hook trust, the tested version and a fresh supervised pane.
-Never publish credential files or full logs containing user prompts.
-
-Messaging does not prevent conflicting edits to a shared workspace. “Read-only”
-or “tests-only” peer scopes are agreements, not filesystem enforcement. This work
-does not claim to repair unrelated findings in the sandbox security review.
+See [smoke instructions](../smoke.md) and [validation](agent-messaging-validation.md).

@@ -452,7 +452,7 @@ impl ZellijPlugin for State {
                 self.apply_message_action(self.messages_browser.refresh_visible());
                 if !self.messages_pending {
                     self.messages_pending = true;
-                    messaging::poll();
+                    messaging::poll(&self.agents);
                 }
                 if self.voice.snapshot.installed && self.config.voxcode_enabled && !self.voice.pending {
                     self.voice_request(serde_json::json!({"action": "status"}));
@@ -519,10 +519,6 @@ impl ZellijPlugin for State {
                         let revision = context.get("revision").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
                         let operation = context.get("operation").map(String::as_str).unwrap_or("");
                         let action = self.messages_browser.response(revision, operation, exit_code == Some(0), &stdout);
-                        if revision == self.messages_browser.revision && !matches!(operation, "list" | "get") {
-                            self.messages_pending = true;
-                            messaging::poll();
-                        }
                         self.apply_message_action(action);
                         return true;
                     }
@@ -533,7 +529,7 @@ impl ZellijPlugin for State {
                                 self.messages = Some(snapshot);
                                 self.messages_error = None;
                             }
-                            _ => { self.messages_error = Some("Mailbox unavailable".into()); }
+                            _ => { self.messages_error = Some("Communication unavailable".into()); }
                         }
                         return true;
                     }
@@ -1208,7 +1204,6 @@ impl State {
         if self.voice.open { return self.handle_voice_key(key); }
         if self.messages_browser.open {
             if !key.key_modifiers.is_empty() { return false; }
-            if self.messages_browser.groups_open && self.messages_pending && key.bare_key != BareKey::Esc { return false; }
             let action = self.messages_browser.key(&key.bare_key, self.messages.as_ref());
             self.apply_message_action(action);
             return true;
@@ -1238,8 +1233,7 @@ impl State {
         match bare {
             BareKey::Char('m') if self.menu_open && !self.show_detail => {
                 self.messages_browser.open = true;
-                self.messages_browser.groups_open = false;
-                self.messages_browser.thread = None;
+                self.messages_browser.detail = false;
                 self.messages_browser.scroll = 0;
                 self.apply_message_action(self.messages_browser.refresh());
                 true
@@ -1528,6 +1522,7 @@ impl State {
                         }
                         self.status_message = Some(format!("Renamed to {}", name));
                     }
+                    messaging::poll(&self.agents);
                     self.sort_agents_by_dir();
                 } else {
                     // New agent mode (gh#62): session_defaults wins over static config.
@@ -2668,7 +2663,7 @@ impl State {
         let mut snapshot = attention::Snapshot::from_agents(&self.agents,
             self.focused_agent.as_deref(), &self.config, self.config_error.as_deref());
         if self.messages_error.is_some() {
-            snapshot.mailbox = "Mailbox unavailable".into();
+            snapshot.mailbox = "Communication unavailable".into();
         } else if let Some(messages) = &self.messages {
             messages.decorate(&mut snapshot, &self.agents, self.config.messaging_ascii);
         }
@@ -2792,7 +2787,7 @@ impl State {
 
         let config_warning = self.config_error.as_deref();
         let effective_status = self.status_message.as_deref().or(config_warning)
-            .or(if self.menu_open { Some("m: Messages and tasks") } else { None });
+            .or(if self.menu_open { Some("m: Conversations") } else { None });
 
         let detail_id = if self.show_detail {
             self.agents.get(self.selected_index).map(|a| a.id.as_str())
@@ -2847,7 +2842,7 @@ impl State {
     fn sync_dialog(&mut self) {
         let Some(id) = self.dialog_id else { return; };
         let frame = if self.has_dialog() {
-            let title = if self.messages_browser.open { "LINCE — Messages and tasks" } else if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
+            let title = if self.messages_browser.open { "LINCE — Conversations" } else if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
                 else if self.rename_target.is_some() && self.name_prompt.is_some() { "LINCE — Rename agent" }
                 else if self.wizard.is_some() || self.name_prompt.is_some() { "LINCE — New agent" } else { "LINCE — Agents" };
             Some(render_output::bordered(self.dialog_size.0, self.dialog_size.1, title,

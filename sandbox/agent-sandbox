@@ -182,6 +182,7 @@ passthrough = [
     "ZELLIJ",
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
+    "LINCE_STATUS_DIR",
     # Lets Chromium-based browsers use their native Wayland backend (#284).
     # Also works when X11 exposure is disabled or no X11 display is available.
     "XDG_SESSION_TYPE",

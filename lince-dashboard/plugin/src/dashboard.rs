@@ -886,7 +886,8 @@ fn render_status_bar(
     let is_empty = agents.is_empty();
     let is_focused = focused.is_some();
     let is_detail = detail.is_some();
-    let hints = status_bar_hints(is_empty, is_focused, is_detail);
+    let mut hints = status_bar_hints(is_empty, is_focused, is_detail);
+    if !is_detail { hints.insert(0, ("m", "Messages")); }
 
     let mid = hints.len().div_ceil(2);
     let (first_half, second_half) = hints.split_at(mid);

@@ -2,8 +2,7 @@
 """Exercise real Zellij plugin roles in disposable sessions.
 
 Requires Zellij >= 0.45.1 and a built WASM. Uses disposable sessions/config/cache.
-Ordinary smoke tests use harmless fixture agents. The explicit native-review
-option uses authenticated Claude/Codex TUIs and saves review evidence.
+Smoke tests use harmless fixture agents, including a small terminal conversation fixture.
   python3 tests/check-ui-session.py --zellij /path/to/zellij
 """
 import argparse
@@ -18,6 +17,7 @@ import select
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import termios
 import time
@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = runpy.run_path(str(ROOT / "lince-dashboard-launch"))
 
 
-def check(zellij, wasm, preset, messaging=False, native_review=None):
+def check(zellij, wasm, preset, messaging=False, conversations_only=False):
     version = subprocess.check_output([zellij, '--version'], text=True).strip()
     match = re.fullmatch(r'zellij (\d+)\.(\d+)\.(\d+)', version)
     if not match or tuple(map(int, match.groups())) < (0, 45, 1):
@@ -47,17 +47,18 @@ def check(zellij, wasm, preset, messaging=False, native_review=None):
         fixture = {"agents": {"fixture": {"display_name": "Fixture", "short_label": "FIX",
             "color": "green", "command": ["/bin/sleep", "600"],
             "dashboard": {"pane_title_pattern": "sleep", "has_native_hooks": True}}}}
-        if native_review:
-            from native_review_ui import prepare
-            fixture = prepare(work, fixture)
+        if messaging:
+            shutil.copyfile(ROOT / "tests/converse-fixture.py", work / "converse-fixture.py")
+            fixture["agents"]["fixture"]["command"] = [sys.executable, str(work / "converse-fixture.py")]
+            fixture["agents"]["fixture"]["dashboard"]["pane_title_pattern"] = "converse-fixture"
         (work / "lince-config").write_text("#!/bin/sh\ncat <<'FIXTURE'\n" + json.dumps(fixture) + "\nFIXTURE\n")
         (work / "lince-config").chmod(0o755)
         shutil.copyfile(ROOT / "tests/voice-fixture.py", work / "lince-voice")
         (work / "lince-voice").chmod(0o755)
         (work / ".lince-dashboard").write_text(json.dumps({"version": 3, "next_agent_id": 0,
             "agents": [{"name": f"fixture{i}",
-                        "agent_type": ({1: "claude", 2: "codex"}.get(i, "fixture") if native_review else "fixture"),
-                        "project_dir": str(ROOT.parent if native_review else work)}
+                        "agent_type": "fixture",
+                        "project_dir": str(work)}
                        for i in (1, 2, 3)]}))
         (work / "session.kdl").write_text((ROOT / "zellij-config/config.kdl").read_text()
             + f'\nenv {{ PATH "{work}:{Path(zellij).parent}:/usr/bin:/bin"; }}\n')
@@ -87,7 +88,7 @@ def check(zellij, wasm, preset, messaging=False, native_review=None):
             env.update(HOME=str(work), LINCE_MESSAGES_BIN_DIR=str(work),
                        LINCE_MESSAGES_INSTALL_DIR=str(work / "messages"))
             env.pop("CODEX_HOME", None)
-            subprocess.run(["bash", str(ROOT.parent / "lince-messages/install.sh")],
+            subprocess.run(["bash", str(ROOT.parent / "lince-messages/install.sh"), "--enable", "claude", "codex", "bob"],
                            env=env, check=True, capture_output=True)
         session = f"lince-ui-test-{uuid.uuid4().hex[:10]}"
         process = subprocess.Popen(
@@ -188,7 +189,7 @@ def check(zellij, wasm, preset, messaging=False, native_review=None):
             # Encode complete key events as a terminal with CSI-u support does.
             if data.startswith(b"\x1b") and len(data) == 2:
                 data = f"\x1b[{data[1]};3u".encode()
-            elif len(data) == 1:
+            elif len(data) == 1 and data != b" ":
                 data = ("\x1b[108;5u" if data == b"\x0c" else f"\x1b[{data[0]}u").encode()
             os.write(master, data)
 
@@ -210,16 +211,13 @@ def check(zellij, wasm, preset, messaging=False, native_review=None):
                 return
             assert initial["lince-attention"]["pane_rows"] == 2
             assert initial["lince-attention"]["pane_y"] == 30
-            if native_review:
-                from native_review_ui import check_review
-                check_review(work, session, cli, wait_for, key, panes, visible, env,
-                             terminal, native_review)
-                return
             identities = {(p["id"], p["is_plugin"]) for p in panes()}
             assert len(identities) == 7
             if messaging:
                 from messaging_ui_smoke import check_messages
                 check_messages(work, session, cli, wait_for, key, panes, visible, env, terminal)
+                if conversations_only:
+                    return
             viewport = initial["lince-viewport"]
             if preset == "statusline":
                 assert viewport["pane_columns"] == 100, viewport
@@ -480,19 +478,10 @@ if __name__ == "__main__":
     parser.add_argument("--zellij", default=shutil.which("zellij"))
     parser.add_argument("--wasm", type=Path,
                         default=ROOT / "plugin/target/wasm32-wasip1/release/lince-dashboard.wasm")
-    parser.add_argument("--messaging", action="store_true", help="Also exercise a real isolated mailbox and its UI")
-    parser.add_argument("--native-review-evidence", type=Path,
-                        help="Opt-in authenticated Claude/Codex TUI review; save sanitized evidence in this directory")
-    parser.add_argument("--reviewed-hook-trust", action="store_true",
-                        help="Confirm review of existing Codex status hooks for the native probe's invocation-only bypass")
+    parser.add_argument("--messaging", action="store_true", help="Also exercise a real isolated conversation transport and its UI")
+    parser.add_argument("--conversations-only", action="store_true")
     args = parser.parse_args()
     if not args.zellij or not args.wasm.exists():
         parser.error("Zellij and a built WASM are required")
-    if args.native_review_evidence:
-        if not args.reviewed_hook_trust:
-            parser.error("Native review requires --reviewed-hook-trust after reviewing existing Codex hooks")
-        check(str(Path(args.zellij).resolve()), args.wasm.resolve(), "statusline", True,
-              args.native_review_evidence.resolve())
-        raise SystemExit(0)
-    for preset in (("statusline", "minimal", "classic") if args.messaging else ("statusline", "minimal")):
-        check(str(Path(args.zellij).resolve()), args.wasm.resolve(), preset, args.messaging)
+    for preset in (("statusline", "minimal", "classic") if args.messaging or args.conversations_only else ("statusline", "minimal")):
+        check(str(Path(args.zellij).resolve()), args.wasm.resolve(), preset, args.messaging or args.conversations_only, args.conversations_only)

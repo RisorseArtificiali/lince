@@ -55,8 +55,9 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 | `Alt+1`–`Alt+9` | Focus an agent from any pane |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order, including locked mode |
 | `Alt+PageUp` / `Alt+PageDown` | Cycle agents from any pane |
+| `Alt+↑` / `Alt+↓` | Passed through to the focused agent (e.g. follow-up input editing) |
 | `Alt+x` | Kill the focused agent and focus the next agent, if any |
-| `Alt+r` | Rename the focused agent from any pane |
+| `Alt+r` | Rename the focused agent, including its name in `lince-msg peers` |
 
 ### Inline Name Prompt
 
@@ -290,3 +291,11 @@ Option 2 — Via GUI: **Terminator → Preferences → Keybindings → copy_clip
 - [Sandbox CLI Reference](sandbox/cli-reference.md) -- the `agent-sandbox` command
 - [lince-config CLI](https://github.com/RisorseArtificiali/lince/blob/main/lince-config/README.md) -- structured CLI for reading and editing LINCE configuration
 - [Multi-Agent Guide](https://github.com/RisorseArtificiali/lince/blob/main/lince-dashboard/MULTI-AGENT-GUIDE.md) -- migration guide for multi-agent support
+
+### Conversations between panes
+
+Enable the optional per-agent `lince-converse` skill to exchange questions and
+replies in the original TUIs. `Alt+d` → `m` opens the delivery log. The status
+bar shows the last sender/reference on its left second line; details/help hints
+follow the agent tabs. See the [operator guide](../../agent-messaging.md) for
+installation, supported integrations, migration and delivery limitations.

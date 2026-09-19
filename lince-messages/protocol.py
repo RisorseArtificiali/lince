@@ -7,11 +7,9 @@ import unicodedata
 
 VERSION = 1
 MAX_FRAME = 65536
-# Replies can contain a full request plus a result, or the bounded host registry.
-# Keep inbound frames small while allowing every valid stored item to be read.
-MAX_RESPONSE_FRAME = 2 * 1024 * 1024
+# Snapshots contain at most 200 x 16 KiB messages plus bounded peer metadata.
+MAX_RESPONSE_FRAME = 4 * 1024 * 1024
 MAX_TEXT = 16384
-TERMINAL = frozenset({"completed", "failed", "cancelled", "interrupted"})
 
 
 class ProtocolError(Exception):

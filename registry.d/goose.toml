@@ -22,7 +22,7 @@ allowed_levels = []
 home_subdir = ".config/goose"
 bwrap_conflict = false
 disable_inner_sandbox_args = []
-home_ro_dirs = []
+home_ro_dirs = [".agents/plugins/lince-status"]
 home_rw_dirs = [".config/goose", ".local/share/goose", ".local/state/goose"]
 
 [sandbox.levels.paranoid]
@@ -42,5 +42,15 @@ home_ro_dirs = [".config/gh", ".cache", ".ssh/known_hosts"]
 passthrough = ["GH_TOKEN", "GITHUB_TOKEN"]
 
 [dashboard]
-has_native_hooks = false
+has_native_hooks = true
 providers = ["__discover__"]
+
+# Once per agent; all variants inherit (design §3.5).
+[event_map]
+"goose.SessionStart" = "input"
+"goose.SessionEnd" = "stopped"
+"goose.UserPromptSubmit" = "running"
+"goose.Stop" = "input"
+"goose.PreToolUse" = "running"
+"goose.PostToolUse" = "running"
+"goose.PostToolUseFailure" = "running"

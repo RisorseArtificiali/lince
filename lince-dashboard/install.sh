@@ -186,6 +186,7 @@ LAYOUT_DIR="$HOME/.config/zellij/layouts"
 mkdir -p "$LAYOUT_DIR"
 
 bash "$SCRIPT_DIR/install-ui.sh"
+if [[ -t 0 ]]; then bash "$SCRIPT_DIR/../lince-messages/install.sh"; fi
 echo -e "${GREEN}  ✓ Layouts and launcher installed${NC}"
 
 # ── Step 6: Session-scoped Zellij configuration ─────────────────────────

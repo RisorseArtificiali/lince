@@ -1,4 +1,4 @@
-"""Idempotently add/remove only LINCE messaging handlers; preserve user hooks."""
+"""Remove retired LINCE mailbox hooks without changing unrelated user hooks."""
 from __future__ import annotations
 
 import argparse
@@ -8,10 +8,15 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from adapters import EVENTS
+# Legacy hook names retained only for removal during migration/uninstall.
+EVENTS = {
+    "claude": ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Notification", "Stop", "SessionEnd"),
+    "codex": ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "PreCompact", "PostCompact", "Stop", "Interrupt", "SessionEnd"),
+    "bob": ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "PostCompact", "Stop"),
+}
 
 
-def update(path: Path, agent: str, remove=False):
+def update(path: Path, agent: str, remove=True):
     command = f"lince-msg-hook {agent}"
     if remove and not path.exists():
         return
@@ -37,8 +42,6 @@ def update(path: Path, agent: str, remove=False):
                 remaining.append(group)
             elif handlers:
                 remaining.append({**group, "hooks": handlers})
-        if not remove:
-            remaining.append({"matcher": "", "hooks": [{"type": "command", "command": command, "timeout": 3}]})
         if remaining:
             hooks[event] = remaining
         else:
@@ -68,4 +71,4 @@ if __name__ == "__main__":
     parser.add_argument("settings", type=Path)
     parser.add_argument("--remove", action="store_true")
     args = parser.parse_args()
-    update(args.settings, args.agent, args.remove)
+    update(args.settings, args.agent, True)

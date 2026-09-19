@@ -201,6 +201,8 @@ sandbox_levels = ["normal", "permissive"]
 # Notification event, so the PERMISSION state is never emitted (moot with
 # --auto-approve in the sandboxed default args).
 [agents.bob.event_map]
+"bob.Starting" = "unknown"
+"bob.PromptReady" = "input"
 PreToolUse = "running"
 PostToolUse = "running"
 SessionStart = "input"
@@ -224,6 +226,8 @@ has_native_hooks = true
 providers = ["__discover__"]
 
 [agents.bob-unsandboxed.event_map]
+"bob.Starting" = "unknown"
+"bob.PromptReady" = "input"
 PreToolUse = "running"
 PostToolUse = "running"
 SessionStart = "input"
@@ -240,7 +244,7 @@ display_name = "Google Gemini CLI"
 short_label = "GEM"
 color = "blue"
 sandboxed = true
-has_native_hooks = false
+has_native_hooks = true
 bwrap_conflict = false
 disable_inner_sandbox_args = []
 home_ro_dirs = ["~/.gemini/"]
@@ -248,6 +252,16 @@ providers = ["__discover__"]
 sandbox_level = "normal"          # paranoid | normal | permissive (or custom; see docs)
 # sandbox_backend defaults to bwrap on Linux, seatbelt on macOS. Uncomment to override:
 # sandbox_backend = "seatbelt"
+
+[agents.gemini.event_map]
+"gemini.SessionStart" = "input"
+"gemini.SessionEnd" = "stopped"
+"gemini.BeforeAgent" = "running"
+"gemini.AfterAgent" = "input"
+"gemini.BeforeModel" = "running"
+"gemini.BeforeTool" = "running"
+"gemini.AfterTool" = "running"
+"gemini.ToolPermission" = "permission"
 
 [agents.gemini.env_vars]
 GEMINI_API_KEY = "$GEMINI_API_KEY"
@@ -260,9 +274,19 @@ display_name = "Google Gemini CLI (unsandboxed)"
 short_label = "GEU"
 color = "red"
 sandboxed = false
-has_native_hooks = false
+has_native_hooks = true
 disable_inner_sandbox_args = []
 providers = ["__discover__"]
+
+[agents.gemini-unsandboxed.event_map]
+"gemini.SessionStart" = "input"
+"gemini.SessionEnd" = "stopped"
+"gemini.BeforeAgent" = "running"
+"gemini.AfterAgent" = "input"
+"gemini.BeforeModel" = "running"
+"gemini.BeforeTool" = "running"
+"gemini.AfterTool" = "running"
+"gemini.ToolPermission" = "permission"
 
 [agents.gemini-unsandboxed.env_vars]
 GEMINI_API_KEY = "$GEMINI_API_KEY"
@@ -277,7 +301,7 @@ display_name = "Goose"
 short_label = "GSE"
 color = "blue"
 sandboxed = true
-has_native_hooks = false
+has_native_hooks = true
 bwrap_conflict = false
 disable_inner_sandbox_args = []
 home_ro_dirs = ["~/.config/goose/"]
@@ -287,6 +311,15 @@ sandbox_level = "normal"          # paranoid | normal | permissive (or custom; s
 # sandbox_backend defaults to bwrap on Linux, seatbelt on macOS. Uncomment to override:
 # sandbox_backend = "seatbelt"
 
+[agents.goose.event_map]
+"goose.SessionStart" = "input"
+"goose.SessionEnd" = "stopped"
+"goose.UserPromptSubmit" = "running"
+"goose.Stop" = "input"
+"goose.PreToolUse" = "running"
+"goose.PostToolUse" = "running"
+"goose.PostToolUseFailure" = "running"
+
 [agents.goose-unsandboxed]
 command = ["goose"]
 pane_title_pattern = "goose"
@@ -295,8 +328,17 @@ display_name = "Goose (unsandboxed)"
 short_label = "GSU"
 color = "red"
 sandboxed = false
-has_native_hooks = false
+has_native_hooks = true
 providers = ["__discover__"]
+
+[agents.goose-unsandboxed.event_map]
+"goose.SessionStart" = "input"
+"goose.SessionEnd" = "stopped"
+"goose.UserPromptSubmit" = "running"
+"goose.Stop" = "input"
+"goose.PreToolUse" = "running"
+"goose.PostToolUse" = "running"
+"goose.PostToolUseFailure" = "running"
 
 [agents.opencode]
 # Legacy fallback command — ignored when sandbox_level is set.
@@ -376,7 +418,9 @@ sandbox_level = "normal"          # paranoid | normal | permissive (or custom; s
 session_start = "input"
 turn_start = "running"
 tool_call = "running"
-turn_end = "input"
+turn_end = "running"
+agent_end = "input"
+agent_settled = "input"
 session_shutdown = "stopped"
 
 [agents.pi.env_vars]
@@ -460,7 +504,9 @@ AWS_ENDPOINT_URL_BEDROCK_RUNTIME = "$AWS_ENDPOINT_URL_BEDROCK_RUNTIME"
 session_start = "input"
 turn_start = "running"
 tool_call = "running"
-turn_end = "input"
+turn_end = "running"
+agent_end = "input"
+agent_settled = "input"
 session_shutdown = "stopped"
 
 # Raw shell agents (gh#91). Pinned to sandbox_level=normal, no providers.
@@ -536,3 +582,23 @@ color = "red"
 sandboxed = false
 has_native_hooks = false
 providers = []
+
+[agents.amp]
+command = ["agent-sandbox", "run", "-p", "{project_dir}", "--id", "{agent_id}", "--agent", "amp"]
+pane_title_pattern = "agent-sandbox"
+status_pipe_name = "lince-status"
+display_name = "Amp"
+short_label = "AMP"
+color = "blue"
+sandboxed = true
+sandbox_level = "normal"
+has_native_hooks = true
+providers = ["__discover__"]
+
+[agents.amp.event_map]
+"amp.idle" = "input"
+"amp.running" = "running"
+"amp.awaiting-approval" = "permission"
+"amp.error" = "unknown"
+"amp.unknown" = "unknown"
+"amp.stopped" = "stopped"

@@ -1,119 +1,53 @@
 #!/usr/bin/env python3
-"""Exchange correlated questions and tasks with explicitly enabled LINCE peers."""
-from __future__ import annotations
-
+"""Converse with enabled agents in this LINCE session through their terminal panes."""
 import argparse
 import json
 import os
 from pathlib import Path
 import sys
-import time
-import uuid
 
-from protocol import ProtocolError, TERMINAL, call, text
-
-
-EXIT_CODES = {"access_denied": 3, "timeout": 4, "unavailable": 5, "interrupted": 5,
-              "failed": 6, "cancelled": 6, "conflict": 7, "busy": 7, "wait_cycle": 7,
-              "rate_limited": 8, "queue_full": 8}
-
-
-def parser():
-    cli = argparse.ArgumentParser(description=__doc__)
-    cli.add_argument("--json", action="store_true", help="JSON is the default output (accepted for explicit scripts)")
-    commands = cli.add_subparsers(dest="op", required=True)
-    commands.add_parser("peers", help="Discover live peers and host-enabled groups")
-    inbox = commands.add_parser("inbox", help="Read updates without accepting work; previews only")
-    inbox.add_argument("--after", type=int, default=0, help="Event cursor from the preceding page")
-    inbox.add_argument("--limit", type=int, default=20)
-    for op in ("ask", "delegate", "reply", "complete", "fail"):
-        command = commands.add_parser(op)
-        if op in {"ask", "delegate"}:
-            command.add_argument("recipient", help="Exact instance UUID from peers; aliases are display-only")
-            command.add_argument("--group", required=True)
-            command.add_argument("--parent", help="Current inbound request ID for a nested consultation")
-        else:
-            command.add_argument("request")
-        body = command.add_mutually_exclusive_group(required=True)
-        body.add_argument("--text")
-        body.add_argument("--file", type=Path, help="Read locally; no host-side path access")
-        body.add_argument("--stdin", action="store_true")
-        command.add_argument("--key", help="Reuse this key when retrying the identical operation")
-    for op in ("read", "accept", "pause", "resume", "cancel", "cancel-ack", "get", "wait"):
-        command = commands.add_parser(op)
-        command.add_argument("request")
-        if op == "get":
-            command.add_argument("--after", type=int, default=0, help="Thread event cursor; full text, one event per page")
-        if op == "wait":
-            command.add_argument("--timeout", type=float, required=True, help="Seconds, 0..300; timeout does not cancel")
-    return cli
+from protocol import ProtocolError, call, text
 
 
 def run(argv=None):
-    args = vars(parser().parse_args(argv))
-    args.pop("json")
+    cli = argparse.ArgumentParser(description=__doc__)
+    commands = cli.add_subparsers(dest="op", required=True)
+    commands.add_parser("peers", help="List enabled live peers and your own identity")
+    send = commands.add_parser("send", help="Send text; returns without waiting for an answer")
+    send.add_argument("recipient", help="Exact ID or unique name from peers")
+    send.add_argument("--conversation", help="Keep the eight-character conversation ID when replying")
+    body = send.add_mutually_exclusive_group(required=True)
+    body.add_argument("--text")
+    body.add_argument("--file", type=Path)
+    body.add_argument("--stdin", action="store_true")
+    args = vars(cli.parse_args(argv))
     op = args.pop("op")
-    if "file" in args:
-        source = args.pop("file")
-        stdin = args.pop("stdin")
+    if op == "send":
+        source, stdin = args.pop("file"), args.pop("stdin")
         if source:
-            # Bound reads locally before JSON encoding or sending.
             with source.open(encoding="utf-8") as stream:
                 args["text"] = stream.read(16385)
         elif stdin:
             args["text"] = sys.stdin.read(16385)
         text(args["text"])
-        args["key"] = args["key"] or str(uuid.uuid4())
-    args = {key: value for key, value in args.items() if value is not None}
-    endpoint = os.environ.get("LINCE_MSG_ENDPOINT")
-    credential = os.environ.get("LINCE_MSG_CREDENTIAL")
+    endpoint, credential = os.environ.get("LINCE_MSG_ENDPOINT"), os.environ.get("LINCE_MSG_CREDENTIAL")
     if not endpoint or not credential:
-        raise ProtocolError("unavailable", "Messaging is not provisioned for this agent instance")
-    token = Path(credential).read_text().strip()
-    try:
-        result = call(endpoint, token, op, args)
-    except (OSError, ProtocolError) as exc:
-        if isinstance(exc, OSError):
-            exc = ProtocolError("unavailable", "Connection lost; inspect inbox before retrying with the same key")
-        exc.idempotency_key = args.get("key")
-        raise exc
-    code = 0
-    if op == "wait":
-        deadline = time.monotonic() + args["timeout"]
-        try:
-            while result["work"] not in TERMINAL and time.monotonic() < deadline:
-                time.sleep(min(0.25, max(0, deadline - time.monotonic())))
-                result = call(endpoint, token, "get", {"request": args["request"]})
-        finally:
-            # Release wait edges promptly; expiry also handles client crashes.
-            try:
-                call(endpoint, token, "wait", {"request": args["request"], "timeout": 0})
-            except (OSError, ProtocolError):
-                pass
-        if result["work"] not in TERMINAL:
-            result["wait_outcome"] = "timeout"
-            code = EXIT_CODES["timeout"]
-        else:
-            result["wait_outcome"] = result["work"]
-            code = EXIT_CODES.get(result["work"], 0)
-    if "key" in args:
-        result["idempotency_key"] = args["key"]
-    print(json.dumps({"v": 1, "ok": True, "result": result}, ensure_ascii=True))
-    return code
+        raise ProtocolError("unavailable", "Communication is not enabled for this agent; enable its lince-converse skill")
+    result = call(endpoint, Path(credential).read_text().strip(), op,
+                  {k: v for k, v in args.items() if v is not None})
+    print(json.dumps({"ok": True, "result": result}))
+    return 0
 
 
 def main():
     try:
         return run()
     except ProtocolError as exc:
-        error = {"code": exc.code, "message": str(exc)}
-        if getattr(exc, "idempotency_key", None):
-            error["idempotency_key"] = exc.idempotency_key
-        print(json.dumps({"v": 1, "ok": False, "error": error}))
-        return EXIT_CODES.get(exc.code, 2)
+        print(json.dumps({"ok": False, "error": {"code": exc.code, "message": str(exc)}}))
+        return 3 if exc.code == "access_denied" else 2
     except (OSError, UnicodeError):
-        print(json.dumps({"v": 1, "ok": False, "error": {"code": "unavailable",
-              "message": "Cannot read local input/credential or connect to the messaging service"}}))
+        print(json.dumps({"ok": False, "error": {"code": "unavailable", "message":
+              "Connection or local input unavailable. Delivery may be pending; inspect Alt+d > m before retrying."}}))
         return 5
     except KeyboardInterrupt:
         return 130

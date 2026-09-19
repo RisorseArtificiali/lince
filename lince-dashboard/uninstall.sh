@@ -72,6 +72,7 @@ HOOKS=(
     "$HOME/.local/bin/claude-status-hook.sh"
     "$HOME/.local/bin/codex-status-hook.sh"
     "$HOME/.local/bin/bob-status-hook.sh"
+    "$HOME/.local/bin/lince-bob-startup"
 )
 FOUND_HOOKS=()
 for hook in "${HOOKS[@]}"; do
@@ -212,6 +213,9 @@ fi
 echo ""
 
 # ── Pi extension ───────────────────────────────────────────────────────
+if confirm "  Remove Gemini, Amp and Goose dashboard integrations?"; then
+    python3 "$SCRIPT_DIR/hooks/native-hooks-config.py" --remove
+fi
 PI_EXTENSION="$HOME/.pi/agent/extensions/lince-pi-hook.ts"
 if [ -f "$PI_EXTENSION" ]; then
     echo -e "${YELLOW}Found: $PI_EXTENSION${NC}"

@@ -39,6 +39,8 @@ providers = ["__discover__"]
 
 # Once per agent; all variants inherit (design §3.5).
 [event_map]
+"bob.Starting" = "unknown"
+"bob.PromptReady" = "input"
 PreToolUse = "running"
 PostToolUse = "running"
 SessionStart = "input"
