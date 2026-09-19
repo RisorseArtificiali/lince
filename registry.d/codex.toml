@@ -22,7 +22,7 @@ allowed_levels = []
 home_subdir = ".codex"
 bwrap_conflict = true
 disable_inner_sandbox_args = ["--sandbox", "danger-full-access"]
-home_ro_dirs = []
+home_ro_dirs = [".agents"]
 home_rw_dirs = [".codex"]
 
 [sandbox.levels.paranoid]
@@ -57,6 +57,8 @@ OPENAI_API_KEY = "$OPENAI_API_KEY"
 
 # Once per agent; all variants inherit (design §3.5).
 [event_map]
+"codex.Starting" = "unknown"
+"codex.PromptReady" = "input"
 SessionStart = "input"
 UserPromptSubmit = "running"
 PreToolUse = "running"

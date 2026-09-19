@@ -73,6 +73,7 @@ HOOKS=(
     "$HOME/.local/bin/codex-status-hook.sh"
     "$HOME/.local/bin/bob-status-hook.sh"
     "$HOME/.local/bin/lince-bob-startup"
+    "$HOME/.local/bin/lince-codex-startup"
 )
 FOUND_HOOKS=()
 for hook in "${HOOKS[@]}"; do

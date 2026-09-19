@@ -48,6 +48,7 @@ class CodexHooksTests(unittest.TestCase):
         self.assertEqual(cfg["model"], "test-model")
         self.assertTrue((self.home / ".local/bin/codex-status-hook.sh").is_file())
         self.assertFalse((self.home / ".codex").exists())
+        self.assertTrue(os.access(self.home / ".local/bin/lince-codex-startup", os.X_OK))
 
     def test_existing_unmanaged_lince_notify_is_not_duplicated(self):
         original = 'notify = ["codex-status-hook.sh"]\n[features]\nhooks = true\n'

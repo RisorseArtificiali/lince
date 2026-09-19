@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""Observe Codex's initial empty composer once, then defer to its native hooks."""
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import threading
+
+STARTING = "codex.Starting"
+READY = "codex.PromptReady"
+
+
+def prompt_ready(screen):
+    # Match the empty composer from Codex 0.155.1, after the loading header
+    # has resolved. Only infer startup readiness; native events own later turns.
+    lines = [line.strip() for line in screen.splitlines()]
+    if not any("OpenAI Codex" in line for line in lines):
+        return False
+    if not any(re.search(r"model:\s+(?!loading\b)\S+", line) for line in lines):
+        return False
+    if any(marker in screen.lower() for marker in (
+        "esc to interrupt", "starting mcp", "loading", "sign in", "trust this",
+        "would you like", "press enter", "shutting down",
+    )):
+        return False
+    for index, line in enumerate(lines):
+        if line != "› Ask Codex to do anything":
+            continue
+        footer = [line for line in lines[index + 1:] if line]
+        # Default footer or user-configured model/directory status line.
+        if len(footer) == 1 and (
+            re.fullmatch(r"\? for shortcuts(?:\s+.*context left)?", footer[0])
+            or re.fullmatch(r"[^›]+ · (?:~/|/)[^›]+", footer[0])
+        ):
+            return True
+    return False
+
+
+def observe(child, status, session, pane, stop):
+    while not stop.wait(0.5) and child.poll() is None:
+        try:
+            if status.read_text().strip() != STARTING:
+                return  # First native hook wins; never infer subsequent idle states.
+            result = subprocess.run(["zellij", "-s", session, "action", "dump-screen", "--pane-id", pane],
+                                    capture_output=True, text=True, timeout=2)
+            if result.returncode or not prompt_ready(result.stdout):
+                continue
+            # Hook writes use the same lock directory, preventing a startup
+            # observation from overwriting a concurrently arriving running event.
+            lock = status.with_suffix(".startup-lock")
+            try:
+                lock.mkdir()
+            except FileExistsError:
+                continue
+            try:
+                if child.poll() is None and status.read_text().strip() == STARTING:
+                    status.write_text(READY + "\n")
+            finally:
+                lock.rmdir()
+            return
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+
+
+def main():
+    command = sys.argv[1:]
+    if command[:1] == ["--"]:
+        command = command[1:]
+    if not command:
+        return 2
+    agent_id = os.environ.get("LINCE_AGENT_ID", "")
+    pane = os.environ.get("ZELLIJ_PANE_ID", "")
+    session = os.environ.get("ZELLIJ_SESSION_NAME", "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", agent_id) or not pane.isdecimal() or not session:
+        os.execvp(command[0], command)
+    status = Path(os.environ.get("LINCE_STATUS_DIR", "/tmp/lince-dashboard")) / f"{agent_id}.state"
+    try:
+        status.parent.mkdir(parents=True, exist_ok=True)
+        status.write_text(STARTING + "\n")  # Discard a prior pane's stale idle state.
+    except OSError:
+        os.execvp(command[0], command)
+    child = subprocess.Popen(command)
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, lambda number, _frame: child.send_signal(number) if child.poll() is None else None)
+    stop = threading.Event()
+    watcher = threading.Thread(target=observe, args=(child, status, session, pane, stop), daemon=True)
+    watcher.start()
+    try:
+        result = child.wait()
+    finally:
+        stop.set()
+        watcher.join(timeout=3)
+        try:
+            status.write_text("stopped\n")
+        except OSError:
+            pass
+    return result if result >= 0 else 128 - result
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

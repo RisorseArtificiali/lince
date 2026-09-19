@@ -511,8 +511,8 @@ fn spawn_inner(
             expanded.extend(["lince-msg-host".into(), "run".into(), "--alias".into(), name.clone(),
                 "--agent".into(), base.into(), "--".into()]);
         }
-        if base == "bob" {
-            expanded.extend(["lince-bob-startup".into(), "--".into()]);
+        if matches!(base, "bob" | "codex") {
+            expanded.extend([format!("lince-{base}-startup"), "--".into()]);
         }
         // If agent doesn't have native hooks, wrap with lince-agent-wrapper
         if !type_config.has_native_hooks {
