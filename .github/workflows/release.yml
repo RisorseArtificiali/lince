@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: write
@@ -17,15 +17,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Install stable Rust with the WASI target
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
+          toolchain: stable
           targets: wasm32-wasip1
 
       - name: Install Wasmtime
-        uses: bytecodealliance/actions/wasmtime/setup@v1
+        uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1
         with:
           version: "47.0.3"
 
@@ -59,8 +62,10 @@ jobs:
           Prebuilt, platform-independent LINCE dashboard plugin.
 
           Smoke test: the artifact was instantiated by Wasmtime ${WASMTIME_VERSION}
-          with the Zellij host ABI stub at the minimum supported Zellij version,
-          ${ZELLIJ_SMOKE_TEST_VERSION}.
+          with the repository's Zellij host ABI stub.
+
+          Zellij compatibility baseline: ${ZELLIJ_SMOKE_TEST_VERSION}
+          (minimum supported version).
           EOF
 
       - name: Create GitHub release

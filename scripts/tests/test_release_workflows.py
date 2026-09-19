@@ -16,22 +16,28 @@ def workflow_text(path: Path) -> str:
 
 def assert_only_explicit_rustup_cargo(text: str) -> None:
     cargo_lines = [line.strip() for line in text.splitlines() if "cargo" in line and not line.lstrip().startswith("#")]
-    command_lines = [line for line in cargo_lines if "cargo" in line and ("build" in line or "test" in line)]
-    assert command_lines, "workflow must build or test with cargo"
-    assert all(EXPLICIT_CARGO in line for line in command_lines), command_lines
-    assert not re.search(r"(?:^|[;&|]\s*)cargo\s+(?:build|test)\b", text, re.MULTILINE)
+    assert cargo_lines, "workflow must invoke cargo"
+    assert all(EXPLICIT_CARGO in line for line in cargo_lines), cargo_lines
+
+
+def assert_actions_are_pinned(text: str) -> None:
+    uses_lines = [line.strip() for line in text.splitlines() if line.strip().startswith("uses:")]
+    assert uses_lines
+    assert all(re.search(r"@[0-9a-f]{40}(?:\s+#.*)?$", line) for line in uses_lines), uses_lines
+    assert "persist-credentials: false" in text
 
 
 def assert_wasmtime_uses_shared_stub(text: str) -> None:
     assert re.search(r"wasmtime run\s+\\?\s*--preload \"zellij=", text)
     assert STUB in text
+    assert (ROOT / STUB).is_file()
 
 
 def test_plugin_ci_builds_and_runs_wasm_tests_with_shared_stub() -> None:
     text = workflow_text(PLUGIN_CI)
 
     assert "pull_request:" in text
-    assert "dtolnay/rust-toolchain@stable" in text
+    assert "toolchain: stable" in text
     assert "targets: wasm32-wasip1" in text
     assert f"{EXPLICIT_CARGO} build --target wasm32-wasip1" in text
     assert f"{EXPLICIT_CARGO} test --target wasm32-wasip1 --no-run" in text
@@ -39,15 +45,16 @@ def test_plugin_ci_builds_and_runs_wasm_tests_with_shared_stub() -> None:
     assert ".profile.test == true" in text
     assert_wasmtime_uses_shared_stub(text)
     assert_only_explicit_rustup_cargo(text)
+    assert_actions_are_pinned(text)
 
 
 def test_release_builds_validates_and_publishes_checksum_artifacts() -> None:
     text = workflow_text(RELEASE)
 
     assert "tags:" in text
-    assert "v*.*.*" in text
+    assert "v[0-9]+.[0-9]+.[0-9]+" in text
     assert "contents: write" in text
-    assert "dtolnay/rust-toolchain@stable" in text
+    assert "toolchain: stable" in text
     assert "targets: wasm32-wasip1" in text
     assert f"{EXPLICIT_CARGO} build --release --target wasm32-wasip1" in text
     assert_wasmtime_uses_shared_stub(text)
@@ -58,3 +65,4 @@ def test_release_builds_validates_and_publishes_checksum_artifacts() -> None:
     assert "0.45.1" in text
     assert text.index("wasmtime run") < text.index("gh release create")
     assert_only_explicit_rustup_cargo(text)
+    assert_actions_are_pinned(text)
