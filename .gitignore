@@ -15,6 +15,7 @@ lince-dashboard/plugin/lince-dashboard.wasm
 *.pdb
 
 # IDE
+.obsidian/
 .vscode/
 .idea/
 *.swp
