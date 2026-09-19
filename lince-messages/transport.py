@@ -44,7 +44,8 @@ class TerminalTransport:
             if event in {"SessionStart", "Stop", "idle_prompt", "turn_complete", "agent-turn-complete", "input",
                         "session_start", "agent_end", "agent_settled",
                         "session.created", "session.status.idle", "session.idle",
-                        "bob.PromptReady", "gemini.SessionStart", "gemini.AfterAgent", "goose.SessionStart", "goose.Stop", "amp.idle"}:
+                        "bob.PromptReady", "codex.PromptReady", "gemini.SessionStart", "gemini.AfterAgent",
+                        "goose.SessionStart", "goose.Stop", "amp.idle"}:
                 return True, "Idle hook received"
             return False, f"Waiting for idle: latest hook is {event[:80]!r}"
         except FileNotFoundError:

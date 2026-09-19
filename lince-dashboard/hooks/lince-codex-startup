@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 
 STARTING = "codex.Starting"
 READY = "codex.PromptReady"
@@ -21,21 +22,14 @@ def prompt_ready(screen):
     if not any(re.search(r"model:\s+(?!loading\b)\S+", line) for line in lines):
         return False
     if any(marker in screen.lower() for marker in (
-        "esc to interrupt", "starting mcp", "loading", "sign in", "trust this",
-        "would you like", "press enter", "shutting down",
+        "esc to interrupt", "starting mcp", "booting mcp", "loading", "sign in",
+        "trust this", "would you like", "press enter", "select a model", "shutting down",
     )):
         return False
-    for index, line in enumerate(lines):
-        if line != "› Ask Codex to do anything":
-            continue
-        footer = [line for line in lines[index + 1:] if line]
-        # Default footer or user-configured model/directory status line.
-        if len(footer) == 1 and (
-            re.fullmatch(r"\? for shortcuts(?:\s+.*context left)?", footer[0])
-            or re.fullmatch(r"[^›]+ · (?:~/|/)[^›]+", footer[0])
-        ):
-            return True
-    return False
+    # The status line is user-configurable and may wrap or be clipped in a
+    # narrow pane. The resolved header plus the exact empty composer are the
+    # stable readiness signals; transient screens are excluded above.
+    return "› Ask Codex to do anything" in lines
 
 
 def observe(child, status, session, pane, stop):
@@ -51,14 +45,34 @@ def observe(child, status, session, pane, stop):
             # observation from overwriting a concurrently arriving running event.
             lock = status.with_suffix(".startup-lock")
             try:
-                lock.mkdir()
+                lock.symlink_to(str(os.getpid()))
             except FileExistsError:
+                # A killed prior observer/hook must not strand a reused agent
+                # ID in Starting forever. Only reclaim the exact symlink value
+                # we inspected, so a concurrent new owner is never removed.
+                try:
+                    if lock.is_dir() and not lock.is_symlink():
+                        # Upgrade compatibility with the old mkdir lock. Its
+                        # critical section was a single state read/write; use
+                        # the shell hook's same three-second grace period.
+                        if time.time() - lock.stat().st_mtime >= 3:
+                            lock.rmdir()
+                        continue
+                    owner = os.readlink(lock)
+                    if owner.isdecimal():
+                        try:
+                            os.kill(int(owner), 0)
+                        except ProcessLookupError:
+                            if os.readlink(lock) == owner:
+                                lock.unlink(missing_ok=True)
+                except OSError:
+                    pass
                 continue
             try:
                 if child.poll() is None and status.read_text().strip() == STARTING:
                     status.write_text(READY + "\n")
             finally:
-                lock.rmdir()
+                lock.unlink(missing_ok=True)
             return
         except (OSError, subprocess.TimeoutExpired):
             continue

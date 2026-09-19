@@ -63,13 +63,27 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${AGENT_ID} ${NATIVE_EVENT}" >> "$LOG_FILE"
 # Serialize the state write with the startup observer before sending the pipe.
 mkdir -p "${STATUS_DIR}" 2>/dev/null || true
 STATUS_LOCK="${STATUS_DIR}/${AGENT_ID}.startup-lock"
-LOCKED=false
-for _ in {1..20}; do
-    if mkdir "$STATUS_LOCK" 2>/dev/null; then LOCKED=true; break; fi
+legacy_waits=0
+while ! ln -s "$$" "$STATUS_LOCK" 2>/dev/null; do
+    owner=$(readlink "$STATUS_LOCK" 2>/dev/null || true)
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+        if [ "$(readlink "$STATUS_LOCK" 2>/dev/null || true)" = "$owner" ]; then
+            rm -f -- "$STATUS_LOCK" 2>/dev/null || true
+        fi
+    elif [ -d "$STATUS_LOCK" ] && [ ! -L "$STATUS_LOCK" ]; then
+        # Upgrade compatibility: the previous observer used a directory lock.
+        # Its critical section is only a state read/write; remove it only after
+        # allowing an already-running old observer ample time to finish.
+        legacy_waits=$((legacy_waits + 1))
+        if [ "$legacy_waits" -ge 300 ]; then
+            rmdir "$STATUS_LOCK" 2>/dev/null || true
+            legacy_waits=0
+        fi
+    fi
     sleep 0.01
 done
 echo "$NATIVE_EVENT" > "${STATUS_DIR}/${AGENT_ID}.state" 2>/dev/null || true
-if $LOCKED; then rmdir "$STATUS_LOCK" 2>/dev/null || true; fi
+rm -f -- "$STATUS_LOCK" 2>/dev/null || true
 
 # Use whatever `timeout` is available (GNU `timeout` on Linux, `gtimeout` on
 # macOS with `brew install coreutils`); fall back to running zellij directly
