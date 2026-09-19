@@ -95,6 +95,10 @@ python_is_compatible() {
   '
 }
 
+python_has_pip() {
+  "$1" -m pip --version >/dev/null 2>&1
+}
+
 verify_sha256() {
   local archive="$1"
   local expected="$2"
@@ -247,13 +251,17 @@ fi
 
 select_assets
 
-# Python 3.11+: prefer a compatible system interpreter, then the persistent
-# standalone interpreter, and download only when neither is usable.
+# Python 3.11+ with pip: prefer a compatible system interpreter, then the
+# persistent standalone interpreter, and download only when neither is usable.
 PYTHON_ROOT="$HOME/.local/share/lince/python"
-if check_cmd python3 && python_is_compatible "$(command -v python3)"; then
+if check_cmd python3 && \
+   python_is_compatible "$(command -v python3)" && \
+   python_has_pip "$(command -v python3)"; then
   PYTHON_CMD="$(command -v python3)"
   echo -e "  ${GREEN}✓${NC} Python $(python_version "$PYTHON_CMD") (system)"
-elif [ -x "$PYTHON_ROOT/bin/python3" ] && python_is_compatible "$PYTHON_ROOT/bin/python3"; then
+elif [ -x "$PYTHON_ROOT/bin/python3" ] && \
+     python_is_compatible "$PYTHON_ROOT/bin/python3" && \
+     python_has_pip "$PYTHON_ROOT/bin/python3"; then
   export PATH="$PYTHON_ROOT/bin:$PATH"
   PYTHON_CMD="$PYTHON_ROOT/bin/python3"
   echo -e "  ${GREEN}✓${NC} Python $(python_version "$PYTHON_CMD") (LINCE standalone)"
@@ -262,12 +270,13 @@ else
   provision_python
   export PATH="$PYTHON_ROOT/bin:$PATH"
   PYTHON_CMD="$PYTHON_ROOT/bin/python3"
-  if ! python_is_compatible "$PYTHON_CMD"; then
-    echo -e "${RED}[!] Provisioned Python failed the 3.11+ version check.${NC}" >&2
+  if ! python_is_compatible "$PYTHON_CMD" || ! python_has_pip "$PYTHON_CMD"; then
+    echo -e "${RED}[!] Provisioned Python failed the 3.11+/pip checks.${NC}" >&2
     exit 1
   fi
   echo -e "  ${GREEN}✓${NC} Python $(python_version "$PYTHON_CMD") (LINCE standalone)"
 fi
+export LINCE_PYTHON_CMD="$PYTHON_CMD"
 
 # Zellij — standalone bootstrap, before the repository is available.
 check_zellij_version() {

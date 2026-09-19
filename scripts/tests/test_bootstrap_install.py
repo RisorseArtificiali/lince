@@ -85,6 +85,10 @@ class BootstrapInstallTest(unittest.TestCase):
         self._write_command(
             "python3",
             """
+            if [ "${1:-} ${2:-} ${3:-}" = "-m pip --version" ]; then
+                [ "$SYSTEM_PYTHON_HAS_PIP" = 1 ]
+                exit
+            fi
             echo "$SYSTEM_PYTHON_VERSION"
             """,
         )
@@ -156,6 +160,7 @@ class BootstrapInstallTest(unittest.TestCase):
         os_name: str = "Linux",
         arch: str = "x86_64",
         python_version: str = "3.11",
+        system_python_has_pip: bool = True,
         zellij_version: str = "zellij 0.45.1",
         wsl: bool = False,
         checksum_failure: bool = False,
@@ -174,6 +179,7 @@ class BootstrapInstallTest(unittest.TestCase):
             "TEST_ARCH": arch,
             "TEST_WSL": "1" if wsl else "0",
             "SYSTEM_PYTHON_VERSION": python_version,
+            "SYSTEM_PYTHON_HAS_PIP": "1" if system_python_has_pip else "0",
             "SYSTEM_ZELLIJ_VERSION": zellij_version,
             "FAIL_CHECKSUM": "1" if checksum_failure else "0",
             "COMMAND_LOG": str(self.log),
@@ -262,6 +268,22 @@ check_prerequisites
         self.assertIn("jq not found; continuing without it", result.stdout)
         self.assertNotIn("rustup", result.stdout)
         self.assertNotIn("C compiler", result.stdout)
+
+    def test_compatible_system_python_without_pip_provisions_standalone(self) -> None:
+        result = self.run_installer(system_python_has_pip=False)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        standalone = self.home / ".local/share/lince/python/bin/python3"
+        self.assertTrue(standalone.is_file())
+        self.assertIn("cpython-3.11.16", self.command_log())
+        self.assertIn(f"python={standalone}", self.quickstart_log.read_text())
+
+    def test_compatible_system_python_with_pip_keeps_fast_path(self) -> None:
+        result = self.run_installer(system_python_has_pip=True)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("cpython-", self.command_log())
+        self.assertIn(f"python={self.bin_dir / 'python3'}", self.quickstart_log.read_text())
 
     def test_rerun_reuses_persistent_python_when_system_python_is_old(self) -> None:
         standalone = self.home / ".local/share/lince/python/bin/python3"

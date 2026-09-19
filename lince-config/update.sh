@@ -9,27 +9,24 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DST="$HOME/.local/bin/lince-config"
 
+# shellcheck source=python-runtime.sh
+source "$SCRIPT_DIR/python-runtime.sh"
+
 echo "Updating lince-config..."
 
 # Prerequisites — same checks as install.sh, so a Python downgrade or a missing
 # tomlkit doesn't leave a broken install.
-command -v python3 >/dev/null 2>&1 || { echo -e "${RED}Missing: python3 (3.11+)${NC}"; exit 1; }
+select_lince_config_python
 
-PY_OK=$(python3 -c "import sys; print(1 if sys.version_info >= (3, 11) else 0)" 2>/dev/null || echo 0)
-if [ "$PY_OK" = "0" ]; then
-    echo -e "${RED}Python 3.11+ required (for tomllib)${NC}"
-    exit 1
-fi
-
-python3 -c "import tomlkit" 2>/dev/null || {
+"$LINCE_CONFIG_PYTHON" -c "import tomlkit" 2>/dev/null || {
     echo -e "${YELLOW}tomlkit not found. Installing...${NC}"
-    pip install --user tomlkit 2>/dev/null || \
-        pip install --user --break-system-packages tomlkit 2>/dev/null || {
-        echo -e "${RED}Failed to install tomlkit. Install manually: pip install tomlkit${NC}"
+    if ! "$LINCE_CONFIG_PYTHON" -m pip install --user tomlkit 2>/dev/null &&
+       ! "$LINCE_CONFIG_PYTHON" -m pip install --user --break-system-packages tomlkit 2>/dev/null; then
+        echo -e "${RED}Failed to install tomlkit. Install manually:${NC}"
+        echo -e "${RED}  $LINCE_CONFIG_PYTHON -m pip install --user tomlkit${NC}"
         exit 1
-    }
+    fi
 }
 
-cp "$SCRIPT_DIR/lince-config" "$INSTALL_DST"
-chmod +x "$INSTALL_DST"
+bash "$SCRIPT_DIR/install-command.sh"
 echo -e "${GREEN}Done. Updated $INSTALL_DST${NC}"
