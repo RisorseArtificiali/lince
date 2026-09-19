@@ -164,6 +164,7 @@ lince-dashboard/
 - Test hook manually: `echo '{"hook_event_name":"Stop"}' | LINCE_AGENT_ID=test-1 bash ~/.local/bin/claude-status-hook.sh`
 - Check file fallback: `cat /tmp/lince-dashboard/claude-test-1.state`
 - For Codex, run `bash hooks/install-codex-hooks.sh`, then open `/hooks` in Codex and review/trust the `codex-status-hook.sh` handlers. Restart the Codex session. The installer merges lifecycle events into `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and preserves other hooks. Legacy `notify` alone can only report turn completion, so it cannot switch the dashboard to `RUNNING`.
+- Codex startup readiness is observed once by `lince-codex-startup`, as for Bob. The dashboard shows `I` when the empty Codex 0.155.1 composer is visible after loading; native hooks take precedence and own subsequent transitions. Unknown or changed TUI layouts remain `-` until a native hook arrives. Updating this integration requires both the dashboard plugin and the hook installer.
 - Verify Bob hooks are installed: check `~/.bob/settings/settings.json` for `bob-status-hook.sh` entries under `hooks`
 - Ensure sandbox passes env vars (see [Sandbox Integration](https://lince.sh/documentation/#/dashboard/usage-guide?id=sandbox-integration))
 

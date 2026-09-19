@@ -265,13 +265,14 @@
             "additionalProperties": {
               "type": "string",
               "enum": [
+                "unknown",
                 "running",
                 "input",
                 "permission",
                 "stopped"
               ]
             },
-            "description": "Agent event name -> canonical status (running/input/permission/stopped)"
+            "description": "Agent event name -> canonical status (unknown/running/input/permission/stopped)"
           }
         },
         "additionalProperties": false

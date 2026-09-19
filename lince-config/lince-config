@@ -114,7 +114,7 @@ _EVENT_MAP = {
     "type": "object",
     "additionalProperties": {
         "type": "string",
-        "enum": ["running", "input", "permission", "stopped"],
+        "enum": ["unknown", "running", "input", "permission", "stopped"],
     },
 }
 
@@ -627,7 +627,7 @@ _V1_DASHBOARD_AGENT_SCHEMA = {
         "env_vars": _d(_STR_MAP, "Env vars exported at spawn ($VAR self-references "
                                  "inherit from the host env)"),
         "event_map": _d(_EVENT_MAP, "Agent event name -> canonical status "
-                                    "(running/input/permission/stopped)"),
+                                    "(unknown/running/input/permission/stopped)"),
     },
     "additionalProperties": False,
 }

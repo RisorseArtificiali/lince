@@ -45,6 +45,7 @@ echo -e "${GREEN}[1/5] Installing Codex status hook...${NC}"
 mkdir -p "$HOME/.local/bin"
 cp "$HOOK_SRC" "$HOOK_DEST"
 chmod +x "$HOOK_DEST"
+install -m 755 "$SCRIPT_DIR/lince-codex-startup" "$HOME/.local/bin/lince-codex-startup"
 echo -e "${GREEN}  Installed: $HOOK_DEST${NC}"
 
 echo ""

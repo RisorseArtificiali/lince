@@ -60,6 +60,17 @@ PAYLOAD="{\"agent_id\":\"${AGENT_ID}\",\"event\":\"${NATIVE_EVENT}\"}"
 
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${AGENT_ID} ${NATIVE_EVENT}" >> "$LOG_FILE" 2>/dev/null || true
 
+# Serialize the state write with the startup observer before sending the pipe.
+mkdir -p "${STATUS_DIR}" 2>/dev/null || true
+STATUS_LOCK="${STATUS_DIR}/${AGENT_ID}.startup-lock"
+LOCKED=false
+for _ in {1..20}; do
+    if mkdir "$STATUS_LOCK" 2>/dev/null; then LOCKED=true; break; fi
+    sleep 0.01
+done
+echo "$NATIVE_EVENT" > "${STATUS_DIR}/${AGENT_ID}.state" 2>/dev/null || true
+if $LOCKED; then rmdir "$STATUS_LOCK" 2>/dev/null || true; fi
+
 # Use whatever `timeout` is available (GNU `timeout` on Linux, `gtimeout` on
 # macOS with `brew install coreutils`); fall back to running zellij directly
 # when neither exists — macOS ships without `timeout` by default.
@@ -76,7 +87,5 @@ if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     printf '%s' "$PAYLOAD" | _lince_send_pipe "lince-status" >/dev/null 2>&1 || true
 fi
 
-mkdir -p "${STATUS_DIR}" 2>/dev/null || true
-echo "$NATIVE_EVENT" > "${STATUS_DIR}/${AGENT_ID}.state" 2>/dev/null || true
 
 exit 0
