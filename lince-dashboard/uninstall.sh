@@ -102,6 +102,8 @@ if [ -f "$HOME/.local/bin/lince-dashboard-launch" ]; then
     fi
 fi
 if [ ! -f "$HOME/.local/bin/lince-dashboard-launch" ] &&
+   { [ ! -f "$HOME/.local/bin/lince-config" ] ||
+     ! head -n 1 "$HOME/.local/bin/lince-config" | grep -q 'lince-python'; } &&
    [ -f "$HOME/.local/bin/lince-python" ] &&
    grep -q "Managed by LINCE for the standalone bootstrap interpreter" "$HOME/.local/bin/lince-python"; then
     rm -f "$HOME/.local/bin/lince-python"

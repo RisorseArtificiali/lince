@@ -8,8 +8,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CMD_SRC="$SCRIPT_DIR/lince-config"
 INSTALL_DST="$HOME/.local/bin/lince-config"
+
+# shellcheck source=python-runtime.sh
+source "$SCRIPT_DIR/python-runtime.sh"
 
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}   lince-config — Installer${NC}"
@@ -20,43 +22,27 @@ echo ""
 
 echo -e "${GREEN}[1/4] Checking prerequisites...${NC}"
 
-command -v python3 >/dev/null 2>&1 || { echo -e "${RED}Missing: python3 (3.11+)${NC}"; exit 1; }
-
-PY_OK=$(python3 -c "import sys; print(1 if sys.version_info >= (3, 11) else 0)" 2>/dev/null || echo 0)
-if [ "$PY_OK" = "0" ]; then
-    echo -e "${RED}Python 3.11+ required (for tomllib)${NC}"
-    exit 1
-fi
-echo -e "${GREEN}  ✓ python3 $(python3 --version 2>&1 | awk '{print $2}')${NC}"
+select_lince_config_python
+echo -e "${GREEN}  ✓ python3 $("$LINCE_CONFIG_PYTHON" --version 2>&1 | awk '{print $2}')${NC}"
 
 # Check/install tomlkit
-python3 -c "import tomlkit" 2>/dev/null || {
+"$LINCE_CONFIG_PYTHON" -c "import tomlkit" 2>/dev/null || {
     echo -e "${YELLOW}  tomlkit not found. Installing...${NC}"
-    _installed=false
-    for _pip in "python3 -m pip" pip pip3; do
-        for _flags in "--user" "--user --break-system-packages"; do
-            if $_pip install $_flags tomlkit 2>/dev/null; then
-                _installed=true
-                break 2
-            fi
-        done
-    done
-    if [ "$_installed" = "false" ]; then
+    if ! "$LINCE_CONFIG_PYTHON" -m pip install --user tomlkit 2>/dev/null &&
+       ! "$LINCE_CONFIG_PYTHON" -m pip install --user --break-system-packages tomlkit 2>/dev/null; then
         echo -e "${RED}  Failed to install tomlkit. Install manually:${NC}"
-        echo -e "${RED}    python3 -m pip install --user tomlkit${NC}"
+        echo -e "${RED}    $LINCE_CONFIG_PYTHON -m pip install --user tomlkit${NC}"
         exit 1
     fi
 }
-echo -e "${GREEN}  ✓ tomlkit$(python3 -c "import tomlkit; print(' ' + tomlkit.__version__)" 2>/dev/null)${NC}"
+echo -e "${GREEN}  ✓ tomlkit$("$LINCE_CONFIG_PYTHON" -c "import tomlkit; print(' ' + tomlkit.__version__)" 2>/dev/null)${NC}"
 
 # ── Install binary ─────────────────────────────────────────────────────
 
 echo ""
 echo -e "${GREEN}[2/4] Installing lince-config...${NC}"
 
-mkdir -p "$(dirname "$INSTALL_DST")"
-cp "$CMD_SRC" "$INSTALL_DST"
-chmod +x "$INSTALL_DST"
+bash "$SCRIPT_DIR/install-command.sh"
 echo -e "${GREEN}  ✓ Installed to $INSTALL_DST${NC}"
 
 # ── PATH check ─────────────────────────────────────────────────────────
@@ -79,7 +65,7 @@ esac
 echo ""
 echo -e "${GREEN}[4/4] Verifying...${NC}"
 
-if "$INSTALL_DST" --help >/dev/null 2>&1; then
+if PATH="$HOME/.local/bin:$PATH" "$INSTALL_DST" --help >/dev/null 2>&1; then
     echo -e "${GREEN}  ✓ lince-config is working${NC}"
 else
     echo -e "${RED}  ✗ lince-config --help failed${NC}"
