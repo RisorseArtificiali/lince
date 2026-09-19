@@ -98,6 +98,7 @@ echo ""
 if [ -f "$HOME/.local/bin/lince-dashboard-launch" ]; then
     if confirm "  Remove LINCE presentation launcher?"; then
         rm -f "$HOME/.local/bin/lince-dashboard-launch"
+        rm -f "$HOME/.local/bin/lince"
     fi
 fi
 if [ ! -f "$HOME/.local/bin/lince-dashboard-launch" ] &&

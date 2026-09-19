@@ -1,5 +1,8 @@
 """Layout generation must agree with the actual viewport on nondefault widths."""
 import runpy
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -215,6 +218,7 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(global_config.read_text(), '// personal global config\n')
             self.assertTrue(active.with_suffix('.kdl.dist').exists())
             self.assertTrue((home / ".local/bin/lince-dashboard-launch").stat().st_mode & 0o111)
+            self.assertTrue((home / ".local/bin/lince").stat().st_mode & 0o111)
             self.assertEqual({p.name for p in (home / ".config/zellij/layouts").glob('*.kdl')},
                              {p.name for p in (ROOT / 'layouts').glob('*.kdl')})
 
@@ -281,3 +285,33 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue(launcher.is_file())
             self.assertTrue(shim.is_file())
+
+    def test_lince_shim_forwards_arguments_from_common_shells(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory)
+            shutil.copy2(ROOT / "lince", bin_dir / "lince")
+            (bin_dir / "lince").chmod(0o755)
+            invocation = bin_dir / "invocation"
+            dashboard = bin_dir / "lince-dashboard-launch"
+            dashboard.write_text(
+                f'#!/bin/sh\nprintf "%s\\n" "$*" > "{invocation}"\n'
+            )
+            dashboard.chmod(0o755)
+
+            shell_commands = [
+                ("/bin/sh", '"$1" --preset minimal "two words"'),
+                (shutil.which("bash"), '"$1" --preset minimal "two words"'),
+                (shutil.which("zsh"), '"$1" --preset minimal "two words"'),
+            ]
+            for shell, command in shell_commands:
+                if shell is None:
+                    continue
+                with self.subTest(shell=shell):
+                    result = subprocess.run(
+                        [shell, "-c", command, shell, str(bin_dir / "lince")],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(invocation.read_text(), "--preset minimal two words\n")
