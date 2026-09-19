@@ -80,17 +80,17 @@
         sandboxed, monitored, and controllable by voice. No vendor lock-in.
       </p>
 
-      <!-- Install command -->
-      <div class="cmd-box rounded-lg p-4 font-mono text-sm flex items-center gap-3 mb-2 max-w-lg group cursor-pointer" onclick="copyInstall(this)">
+      <!-- Install command: --defaults first (promoted), interactive second -->
+      <div class="cmd-box rounded-lg p-4 font-mono text-sm flex items-center gap-3 mb-2 max-w-xl group cursor-pointer" onclick="copyInstall(this)">
         <span class="text-accent select-none">$</span>
-        <code class="text-white flex-1">curl -sSL https://lince.sh/install | bash</code>
+        <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash -s -- --defaults</code>
         <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
-      <div class="cmd-box rounded-lg p-4 font-mono text-sm flex items-center gap-3 mb-4 max-w-lg group cursor-pointer overflow-x-auto" onclick="copyInstall(this)">
+      <div class="cmd-box rounded-lg p-4 font-mono text-sm flex items-center gap-3 mb-4 max-w-xl group cursor-pointer" onclick="copyInstall(this)">
         <span class="text-accent select-none">$</span>
-        <code class="text-white flex-1 whitespace-nowrap">curl -sSL https://lince.sh/install | bash -s -- --defaults</code>
+        <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash</code>
         <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
@@ -231,31 +231,32 @@
     <div class="max-w-5xl mx-auto px-6 py-20">
       <h2 class="text-2xl font-bold mb-8">Install</h2>
 
-      <div class="grid sm:grid-cols-2 gap-8">
-        <!-- Quick install -->
-        <div>
+      <div class="grid sm:grid-cols-5 gap-8">
+        <!-- Quick install: --defaults first (promoted); wider column so the
+             one-liners never need a scrollbar and the copy button stays put -->
+        <div class="sm:col-span-3">
           <h3 class="font-semibold mb-3">One-liner</h3>
           <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3 flex items-center gap-3 group cursor-pointer" onclick="copyInstall(this)">
             <span class="text-accent select-none">$</span>
-            <code class="text-white flex-1">curl -sSL https://lince.sh/install | bash</code>
+            <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash -s -- --defaults</code>
             <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
           </div>
-          <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3 overflow-x-auto flex items-center gap-3 group cursor-pointer" onclick="copyInstall(this)">
+          <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3 flex items-center gap-3 group cursor-pointer" onclick="copyInstall(this)">
             <span class="text-accent select-none">$</span>
-            <code class="text-white flex-1 whitespace-nowrap">curl -sSL https://lince.sh/install | bash -s -- --defaults</code>
+            <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash</code>
             <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
           </div>
-          <p class="text-sm text-muted">Interactive or unattended: provisions Zellij and standalone Python when needed, verifies the released dashboard plugin checksum, then sets up the sandbox, dashboard, and updater.</p>
+          <p class="text-sm text-muted">Unattended or interactive: provisions Zellij and standalone Python when needed, verifies the released dashboard plugin checksum, then sets up the sandbox, dashboard, and updater.</p>
         </div>
 
         <!-- Manual -->
-        <div>
+        <div class="sm:col-span-2">
           <h3 class="font-semibold mb-3">Manual</h3>
-          <div class="cmd-box rounded-lg p-4 font-mono text-sm space-y-1 mb-3">
+          <div class="cmd-box rounded-lg p-4 font-mono text-sm space-y-1 mb-3 overflow-x-auto">
             <div><span class="text-accent">$</span> git clone https://github.com/RisorseArtificiali/lince</div>
             <div><span class="text-accent">$</span> cd lince/sandbox && ./install.sh</div>
             <div><span class="text-accent">$</span> cd ../lince-dashboard && ./install.sh</div>
