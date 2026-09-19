@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+env:
+  WASMTIME_VERSION: "47.0.3"
+  ZELLIJ_SMOKE_TEST_VERSION: "0.45.1"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust with the WASI target
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+          targets: wasm32-wasip1
+
+      - name: Install Wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1
+        with:
+          version: "47.0.3"
+
+      - name: Build release plugin
+        working-directory: lince-dashboard/plugin
+        run: PATH="$HOME/.cargo/bin:$PATH" "$HOME/.cargo/bin/cargo" build --release --target wasm32-wasip1
+
+      - name: Stage release artifact
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp lince-dashboard/plugin/target/wasm32-wasip1/release/lince-dashboard.wasm dist/lince-dashboard.wasm
+
+      - name: Validate release artifact with Wasmtime
+        run: |
+          set -euo pipefail
+          wasmtime run \
+            --preload "zellij=${{ github.workspace }}/lince-dashboard/tests/zellij-host-stub.wat" \
+            dist/lince-dashboard.wasm
+
+      - name: Generate and verify checksum
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum lince-dashboard.wasm > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Write release notes
+        run: |
+          cat > dist/RELEASE_NOTES.md <<EOF
+          Prebuilt, platform-independent LINCE dashboard plugin.
+
+          Smoke test: the artifact was instantiated by Wasmtime ${WASMTIME_VERSION}
+          with the repository's Zellij host ABI stub.
+
+          Zellij compatibility baseline: ${ZELLIJ_SMOKE_TEST_VERSION}
+          (minimum supported version).
+          EOF
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/lince-dashboard.wasm \
+            dist/SHA256SUMS \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file dist/RELEASE_NOTES.md
