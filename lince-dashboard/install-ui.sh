@@ -11,6 +11,36 @@ cp "$UI_SOURCE/lince-voice" "$HOME/.local/bin/lince-voice"
 chmod +x "$HOME/.local/bin/lince-voice"
 cp "$UI_SOURCE/lince-dashboard-launch" "$HOME/.local/bin/lince-dashboard-launch"
 chmod +x "$HOME/.local/bin/lince-dashboard-launch"
+
+# The curl bootstrap may provision Python outside the normal PATH. Keep the
+# installed launcher bound to that managed interpreter without shadowing the
+# user's generic `python3` command.
+MANAGED_PYTHON="$HOME/.local/share/lince/python/bin/python3"
+if [ -x "$MANAGED_PYTHON" ]; then
+    PYTHON_SHIM="$HOME/.local/bin/lince-python"
+    PYTHON_SHIM_NEW="${PYTHON_SHIM}.new.$$"
+    cat > "$PYTHON_SHIM_NEW" <<'SHIM'
+#!/bin/sh
+# Managed by LINCE for the standalone bootstrap interpreter.
+managed_python="$HOME/.local/share/lince/python/bin/python3"
+if [ ! -x "$managed_python" ]; then
+    echo "lince: managed Python is missing; re-run the LINCE installer" >&2
+    exit 1
+fi
+export PATH="$HOME/.local/share/lince/python/bin:$PATH"
+exec "$managed_python" "$@"
+SHIM
+    chmod 755 "$PYTHON_SHIM_NEW"
+    mv "$PYTHON_SHIM_NEW" "$PYTHON_SHIM"
+
+    LAUNCHER_NEW="$HOME/.local/bin/.lince-dashboard-launch.new.$$"
+    {
+        printf '%s\n' '#!/usr/bin/env lince-python'
+        tail -n +2 "$UI_SOURCE/lince-dashboard-launch"
+    } > "$LAUNCHER_NEW"
+    chmod 755 "$LAUNCHER_NEW"
+    mv "$LAUNCHER_NEW" "$HOME/.local/bin/lince-dashboard-launch"
+fi
 # The active session config is user-owned; refreshed defaults remain reviewable.
 if [ ! -f "$HOME/.config/lince-dashboard/zellij.kdl" ]; then
     cp "$UI_SOURCE/zellij-config/config.kdl" "$HOME/.config/lince-dashboard/zellij.kdl"

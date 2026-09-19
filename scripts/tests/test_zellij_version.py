@@ -9,7 +9,14 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = (ROOT / 'scripts/check-zellij.sh').read_text()
 BOOTSTRAP = (ROOT / 'docs/install').read_text()
-BOOTSTRAP_CHECK = BOOTSTRAP[BOOTSTRAP.index('check_zellij_version() {'):].split('\nif ! check_zellij_version;', 1)[0]
+
+
+def extract_shell_function(source, name):
+    function = source[source.index(f'{name}() {{'):]
+    return function[:function.index('\n}\n') + 2]
+
+
+BOOTSTRAP_CHECK = extract_shell_function(BOOTSTRAP, 'check_zellij_version')
 
 
 class ZellijVersionTest(unittest.TestCase):

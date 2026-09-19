@@ -39,6 +39,7 @@ SELECTED_AGENTS=()
 INSTALL_VOXCODE=false
 INSTALL_LINCE_LAB=false
 USE_DEFAULTS=false
+BUILD_FROM_SOURCE=false
 
 # Available agents: key|display_name|description
 AGENTS=(
@@ -890,7 +891,13 @@ do_install_dashboard() {
     echo ""
 
     cd "$SCRIPT_DIR/lince-dashboard"
-    if LINCE_DASHBOARD_PRESET="$LINCE_DASHBOARD_PRESET" bash install.sh; then
+    local dashboard_args=()
+    if [ "$BUILD_FROM_SOURCE" = true ]; then
+        dashboard_args+=("--build-from-source")
+    fi
+    if LINCE_DASHBOARD_PRESET="$LINCE_DASHBOARD_PRESET" \
+       LINCE_BUILD_FROM_SOURCE="$BUILD_FROM_SOURCE" \
+       bash install.sh "${dashboard_args[@]}"; then
         echo -e "${GREEN}✓ lince-dashboard installed${NC}"
     else
         echo -e "${RED}✗ lince-dashboard installation failed${NC}"
@@ -963,8 +970,9 @@ check_prerequisites() {
     # A hard prerequisite: do not install components with broken scrollback.
     check_zellij_version || exit 1
 
-    # Rustup (distro rustc alone cannot provide wasm32 targets needed for dashboard)
-    if command -v rustup >/dev/null 2>&1; then
+    # Rustup and a C linker are needed only for an explicit source build.
+    local missing_source_tools=()
+    if [ "$BUILD_FROM_SOURCE" = true ] && command -v rustup >/dev/null 2>&1; then
         echo -e "  ${GREEN}✓${NC} rustup $(rustup --version 2>/dev/null | awk '{print $2}')"
         # On macOS, check for the common Homebrew Rust conflict: rustup binary
         # exists but the toolchain isn't set up, so cargo resolves to Homebrew's
@@ -986,38 +994,42 @@ check_prerequisites() {
                 echo -e "  ${YELLOW}✗${NC} Could not set up toolchain. Run manually: rustup default stable"
             fi
         fi
-    else
-        warnings+=("rustup not found (required to build dashboard WASM plugin)")
+    elif [ "$BUILD_FROM_SOURCE" = true ]; then
+        missing_source_tools+=("rustup")
         echo -e "  ${YELLOW}✗${NC} rustup not found — needed to build dashboard"
         echo -e "      ${DIM}Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | RUSTUP_INIT_SKIP_PATH_CHECK=yes sh${NC}"
+    fi
+
+    if [ "$BUILD_FROM_SOURCE" = true ]; then
+        if command -v cc >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} cc (source build)"
+        else
+            missing_source_tools+=("C compiler/linker (cc)")
+            echo -e "  ${YELLOW}✗${NC} C compiler/linker (cc) not found — needed to build dashboard"
+        fi
+    fi
+
+    if [ ${#missing_source_tools[@]} -gt 0 ]; then
+        echo ""
+        echo -e "  ${RED}Missing --build-from-source prerequisites:${NC}"
+        for tool in "${missing_source_tools[@]}"; do
+            echo "    - $tool"
+        done
+        exit 1
     fi
 
     # jq
     if command -v jq >/dev/null 2>&1; then
         echo -e "  ${GREEN}✓${NC} jq"
     else
-        warnings+=("jq not found")
-        echo -e "  ${YELLOW}✗${NC} jq not found"
-        if [ "$OS_NAME" = "Darwin" ]; then
-            echo -e "      ${DIM}Install: brew install jq${NC}"
-        else
-            echo -e "      ${DIM}# Fedora/RHEL: sudo dnf install jq${NC}"
-            echo -e "      ${DIM}# Ubuntu/Debian: sudo apt install jq${NC}"
-        fi
+        echo -e "  ${YELLOW}⚠${NC} jq not found — continuing without it"
     fi
 
     # Node.js
     if command -v node >/dev/null 2>&1; then
         echo -e "  ${GREEN}✓${NC} node $(node --version 2>/dev/null)"
     else
-        warnings+=("Node.js not found")
-        echo -e "  ${YELLOW}✗${NC} node not found"
-        if [ "$OS_NAME" = "Darwin" ]; then
-            echo -e "      ${DIM}Install: brew install node${NC}"
-        else
-            echo -e "      ${DIM}# Fedora/RHEL: sudo dnf install nodejs${NC}"
-            echo -e "      ${DIM}# Ubuntu/Debian: sudo apt install nodejs${NC}"
-        fi
+        echo -e "  ${YELLOW}⚠${NC} node not found — npm-installed agents will be unavailable"
     fi
 
     # Sandbox backends
@@ -1160,6 +1172,10 @@ while [[ $# -gt 0 ]]; do
             USE_DEFAULTS=true
             shift
             ;;
+        --build-from-source)
+            BUILD_FROM_SOURCE=true
+            shift
+            ;;
         --help|-h)
             echo "LINCE Quickstart Installer"
             echo ""
@@ -1167,6 +1183,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --defaults   Install with defaults (all agents, bwrap sandbox)"
+            echo "  --build-from-source  Build the dashboard WASM plugin locally (requires rustup + cc)"
             echo "  --help       Show this help"
             echo ""
             exit 0

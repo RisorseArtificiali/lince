@@ -100,6 +100,11 @@ if [ -f "$HOME/.local/bin/lince-dashboard-launch" ]; then
         rm -f "$HOME/.local/bin/lince-dashboard-launch"
     fi
 fi
+if [ ! -f "$HOME/.local/bin/lince-dashboard-launch" ] &&
+   [ -f "$HOME/.local/bin/lince-python" ] &&
+   grep -q "Managed by LINCE for the standalone bootstrap interpreter" "$HOME/.local/bin/lince-python"; then
+    rm -f "$HOME/.local/bin/lince-python"
+fi
 WRAPPER="$HOME/.local/bin/lince-agent-wrapper"
 if [ -f "$WRAPPER" ]; then
     echo -e "${YELLOW}Found: $WRAPPER${NC}"

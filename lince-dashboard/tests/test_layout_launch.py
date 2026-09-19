@@ -217,3 +217,67 @@ class LayoutTests(unittest.TestCase):
             self.assertTrue((home / ".local/bin/lince-dashboard-launch").stat().st_mode & 0o111)
             self.assertEqual({p.name for p in (home / ".config/zellij/layouts").glob('*.kdl')},
                              {p.name for p in (ROOT / 'layouts').glob('*.kdl')})
+
+    def test_installed_launcher_uses_managed_python_when_present(self):
+        import os
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            managed_python = home / ".local/share/lince/python/bin/python3"
+            managed_python.parent.mkdir(parents=True)
+            managed_python.write_text(
+                '#!/bin/sh\nprintf "%s\\n" "$*" > "$HOME/python-invocation"\n'
+                'printf "%s\\n" "$PATH" > "$HOME/python-path"\n'
+            )
+            managed_python.chmod(0o755)
+
+            subprocess.run(
+                ["bash", str(ROOT / "install-ui.sh")],
+                env={**os.environ, "HOME": directory},
+                check=True,
+            )
+
+            installed = home / ".local/bin/lince-dashboard-launch"
+            self.assertEqual(installed.read_text().splitlines()[0], "#!/usr/bin/env lince-python")
+            runtime_shim = home / ".local/bin/lince-python"
+            self.assertTrue(runtime_shim.stat().st_mode & 0o111)
+            self.assertIn(".local/share/lince/python/bin/python3", runtime_shim.read_text())
+            subprocess.run(
+                [str(installed), "--help"],
+                env={**os.environ, "HOME": directory, "PATH": f"{home / '.local/bin'}:/usr/bin:/bin"},
+                check=True,
+            )
+            self.assertEqual((home / "python-invocation").read_text().strip(), f"{installed} --help")
+            self.assertEqual(
+                (home / "python-path").read_text().strip().split(":")[0],
+                str(managed_python.parent),
+            )
+
+    def test_uninstall_keeps_runtime_shim_when_launcher_is_kept(self):
+        import os
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            local_bin = home / ".local/bin"
+            local_bin.mkdir(parents=True)
+            launcher = local_bin / "lince-dashboard-launch"
+            launcher.write_text("#!/usr/bin/env lince-python\n")
+            shim = local_bin / "lince-python"
+            shim.write_text(
+                "#!/bin/sh\n# Managed by LINCE for the standalone bootstrap interpreter.\n"
+            )
+
+            result = subprocess.run(
+                ["bash", str(ROOT / "uninstall.sh")],
+                env={**os.environ, "HOME": directory},
+                input="n\nn\n",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(launcher.is_file())
+            self.assertTrue(shim.is_file())
