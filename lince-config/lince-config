@@ -471,8 +471,9 @@ SANDBOX_CONFIG_SCHEMA = {
                                                 "the sandbox so the agent can cancel "
                                                 "and return to the prompt; a second "
                                                 "press within 3s force-exits (Linux "
-                                                "only — needs /proc; elsewhere "
-                                                "immediate exit)", True),
+                                                "only — needs /proc; elsewhere the "
+                                                "first press terminates the sandbox)",
+                                                True),
                 "block_git_push": _d(_BOOL, "Block git push via a PATH wrapper", True),
                 "credential_proxy": _d(_BOOL, "Inject API keys on the host side — "
                                               "keys never enter the sandbox env", False),

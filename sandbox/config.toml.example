@@ -168,8 +168,10 @@ new_session = false
 # the current LLM request and return to the prompt; every press is
 # acknowledged with a hint. A second Ctrl+C within 3 seconds forces
 # termination (SIGTERM → SIGKILL). Requires /proc (Linux); elsewhere this
-# falls back to immediate exit.
-# Set to false to restore the old behaviour (immediate exit on Ctrl+C).
+# falls back to terminating the sandbox on the first press.
+# Set to false to terminate the sandbox on the first Ctrl+C (SIGINT →
+# SIGTERM → SIGKILL escalation; an agent that catches SIGINT can take a
+# few seconds to die).
 graceful_interrupt = true
 
 # Block git push via a wrapper script
