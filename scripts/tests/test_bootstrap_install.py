@@ -124,21 +124,27 @@ class BootstrapInstallTest(unittest.TestCase):
         self._write_command(
             "git",
             """
-            [ "${1:-}" = clone ] || exit 0
-            destination=
-            for argument in "$@"; do destination="$argument"; done
-            /bin/mkdir -p "$destination"
-            {
-                printf '%s\n' '#!/usr/bin/env bash'
-                printf '%s\n' '{'
-                printf '%s\n' '  printf "args=%s\\n" "$*"'
-                printf '%s\n' '  printf "path=%s\\n" "$PATH"'
-                printf '%s\n' '  printf "python=%s\\n" "$(command -v python3)"'
-                printf '%s\n' '  printf "zellij=%s\\n" "$(command -v zellij)"'
-                printf '%s\n' '} > "$QUICKSTART_LOG"'
-            } > "$destination/quickstart.sh"
-            /bin/chmod +x "$destination/quickstart.sh"
-            printf 'git clone %s\n' "$destination" >> "$COMMAND_LOG"
+            if [ "${1:-}" = init ]; then
+                destination=
+                for argument in "$@"; do destination="$argument"; done
+                /bin/mkdir -p "$destination"
+                {
+                    printf '%s\n' '#!/usr/bin/env bash'
+                    printf '%s\n' '{'
+                    printf '%s\n' '  printf "args=%s\\n" "$*"'
+                    printf '%s\n' '  printf "path=%s\\n" "$PATH"'
+                    printf '%s\n' '  printf "python=%s\\n" "$(command -v python3)"'
+                    printf '%s\n' '  printf "zellij=%s\\n" "$(command -v zellij)"'
+                    printf '%s\n' '  printf "release=%s\\n" "${LINCE_RELEASE_VERSION:-}"'
+                    printf '%s\n' '} > "$QUICKSTART_LOG"'
+                } > "$destination/quickstart.sh"
+                /bin/chmod +x "$destination/quickstart.sh"
+                printf 'git init %s\n' "$destination" >> "$COMMAND_LOG"
+            elif [ "${1:-}" = -C ] && [ "${3:-}" = fetch ]; then
+                printf 'git fetch %s\n' "$*" >> "$COMMAND_LOG"
+            elif [ "${1:-}" = -C ] && [ "${3:-}" = rev-parse ]; then
+                printf '%s\n' test-commit
+            fi
             """,
         )
         for command in ("bwrap", "sandbox-exec"):
@@ -174,6 +180,7 @@ class BootstrapInstallTest(unittest.TestCase):
             "QUICKSTART_LOG": str(self.quickstart_log),
             "ZELLIJ_FIXTURE": str(self.zellij_fixture),
             "PYTHON_FIXTURE": str(self.python_fixture),
+            "LINCE_RELEASE_VERSION": "v2.0.0",
         }
         arguments = ["/bin/bash", str(INSTALLER), "--defaults"]
         if build_from_source:
@@ -238,6 +245,8 @@ check_prerequisites
         self.assertTrue((python_dir / "keep-me").is_file())
         self.assertFalse(clone_dir.exists())
         self.assertIn("bootstrap-source", self.command_log())
+        self.assertIn("refs/tags/v2.0.0", self.command_log())
+        self.assertIn("release=v2.0.0", self.quickstart_log.read_text())
 
     def test_old_python_and_zellij_are_provisioned_without_optional_tools(self) -> None:
         result = self.run_installer(python_version="3.10", zellij_version="zellij 0.44.0")

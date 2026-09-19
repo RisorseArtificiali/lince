@@ -8,6 +8,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 QUICKSTART_PATH = ROOT / "quickstart.sh"
 DASHBOARD_INSTALL = ROOT / "lince-dashboard/install.sh"
+DASHBOARD_UPDATE = ROOT / "lince-dashboard/update.sh"
 
 
 def shell_function(source: str, name: str) -> str:
@@ -103,6 +104,13 @@ def test_quickstart_requires_rust_only_for_source_build() -> None:
 
 def test_dashboard_installer_delegates_plugin_acquisition() -> None:
     source = DASHBOARD_INSTALL.read_text()
+
+    assert '"$SCRIPT_DIR/install-plugin.sh"' in source
+    assert '"$SCRIPT_DIR/plugin/build.sh"' not in source
+
+
+def test_dashboard_updater_uses_verified_release_plugin() -> None:
+    source = DASHBOARD_UPDATE.read_text()
 
     assert '"$SCRIPT_DIR/install-plugin.sh"' in source
     assert '"$SCRIPT_DIR/plugin/build.sh"' not in source

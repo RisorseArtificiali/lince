@@ -53,7 +53,9 @@ python3 - "$HOME/.bashrc" "$HOME/.zshrc" <<'PY'
 from pathlib import Path
 import sys
 replacements = {
-    'alias lince="zellij --layout dashboard-tiled"': 'alias lince="lince-dashboard-launch"',
+    'alias lince="zellij --layout dashboard-tiled"': 'alias lince=\'"$HOME/.local/bin/lince"\'',
+    'alias lince="lince-dashboard-launch"': 'alias lince=\'"$HOME/.local/bin/lince"\'',
+    'alias lince="$HOME/.local/bin/lince"': 'alias lince=\'"$HOME/.local/bin/lince"\'',
     'alias lince-floating="zellij --layout dashboard"': 'alias lince-floating="lince-dashboard-launch --layout dashboard"',
     'alias zd="zellij --layout dashboard-tiled"': 'alias zd="lince-dashboard-launch"',
 }

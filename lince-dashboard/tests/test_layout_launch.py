@@ -201,24 +201,38 @@ class LayoutTests(unittest.TestCase):
         import subprocess
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = Path(directory) / "Home With Space"
+            home.mkdir()
             global_config = home / ".config/zellij/config.kdl"
             global_config.parent.mkdir(parents=True)
             global_config.write_text('// personal global config\n')
             rc = home / ".bashrc"
             rc.write_text('# LINCE aliases\nalias lince="zellij --layout dashboard-tiled"\nalias custom="echo mine"\n')
-            env = {**os.environ, "HOME": directory}
+            env = {**os.environ, "HOME": str(home)}
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
             active = home / ".config/lince-dashboard/zellij.kdl"
             active.write_text('// personal LINCE config\ncopy_command "custom-copy"\ncopy_on_select false\n')
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
-            self.assertIn('alias lince="lince-dashboard-launch"', rc.read_text())
+            self.assertIn("alias lince='\"$HOME/.local/bin/lince\"'", rc.read_text())
             self.assertIn('alias custom="echo mine"', rc.read_text())
             self.assertEqual(active.read_text(), '// personal LINCE config\ncopy_command "custom-copy"\ncopy_on_select false\n')
             self.assertEqual(global_config.read_text(), '// personal global config\n')
             self.assertTrue(active.with_suffix('.kdl.dist').exists())
             self.assertTrue((home / ".local/bin/lince-dashboard-launch").stat().st_mode & 0o111)
             self.assertTrue((home / ".local/bin/lince").stat().st_mode & 0o111)
+            update_log = home / "update.log"
+            updater = home / ".local/bin/lince-update"
+            updater.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" > "{update_log}"\n')
+            updater.chmod(0o755)
+            invoked = subprocess.run(
+                ["bash", "-c", 'shopt -s expand_aliases; source "$HOME/.bashrc"; eval "lince update --check"'],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(invoked.returncode, 0, invoked.stdout + invoked.stderr)
+            self.assertEqual(update_log.read_text(), "--check\n")
             self.assertEqual({p.name for p in (home / ".config/zellij/layouts").glob('*.kdl')},
                              {p.name for p in (ROOT / 'layouts').glob('*.kdl')})
 

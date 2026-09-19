@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Update an existing LINCE release-channel installation.
+set -euo pipefail
+
+REPOSITORY_URL="${LINCE_REPOSITORY_URL:-https://github.com/RisorseArtificiali/lince.git}"
+LATEST_RELEASE_URL="${LINCE_LATEST_RELEASE_URL:-https://github.com/RisorseArtificiali/lince/releases/latest}"
+VERSION_FILE="$HOME/.local/share/lince/release-version"
+CHECK_ONLY=false
+WORK_DIR=""
+
+# The curl bootstrap may provision Python outside the user's normal PATH.
+# Module update scripts must see the same compatible interpreter as install.
+if [ -x "$HOME/.local/share/lince/python/bin/python3" ]; then
+    export PATH="$HOME/.local/share/lince/python/bin:$HOME/.local/bin:$PATH"
+else
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
+usage() {
+    echo "Usage: lince update [--check]"
+    echo "       lince-update [--check]"
+}
+
+case "${1:-}" in
+    "") ;;
+    --check) CHECK_ONLY=true; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "lince update: unknown option: $1" >&2; usage >&2; exit 2 ;;
+esac
+[ "$#" -eq 0 ] || { echo "lince update: too many arguments" >&2; exit 2; }
+
+latest_version() {
+    local effective version
+    if [ -n "${LINCE_LATEST_VERSION:-}" ]; then
+        version="$LINCE_LATEST_VERSION"
+    else
+        effective="$(curl --fail --location --silent --show-error \
+            --output /dev/null --write-out '%{url_effective}' "$LATEST_RELEASE_URL")"
+        version="${effective%/}"
+        version="${version##*/}"
+    fi
+    if printf '%s\n' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+        printf '%s\n' "$version"
+    else
+        echo "lince update: invalid latest release version: $version" >&2
+        return 1
+    fi
+}
+
+LATEST_VERSION="$(latest_version)"
+INSTALLED_VERSION="not recorded"
+if [ -f "$VERSION_FILE" ]; then
+    IFS= read -r INSTALLED_VERSION < "$VERSION_FILE"
+fi
+
+if [ "$CHECK_ONLY" = true ]; then
+    echo "Installed: $INSTALLED_VERSION"
+    echo "Latest:    $LATEST_VERSION"
+    if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
+        echo "LINCE is up to date."
+    else
+        echo "Update available."
+    fi
+    exit 0
+fi
+
+command -v git >/dev/null 2>&1 || {
+    echo "lince update: git is required to fetch release module updates" >&2
+    exit 1
+}
+
+cleanup() {
+    if [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
+        rm -rf "$WORK_DIR"
+    fi
+}
+trap cleanup EXIT
+
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lince-update.XXXXXX")"
+SOURCE_DIR="$WORK_DIR/source"
+echo "Fetching LINCE $LATEST_VERSION..."
+git init --quiet "$SOURCE_DIR"
+git -C "$SOURCE_DIR" remote add origin "$REPOSITORY_URL"
+git -C "$SOURCE_DIR" fetch --quiet --depth 1 origin \
+    "refs/tags/$LATEST_VERSION:refs/tags/$LATEST_VERSION"
+TAG_COMMIT="$(git -C "$SOURCE_DIR" rev-parse "refs/tags/$LATEST_VERSION^{commit}")"
+git -C "$SOURCE_DIR" checkout --quiet --detach "$TAG_COMMIT"
+[ "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$TAG_COMMIT" ] || {
+    echo "lince update: failed to check out release tag $LATEST_VERSION" >&2
+    exit 1
+}
+
+module_is_installed() {
+    case "$1" in
+        sandbox) [ -x "$HOME/.local/bin/agent-sandbox" ] ;;
+        lince-config) [ -x "$HOME/.local/bin/lince-config" ] ;;
+        lince-dashboard) [ -f "$HOME/.config/zellij/plugins/lince-dashboard.wasm" ] ;;
+        lince-lab) [ -x "$HOME/.local/bin/lince-lab" ] ;;
+        lince-messages) [ -x "$HOME/.local/bin/lince-msg" ] ;;
+        lince-updater) [ -x "$HOME/.local/bin/lince-update" ] ;;
+        *) return 1 ;;
+    esac
+}
+
+# Dashboard goes first: its update script verifies and installs the release
+# artifact before the remaining installed modules are refreshed.
+for module in lince-dashboard sandbox lince-config lince-lab lince-messages lince-updater; do
+    if ! module_is_installed "$module"; then
+        continue
+    fi
+    updater="$SOURCE_DIR/$module/update.sh"
+    if [ ! -x "$updater" ]; then
+        echo "lince update: release $LATEST_VERSION has no executable $module/update.sh" >&2
+        exit 1
+    fi
+    echo "Updating $module..."
+    LINCE_RELEASE_BASE_URL="https://github.com/RisorseArtificiali/lince/releases/download/$LATEST_VERSION" \
+    LINCE_RELEASE_VERSION="$LATEST_VERSION" \
+    LINCE_RECORD_RELEASE=0 \
+        bash "$updater"
+done
+
+mkdir -p "$(dirname "$VERSION_FILE")"
+VERSION_NEW="${VERSION_FILE}.new.$$"
+printf '%s\n' "$LATEST_VERSION" > "$VERSION_NEW"
+mv "$VERSION_NEW" "$VERSION_FILE"
+echo "LINCE updated to $LATEST_VERSION."

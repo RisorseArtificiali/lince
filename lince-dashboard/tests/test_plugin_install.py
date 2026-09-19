@@ -53,6 +53,7 @@ class PluginInstallTest(unittest.TestCase):
                 **os.environ,
                 "HOME": str(self.home),
                 "LINCE_RELEASE_BASE_URL": self.release.as_uri(),
+                "LINCE_RELEASE_VERSION": "v2.0.0",
                 "PATH": f"{self.bin_dir}:{os.environ['PATH']}",
                 "COMMAND_LOG": str(self.command_log),
                 "TMPDIR": str(self.tmp_dir),
@@ -77,6 +78,10 @@ class PluginInstallTest(unittest.TestCase):
         self.assertEqual(self.installed.read_bytes(), b"release wasm")
         self.assertFalse(self.command_log.exists(), self.command_log.read_text() if self.command_log.exists() else "")
         self.assertEqual(list(self.tmp_dir.iterdir()), [])
+        self.assertEqual(
+            (self.home / ".local/share/lince/release-version").read_text(),
+            "v2.0.0\n",
+        )
 
     def test_checksum_mismatch_keeps_existing_plugin(self) -> None:
         self.installed.parent.mkdir(parents=True)
