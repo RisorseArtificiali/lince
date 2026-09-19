@@ -18,12 +18,18 @@ source "$SCRIPT_DIR/../scripts/dashboard-preset.sh"
 # the dashboard's New Agent wizard at spawn time; the old install-time selection
 # wrote legacy [agents.<base>-<level>] blocks into config.toml that both
 # duplicated wizard rows and blocked the v2 policy switch (see #202 regression).
+BUILD_FROM_SOURCE=false
 for arg in "$@"; do
     case "$arg" in
+        --build-from-source)
+            BUILD_FROM_SOURCE=true
+            ;;
         --help|-h)
-            echo "Usage: $0"
+            echo "Usage: $0 [--build-from-source]"
             echo ""
             echo "  Installs the lince-dashboard Zellij plugin and its config."
+            echo "  Downloads a checksum-verified prebuilt plugin by default."
+            echo "  --build-from-source requires a rustup toolchain and builds locally."
             echo "  Choose a dashboard preset interactively (default: minimal)."
             echo "  Set LINCE_DASHBOARD_PRESET=minimal|statusline|classic to skip that prompt."
             echo "  Sandbox isolation levels are offered per agent at spawn time"
@@ -48,99 +54,79 @@ select_dashboard_preset
 # ── Step 1: Prerequisites ─────────────────────────────────────────────
 echo -e "${GREEN}[1/14] Checking prerequisites...${NC}"
 
-MISSING=()
-
 check_zellij_version || exit 1
-
-if ! command -v rustc >/dev/null 2>&1; then
-    MISSING+=("rustc")
-else
-    echo -e "${GREEN}  ✓ rustc $(rustc --version 2>/dev/null | awk '{print $2}')${NC}"
-fi
-
-if ! command -v cargo >/dev/null 2>&1; then
-    MISSING+=("cargo")
-else
-    echo -e "${GREEN}  ✓ cargo${NC}"
-fi
-
-# On macOS, detect the common case where Homebrew provides standalone
-# rustc/cargo but rustup isn't installed or isn't the active toolchain.
-# The WASM build requires rustup-managed Rust because only rustup can
-# install the wasm32-wasip1 target.
-if [ "$(uname -s)" = "Darwin" ]; then
-    BREW_CARGO=""
-    if [ -x "/opt/homebrew/bin/cargo" ]; then
-        BREW_CARGO="/opt/homebrew/bin/cargo"
-    elif [ -x "/usr/local/bin/cargo" ]; then
-        BREW_CARGO="/usr/local/bin/cargo"
+if [ "$BUILD_FROM_SOURCE" = true ]; then
+    echo -e "${YELLOW}  Source build requested; rustup-managed Rust is required.${NC}"
+    MISSING=()
+    if ! command -v rustc >/dev/null 2>&1; then
+        MISSING+=("rustc")
+    else
+        echo -e "${GREEN}  ✓ rustc $(rustc --version 2>/dev/null | awk '{print $2}')${NC}"
     fi
-    if [ -n "$BREW_CARGO" ] && ! command -v rustup >/dev/null 2>&1; then
-        MISSING+=("rustup (Homebrew Rust detected at $BREW_CARGO but rustup is missing)")
-    elif [ -n "$BREW_CARGO" ] && ! rustup which rustc >/dev/null 2>&1; then
-        MISSING+=("rustup toolchain (run: rustup default stable)")
+    if ! command -v cargo >/dev/null 2>&1; then
+        MISSING+=("cargo")
+    else
+        echo -e "${GREEN}  ✓ cargo${NC}"
     fi
-fi
 
-if [ ${#MISSING[@]} -gt 0 ]; then
-    echo -e "${RED}Missing prerequisites:${NC}"
-    for m in "${MISSING[@]}"; do
-        echo "  - $m"
-    done
-    echo ""
-    echo "Install them first, then re-run this script."
-    exit 1
-fi
-echo ""
-
-# ── Step 2: WASM target ───────────────────────────────────────────────
-echo -e "${GREEN}[2/14] Checking wasm32-wasip1 target...${NC}"
-
-# Ensure rustup toolchain takes precedence
-export PATH="$HOME/.cargo/bin:$PATH"
-
-if command -v rustup >/dev/null 2>&1; then
-    if ! rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
-        echo "  Installing wasm32-wasip1 target..."
-        rustup target add wasm32-wasip1
-        if ! rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
-            echo -e "${RED}  ✗ Failed to install wasm32-wasip1 target${NC}"
-            exit 1
+    # Homebrew's standalone Rust cannot provide rustup-managed WASM targets.
+    if [ "$(uname -s)" = "Darwin" ]; then
+        BREW_CARGO=""
+        if [ -x "/opt/homebrew/bin/cargo" ]; then
+            BREW_CARGO="/opt/homebrew/bin/cargo"
+        elif [ -x "/usr/local/bin/cargo" ]; then
+            BREW_CARGO="/usr/local/bin/cargo"
+        fi
+        if [ -n "$BREW_CARGO" ] && ! command -v rustup >/dev/null 2>&1; then
+            MISSING+=("rustup (Homebrew Rust detected at $BREW_CARGO but rustup is missing)")
+        elif [ -n "$BREW_CARGO" ] && ! rustup which rustc >/dev/null 2>&1; then
+            MISSING+=("rustup toolchain (run: rustup default stable)")
         fi
     fi
-    echo -e "${GREEN}  ✓ wasm32-wasip1 target installed${NC}"
+
+    if [ ${#MISSING[@]} -gt 0 ]; then
+        echo -e "${RED}Missing prerequisites:${NC}"
+        for missing in "${MISSING[@]}"; do
+            echo "  - $missing"
+        done
+        echo "Install them first, then re-run this script."
+        exit 1
+    fi
+
+    export PATH="$HOME/.cargo/bin:$PATH"
+    if command -v rustup >/dev/null 2>&1; then
+        if ! rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
+            echo "  Installing wasm32-wasip1 target..."
+            rustup target add wasm32-wasip1
+            if ! rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
+                echo -e "${RED}  ✗ Failed to install wasm32-wasip1 target${NC}"
+                exit 1
+            fi
+        fi
+        echo -e "${GREEN}  ✓ wasm32-wasip1 target installed${NC}"
+    else
+        echo -e "${RED}  ✗ rustup not found — wasm32-wasip1 target cannot be installed${NC}"
+        echo -e "${RED}    Install rustup: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${NC}"
+        exit 1
+    fi
+elif ! command -v curl >/dev/null 2>&1; then
+    echo -e "${RED}  ✗ curl not found — required to download the release plugin${NC}"
+    exit 1
 else
-    echo -e "${RED}  ✗ rustup not found — wasm32-wasip1 target cannot be installed${NC}"
-    echo -e "${RED}    Install rustup: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${NC}"
-    exit 1
+    echo -e "${GREEN}  ✓ prebuilt release install (no Rust toolchain required)${NC}"
 fi
 echo ""
 
-# ── Step 3: Build plugin ──────────────────────────────────────────────
-echo -e "${GREEN}[3/14] Building plugin...${NC}"
-
-if ! "$SCRIPT_DIR/plugin/build.sh"; then
-    echo -e "${RED}Build failed. Check errors above.${NC}"
+# ── Steps 2-4: Acquire, verify, and install WASM plugin ───────────────
+echo -e "${GREEN}[2-4/14] Installing dashboard plugin...${NC}"
+PLUGIN_ARGS=()
+if [ "$BUILD_FROM_SOURCE" = true ]; then
+    PLUGIN_ARGS+=("--build-from-source")
+fi
+if ! "$SCRIPT_DIR/install-plugin.sh" "${PLUGIN_ARGS[@]}"; then
     exit 1
 fi
-echo ""
-
-# ── Step 4: Install WASM plugin ───────────────────────────────────────
-echo -e "${GREEN}[4/14] Installing plugin...${NC}"
-
-PLUGIN_DIR="$HOME/.config/zellij/plugins"
-mkdir -p "$PLUGIN_DIR"
-
-WASM_SRC="$SCRIPT_DIR/plugin/lince-dashboard.wasm"
-WASM_DST="$PLUGIN_DIR/lince-dashboard.wasm"
-
-if [ -f "$WASM_DST" ]; then
-    echo -e "${YELLOW}  Existing plugin found, backing up...${NC}"
-    cp "$WASM_DST" "${WASM_DST}.bak.$(date +%Y%m%d-%H%M%S)"
-fi
-
-cp "$WASM_SRC" "$WASM_DST"
-echo -e "${GREEN}  ✓ Installed: $WASM_DST${NC}"
+WASM_DST="$HOME/.config/zellij/plugins/lince-dashboard.wasm"
 
 # Pre-grant Zellij permissions so the plugin works without interactive prompt.
 # Zellij cache location differs by OS:
