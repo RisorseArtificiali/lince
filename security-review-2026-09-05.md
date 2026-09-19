@@ -4,8 +4,8 @@
 > La pubblicazione non costituisce una nuova verifica del codice corrente né
 > attesta che ciascun problema sia ancora presente o sia stato risolto.
 
-**Data:** 5 settembre 2026  
-**Revisione analizzata:** `6ff12f27c2e89d9673f134c1fef2f21d5b485890`, con lo stato locale del workspace. Le modifiche preesistenti dell’utente non sono state alterate.  
+**Data:** 5 settembre 2026
+**Revisione analizzata:** `6ff12f27c2e89d9673f134c1fef2f21d5b485890`, con lo stato locale del workspace. Le modifiche preesistenti dell’utente non sono state alterate.
 **Ambito:** launcher `agent-sandbox`, profili bwrap/Seatbelt, Landlock, proxy credenziali, dashboard Zellij, risoluzione della configurazione e broker opzionale `lince-lab`.
 
 ## Giudizio
