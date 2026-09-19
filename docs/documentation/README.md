@@ -28,6 +28,8 @@ Structured CLI for reading and editing LINCE TOML configuration files. Also powe
 
 ## Quick Links
 
+- [Install and update](install.md)
+- [Install validation checklist](install-validation-checklist.md)
 - [Getting Started](https://github.com/RisorseArtificiali/lince/blob/main/QUICKSTART.md)
 - [GitHub Repository](https://github.com/RisorseArtificiali/lince)
 - [Cheat Sheet](https://github.com/RisorseArtificiali/lince/blob/main/sandbox/CHEATSHEET.md)

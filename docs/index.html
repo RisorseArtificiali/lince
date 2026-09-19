@@ -88,7 +88,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
-      <p class="text-xs text-muted">Linux (fully supported) &middot; macOS (experimental) &middot; <a href="https://github.com/RisorseArtificiali/lince/issues/22" class="text-accent hover:underline">Windows (planned)</a></p>
+      <p class="text-xs text-muted">Linux (fully supported) &middot; macOS (experimental, no Homebrew required) &middot; <a href="https://github.com/RisorseArtificiali/lince/issues/356" class="text-accent hover:underline">WSL not yet supported</a></p>
     </div>
   </section>
 
@@ -231,7 +231,10 @@
           <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3">
             <span class="text-accent">$</span> curl -sSL https://lince.sh/install | bash
           </div>
-          <p class="text-sm text-muted">Interactive wizard: detects your OS, installs prerequisites, sets up sandbox + dashboard. Offers optional VoxCode voice input.</p>
+          <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3 overflow-x-auto">
+            <span class="text-accent">$</span> curl -sSL https://lince.sh/install | bash -s -- --defaults
+          </div>
+          <p class="text-sm text-muted">Interactive or unattended: provisions Zellij and standalone Python when needed, verifies the released dashboard plugin checksum, then sets up the sandbox, dashboard, and updater.</p>
         </div>
 
         <!-- Manual -->
@@ -243,7 +246,7 @@
             <div><span class="text-accent">$</span> cd ../lince-dashboard && ./install.sh</div>
             <div><span class="text-accent">$</span> source ~/.bashrc && lince</div>
           </div>
-          <p class="text-sm text-muted">Clone, install sandbox + dashboard, launch. Requires Rust with the <span class="font-mono">wasm32-wasip1</span> target for the dashboard plugin. See <a href="https://github.com/RisorseArtificiali/lince/blob/main/QUICKSTART.md" class="text-accent hover:underline">QUICKSTART.md</a> for details.</p>
+          <p class="text-sm text-muted">Clone a tagged release, install sandbox + dashboard, launch. The default uses a checksum-verified prebuilt plugin; Rust is needed only with <span class="font-mono">--build-from-source</span>. See the <a href="documentation/#/install" class="text-accent hover:underline">install and offline guide</a> or <a href="https://github.com/RisorseArtificiali/lince/blob/main/QUICKSTART.md" class="text-accent hover:underline">QUICKSTART.md</a>.</p>
         </div>
       </div>
 
@@ -268,7 +271,7 @@
             <span class="text-muted font-bold">&#x2014;</span>
             <h4 class="font-semibold">Windows</h4>
           </div>
-          <p class="text-muted">Planned. WSL2 likely works today. <a href="https://github.com/RisorseArtificiali/lince/issues/22" class="text-accent hover:underline">Tracking issue.</a></p>
+          <p class="text-muted">Not supported. The installer exits explicitly under WSL before making changes. <a href="https://github.com/RisorseArtificiali/lince/issues/356" class="text-accent hover:underline">Follow WSL support.</a></p>
         </div>
       </div>
     </div>
