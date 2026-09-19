@@ -1,3 +1,4 @@
+import fcntl
 import os
 import runpy
 from pathlib import Path
@@ -50,9 +51,10 @@ class CodexStartup(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             status_dir = Path(directory)
             status = status_dir / "codex-1.state"
-            lock = status_dir / "codex-1.startup-lock"
+            lock = status_dir / "codex-1.startup-flock"
             status.write_text(MODULE["STARTING"])
-            lock.symlink_to(str(os.getpid()))
+            lock_handle = lock.open("a")
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
             env = os.environ | {
                 "LINCE_AGENT_ID": "codex-1",
                 "LINCE_STATUS_DIR": directory,
@@ -69,7 +71,8 @@ class CodexStartup(unittest.TestCase):
             time.sleep(0.8)
             self.assertIsNone(process.poll())
             self.assertEqual(status.read_text(), MODULE["STARTING"])
-            lock.unlink()
+            fcntl.flock(lock_handle, fcntl.LOCK_UN)
+            lock_handle.close()
             self.assertEqual(process.wait(timeout=2), 0)
             self.assertEqual(status.read_text().strip(), "UserPromptSubmit")
 
@@ -108,37 +111,69 @@ class CodexStartup(unittest.TestCase):
                 dump.assert_called_once()
                 self.assertEqual(status.read_text(), "PreToolUse")
 
-    def test_startup_reclaims_lock_owned_by_dead_process(self):
+    def test_startup_observer_uses_namespace_independent_file_lock(self):
         with tempfile.TemporaryDirectory() as directory:
             status = Path(directory) / "codex-1.state"
-            lock = status.with_suffix(".startup-lock")
+            lock = status.with_suffix(".startup-flock")
             status.write_text(MODULE["STARTING"])
-            lock.symlink_to("2147483647")
+            lock_handle = lock.open("a")
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
             child = Mock()
             child.poll.return_value = None
             stop = Mock()
-            stop.wait.side_effect = [False, False, True]
+            stop.wait.return_value = False
 
             with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, SCREEN)):
-                MODULE["observe"](child, status, "session", "1", stop)
+                observer = subprocess.Popen([
+                    "python3", str(Path(__file__).resolve().parents[1] / "hooks/lince-codex-startup"),
+                    "--write-state", str(status), MODULE["READY"],
+                ])
+                time.sleep(0.2)
+                self.assertIsNone(observer.poll())
+                self.assertEqual(status.read_text().strip(), MODULE["STARTING"])
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
+                lock_handle.close()
+                self.assertEqual(observer.wait(timeout=2), 0)
 
             self.assertEqual(status.read_text().strip(), MODULE["READY"])
-            self.assertFalse(lock.exists())
 
-    def test_startup_reclaims_stale_legacy_directory_lock(self):
+    def test_native_hook_does_not_mutate_legacy_lock_directory(self):
         with tempfile.TemporaryDirectory() as directory:
-            status = Path(directory) / "codex-1.state"
-            lock = status.with_suffix(".startup-lock")
+            status_dir = Path(directory)
+            status = status_dir / "codex-1.state"
+            lock = status_dir / "codex-1.startup-lock"
             status.write_text(MODULE["STARTING"])
             lock.mkdir()
-            os.utime(lock, (1, 1))
-            child = Mock()
-            child.poll.return_value = None
-            stop = Mock()
-            stop.wait.side_effect = [False, False, True]
+            hook = Path(__file__).resolve().parents[1] / "hooks/codex-status-hook.sh"
+            result = subprocess.run(
+                ["bash", str(hook), '{"hook_event_name":"UserPromptSubmit"}'],
+                env=os.environ | {
+                    "LINCE_AGENT_ID": "codex-1",
+                    "LINCE_STATUS_DIR": directory,
+                    "ZELLIJ": "",
+                },
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(status.read_text().strip(), "UserPromptSubmit")
+            self.assertEqual(list(lock.iterdir()), [])
 
-            with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, SCREEN)):
-                MODULE["observe"](child, status, "session", "1", stop)
-
-            self.assertEqual(status.read_text().strip(), MODULE["READY"])
-            self.assertFalse(lock.exists())
+    def test_native_hook_rejects_agent_id_path_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            status_dir = root / "status"
+            status_dir.mkdir()
+            outside = root / "victim.state"
+            outside.write_text("unchanged\n")
+            hook = Path(__file__).resolve().parents[1] / "hooks/codex-status-hook.sh"
+            result = subprocess.run(
+                ["bash", str(hook), '{"hook_event_name":"Stop"}'],
+                env=os.environ | {
+                    "LINCE_AGENT_ID": "../victim",
+                    "LINCE_STATUS_DIR": str(status_dir),
+                    "ZELLIJ": "",
+                },
+                timeout=2,
+            )
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(outside.read_text(), "unchanged\n")

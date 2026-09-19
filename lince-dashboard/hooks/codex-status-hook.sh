@@ -26,9 +26,9 @@ LOG_FILE="/tmp/lince-dashboard/codex-hook-debug.log"
 
 mkdir -p /tmp/lince-dashboard 2>/dev/null || true
 
-if [ -z "$AGENT_ID" ]; then
-    exit 0
-fi
+case "$AGENT_ID" in
+    ""|*[!A-Za-z0-9_-]*) exit 0 ;;
+esac
 
 INPUT="${1:-}"
 if [ -z "$INPUT" ] && [ ! -t 0 ]; then
@@ -60,30 +60,16 @@ PAYLOAD="{\"agent_id\":\"${AGENT_ID}\",\"event\":\"${NATIVE_EVENT}\"}"
 
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${AGENT_ID} ${NATIVE_EVENT}" >> "$LOG_FILE" 2>/dev/null || true
 
-# Serialize the state write with the startup observer before sending the pipe.
+# Serialize the state write with the host-side startup observer before sending
+# the pipe. The helper uses flock(2), which works across PID namespaces and is
+# released automatically if either process exits.
 mkdir -p "${STATUS_DIR}" 2>/dev/null || true
-STATUS_LOCK="${STATUS_DIR}/${AGENT_ID}.startup-lock"
-legacy_waits=0
-while ! ln -s "$$" "$STATUS_LOCK" 2>/dev/null; do
-    owner=$(readlink "$STATUS_LOCK" 2>/dev/null || true)
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
-        if [ "$(readlink "$STATUS_LOCK" 2>/dev/null || true)" = "$owner" ]; then
-            rm -f -- "$STATUS_LOCK" 2>/dev/null || true
-        fi
-    elif [ -d "$STATUS_LOCK" ] && [ ! -L "$STATUS_LOCK" ]; then
-        # Upgrade compatibility: the previous observer used a directory lock.
-        # Its critical section is only a state read/write; remove it only after
-        # allowing an already-running old observer ample time to finish.
-        legacy_waits=$((legacy_waits + 1))
-        if [ "$legacy_waits" -ge 300 ]; then
-            rmdir "$STATUS_LOCK" 2>/dev/null || true
-            legacy_waits=0
-        fi
-    fi
-    sleep 0.01
-done
-echo "$NATIVE_EVENT" > "${STATUS_DIR}/${AGENT_ID}.state" 2>/dev/null || true
-rm -f -- "$STATUS_LOCK" 2>/dev/null || true
+STARTUP_HELPER="$(dirname -- "$0")/lince-codex-startup"
+if [ -x "$STARTUP_HELPER" ]; then
+    "$STARTUP_HELPER" --write-state "${STATUS_DIR}/${AGENT_ID}.state" "$NATIVE_EVENT" 2>/dev/null || true
+else
+    echo "$NATIVE_EVENT" > "${STATUS_DIR}/${AGENT_ID}.state" 2>/dev/null || true
+fi
 
 # Use whatever `timeout` is available (GNU `timeout` on Linux, `gtimeout` on
 # macOS with `brew install coreutils`); fall back to running zellij directly

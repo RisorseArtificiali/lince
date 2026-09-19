@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Observe Codex's initial empty composer once, then defer to its native hooks."""
+import fcntl
 import os
 from pathlib import Path
 import re
@@ -7,10 +8,18 @@ import signal
 import subprocess
 import sys
 import threading
-import time
 
 STARTING = "codex.Starting"
 READY = "codex.PromptReady"
+
+
+def write_state_locked(status, event):
+    """Write an event while holding a lock shared across PID namespaces."""
+    lock = status.with_suffix(".startup-flock")
+    status.parent.mkdir(parents=True, exist_ok=True)
+    with lock.open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        status.write_text(event + "\n")
 
 
 def prompt_ready(screen):
@@ -41,44 +50,24 @@ def observe(child, status, session, pane, stop):
                                     capture_output=True, text=True, timeout=2)
             if result.returncode or not prompt_ready(result.stdout):
                 continue
-            # Hook writes use the same lock directory, preventing a startup
-            # observation from overwriting a concurrently arriving running event.
-            lock = status.with_suffix(".startup-lock")
-            try:
-                lock.symlink_to(str(os.getpid()))
-            except FileExistsError:
-                # A killed prior observer/hook must not strand a reused agent
-                # ID in Starting forever. Only reclaim the exact symlink value
-                # we inspected, so a concurrent new owner is never removed.
-                try:
-                    if lock.is_dir() and not lock.is_symlink():
-                        # Upgrade compatibility with the old mkdir lock. Its
-                        # critical section was a single state read/write; use
-                        # the shell hook's same three-second grace period.
-                        if time.time() - lock.stat().st_mtime >= 3:
-                            lock.rmdir()
-                        continue
-                    owner = os.readlink(lock)
-                    if owner.isdecimal():
-                        try:
-                            os.kill(int(owner), 0)
-                        except ProcessLookupError:
-                            if os.readlink(lock) == owner:
-                                lock.unlink(missing_ok=True)
-                except OSError:
-                    pass
-                continue
-            try:
+            # File locks are kernel-owned and therefore remain valid when the
+            # native hook runs in a different PID namespace.
+            lock = status.with_suffix(".startup-flock")
+            with lock.open("a") as handle:
+                fcntl.flock(handle, fcntl.LOCK_EX)
                 if child.poll() is None and status.read_text().strip() == STARTING:
                     status.write_text(READY + "\n")
-            finally:
-                lock.unlink(missing_ok=True)
             return
         except (OSError, subprocess.TimeoutExpired):
             continue
 
 
 def main():
+    if sys.argv[1:2] == ["--write-state"]:
+        if len(sys.argv) != 4:
+            return 2
+        write_state_locked(Path(sys.argv[2]), sys.argv[3])
+        return 0
     command = sys.argv[1:]
     if command[:1] == ["--"]:
         command = command[1:]
