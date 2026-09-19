@@ -22,18 +22,21 @@ in the same project; `Alt+d`, then `q`, leaves the previous saved state unchange
 See [Views and Themes](https://lince.sh/documentation/#/dashboard/views-and-themes)
 for palettes, width, frame overrides and session configuration.
 
-Sandboxed agents run inside [agent-sandbox](../sandbox/) (bubblewrap, Linux) or [nono](https://github.com/always-further/nono) (Landlock/Seatbelt, Linux + macOS) — the dashboard manages pane lifecycle and status, not isolation. The sandbox backend is auto-detected or configurable per-agent.
+Sandboxed agents run inside [agent-sandbox](../sandbox/) (bubblewrap on Linux,
+native Seatbelt on macOS) or the deprecated [nono](https://github.com/always-further/nono)
+backend — the dashboard manages pane lifecycle and status, not isolation. The
+sandbox backend is auto-detected or configurable per-agent.
 
 **Message relay**: Send conversation messages between agents (`s` to relay last message, `S` for N messages).
 
 ## Prerequisites
 
 - **Zellij** >= 0.45.1
-- **Rust** with `wasm32-wasip1` target (`rustup target add wasm32-wasip1`)
+- **curl** (for the released plugin and checksum)
 - **At least one supported AI coding agent** (Claude Code, Codex, Gemini, OpenCode, Aider, Amp)
 - **A sandbox backend** (at least one):
   - **Linux**: [agent-sandbox](../sandbox/) (recommended) or [nono](https://github.com/always-further/nono)
-  - **macOS**: [nono](https://github.com/always-further/nono) (required — agent-sandbox is Linux-only)
+  - **macOS**: [agent-sandbox](../sandbox/) with built-in Seatbelt (recommended; no Homebrew required) or deprecated [nono](https://github.com/always-further/nono)
 - **[VoxCode](https://github.com/RisorseArtificiali/voxcode)** (optional, for voice relay)
 
 ## Installation
@@ -45,8 +48,8 @@ chmod +x install.sh
 ```
 
 The installer:
-1. Checks prerequisites (Zellij, Rust, WASM target)
-2. Builds the plugin (Rust → WASM, ~900 KB)
+1. Checks prerequisites (Zellij and curl)
+2. Downloads the released WASM plugin and verifies it against `SHA256SUMS`
 3. Copies plugin to `~/.config/zellij/plugins/`
 4. Installs layouts to `~/.config/zellij/layouts/`
 5. Creates config at `~/.config/lince-dashboard/config.toml`
@@ -61,6 +64,16 @@ source ~/.bashrc
 lince              # launch the dashboard (tiled layout)
 lince-floating     # launch the floating overlay layout
 zd                 # legacy alias for lince
+```
+
+### Build from source
+
+The default path uses the prebuilt release artifact. Contributors can instead
+install `rustup`, a C compiler/linker, and the `wasm32-wasip1` target, then run:
+
+```bash
+rustup target add wasm32-wasip1
+./install.sh --build-from-source
 ```
 
 ## Quick Start

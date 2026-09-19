@@ -1,5 +1,7 @@
 - **Getting Started**
   - [Overview](/)
+  - [Install and update](install.md)
+  - [Install validation checklist](install-validation-checklist.md)
   - [Configuration Keys (generated)](configuration-keys.md)
   - [Docs Inventory](docs-inventory.md)
   - [Migrating to Config v2 — users](https://github.com/RisorseArtificiali/lince/blob/main/docs/migration-v2-users.md)
