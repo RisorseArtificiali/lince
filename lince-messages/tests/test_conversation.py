@@ -208,7 +208,8 @@ class Transport(unittest.TestCase):
             instance = {'status_dir': directory, 'status_id': 'peer', 'created': 0, 'last_submit': 0}
             transport = TerminalTransport('session')
             for event in ('session_start', 'agent_end', 'agent_settled', 'session.created', 'session.status.idle', 'session.idle',
-                          'bob.PromptReady', 'gemini.SessionStart', 'gemini.AfterAgent', 'goose.SessionStart', 'goose.Stop', 'amp.idle'):
+                          'bob.PromptReady', 'codex.PromptReady', 'gemini.SessionStart', 'gemini.AfterAgent',
+                          'goose.SessionStart', 'goose.Stop', 'amp.idle'):
                 status.write_text(event)
                 self.assertTrue(transport.ready(instance), event)
             for event in ('turn_end', 'turn_start', 'tool_call', 'session_shutdown',

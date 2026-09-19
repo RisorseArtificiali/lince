@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Observe Codex's initial empty composer once, then defer to its native hooks."""
+import fcntl
 import os
 from pathlib import Path
 import re
@@ -12,6 +13,15 @@ STARTING = "codex.Starting"
 READY = "codex.PromptReady"
 
 
+def write_state_locked(status, event):
+    """Write an event while holding a lock shared across PID namespaces."""
+    lock = status.with_suffix(".startup-flock")
+    status.parent.mkdir(parents=True, exist_ok=True)
+    with lock.open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        status.write_text(event + "\n")
+
+
 def prompt_ready(screen):
     # Match the empty composer from Codex 0.155.1, after the loading header
     # has resolved. Only infer startup readiness; native events own later turns.
@@ -21,21 +31,14 @@ def prompt_ready(screen):
     if not any(re.search(r"model:\s+(?!loading\b)\S+", line) for line in lines):
         return False
     if any(marker in screen.lower() for marker in (
-        "esc to interrupt", "starting mcp", "loading", "sign in", "trust this",
-        "would you like", "press enter", "shutting down",
+        "esc to interrupt", "starting mcp", "booting mcp", "loading", "sign in",
+        "trust this", "would you like", "press enter", "select a model", "shutting down",
     )):
         return False
-    for index, line in enumerate(lines):
-        if line != "› Ask Codex to do anything":
-            continue
-        footer = [line for line in lines[index + 1:] if line]
-        # Default footer or user-configured model/directory status line.
-        if len(footer) == 1 and (
-            re.fullmatch(r"\? for shortcuts(?:\s+.*context left)?", footer[0])
-            or re.fullmatch(r"[^›]+ · (?:~/|/)[^›]+", footer[0])
-        ):
-            return True
-    return False
+    # The status line is user-configurable and may wrap or be clipped in a
+    # narrow pane. The resolved header plus the exact empty composer are the
+    # stable readiness signals; transient screens are excluded above.
+    return "› Ask Codex to do anything" in lines
 
 
 def observe(child, status, session, pane, stop):
@@ -47,24 +50,24 @@ def observe(child, status, session, pane, stop):
                                     capture_output=True, text=True, timeout=2)
             if result.returncode or not prompt_ready(result.stdout):
                 continue
-            # Hook writes use the same lock directory, preventing a startup
-            # observation from overwriting a concurrently arriving running event.
-            lock = status.with_suffix(".startup-lock")
-            try:
-                lock.mkdir()
-            except FileExistsError:
-                continue
-            try:
+            # File locks are kernel-owned and therefore remain valid when the
+            # native hook runs in a different PID namespace.
+            lock = status.with_suffix(".startup-flock")
+            with lock.open("a") as handle:
+                fcntl.flock(handle, fcntl.LOCK_EX)
                 if child.poll() is None and status.read_text().strip() == STARTING:
                     status.write_text(READY + "\n")
-            finally:
-                lock.rmdir()
             return
         except (OSError, subprocess.TimeoutExpired):
             continue
 
 
 def main():
+    if sys.argv[1:2] == ["--write-state"]:
+        if len(sys.argv) != 4:
+            return 2
+        write_state_locked(Path(sys.argv[2]), sys.argv[3])
+        return 0
     command = sys.argv[1:]
     if command[:1] == ["--"]:
         command = command[1:]
