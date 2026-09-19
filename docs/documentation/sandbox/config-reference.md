@@ -96,7 +96,7 @@ Per-agent configuration. Defines how to run a specific AI coding agent inside th
 ```toml
 [agents.codex]
 command = "codex"
-default_args = ["--full-auto"]
+default_args = ["-a", "never"]
 env = {}
 home_ro_dirs = []
 home_rw_dirs = [".codex"]

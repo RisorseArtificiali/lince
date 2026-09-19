@@ -169,13 +169,7 @@ pub fn default_agent_pane_coords() -> FloatingPaneCoordinates {
 /// B is the right column — full height, 60% width. Accounting for the
 /// tab-bar (~2%) and status-bar (~4%), the overlay starts at y=2% and
 /// spans roughly 99% height.
-pub fn tiled_viewport_coords() -> FloatingPaneCoordinates {
-    FloatingPaneCoordinates::default()
-        .with_x_percent(40)
-        .with_y_percent(2)
-        .with_width_percent(60)
-        .with_height_percent(99)
-}
+
 
 use crate::config::now_secs;
 
@@ -294,7 +288,9 @@ fn synthesize_sandboxed_command(
         "codex" => (
             vec![
                 "codex".to_string(),
-                "--full-auto".to_string(),
+                "--no-alt-screen".to_string(),
+                "-a".to_string(),
+                "never".to_string(),
                 "--sandbox".to_string(),
                 "danger-full-access".to_string(),
             ],
@@ -507,6 +503,13 @@ fn spawn_inner(
         }
 
         expanded.push(format!("LINCE_AGENT_ID={}", id));
+        // Host wrapper owns credentials/lifetime; the original agent TUI remains
+        // the child process. Group membership still requires explicit human opt-in.
+        if matches!(base, "claude" | "codex" | "bob") && (!type_config.sandboxed
+            || backend_rides_agent_sandbox(sandbox_backend_override.as_ref().unwrap_or(&type_config.sandbox_backend))) {
+            expanded.extend(["lince-msg-host".into(), "run".into(), "--alias".into(), name.clone(),
+                "--agent".into(), base.into(), "--".into()]);
+        }
         // If agent doesn't have native hooks, wrap with lince-agent-wrapper
         if !type_config.has_native_hooks {
             expanded.push(AGENT_WRAPPER.to_string());
@@ -597,12 +600,12 @@ fn spawn_inner(
 
     match config.agent_layout {
         AgentLayout::Floating => {
-            open_command_pane_floating(command, Some(default_agent_pane_coords()), BTreeMap::new());
+            open_command_pane_floating(command, Some(crate::pane_manager::agent_coordinates(None, config.agent_borderless)), BTreeMap::new());
         }
         AgentLayout::Tiled => {
             // Tiled layout: agents are still floating panes, but hidden at spawn.
             // When focused, they overlay the viewport pane (B) in the 3-pane layout.
-            open_command_pane_floating(command, Some(tiled_viewport_coords()), BTreeMap::new());
+            open_command_pane_floating(command, Some(crate::pane_manager::agent_coordinates(config.viewport, config.agent_borderless)), BTreeMap::new());
         }
     }
 
@@ -726,6 +729,10 @@ pub fn reconcile_panes(
     for agent in agents.iter_mut() {
         if let Some(pid) = agent.pane_id {
             if !all_pane_ids.contains(&pid) {
+                // A forwarded/CLI manifest can predate a newly opened pane.
+                // Confirm disappearance against the live screen before releasing
+                // its association, or another restoring agent could claim it.
+                if get_pane_info(PaneId::Terminal(pid)).is_some() { continue; }
                 agent.status = AgentStatus::Stopped;
                 agent.pane_id = None;
                 agent.exit_code = None;

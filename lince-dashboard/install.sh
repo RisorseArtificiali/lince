@@ -9,6 +9,10 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/check-zellij.sh
+source "$SCRIPT_DIR/../scripts/check-zellij.sh"
+source "$SCRIPT_DIR/../scripts/dashboard-preset.sh"
+
 # Sandbox isolation levels (paranoid/normal/permissive) are no longer chosen at
 # install time. Under Config v2 they are a dimension of each agent, offered by
 # the dashboard's New Agent wizard at spawn time; the old install-time selection
@@ -20,6 +24,8 @@ for arg in "$@"; do
             echo "Usage: $0"
             echo ""
             echo "  Installs the lince-dashboard Zellij plugin and its config."
+            echo "  Choose a dashboard preset interactively (default: minimal)."
+            echo "  Set LINCE_DASHBOARD_PRESET=minimal|statusline|classic to skip that prompt."
             echo "  Sandbox isolation levels are offered per agent at spawn time"
             echo "  by the dashboard wizard — no install-time selection needed."
             exit 0 ;;
@@ -37,73 +43,14 @@ confirm() {
     [[ $REPLY =~ ^[Yy]$ ]]
 }
 
-# Detect clipboard backend (X11/Wayland/macOS) and uncomment the matching
-# copy_command line in the installed Zellij config so Ctrl+Shift+C reaches
-# the system clipboard even when the host terminal lacks OSC 52 support.
-# Idempotent: re-running leaves an already-uncommented line untouched.
-setup_clipboard_backend() {
-    local config="$1"
-    local os_name backend cmd_name pkg_hint install_hint
-    os_name="$(uname -s)"
-
-    if [ "$os_name" = "Darwin" ]; then
-        backend="macOS"
-        cmd_name="pbcopy"
-        pkg_hint=""
-        install_hint=""
-    elif [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
-        backend="Wayland"
-        cmd_name="wl-copy"
-        pkg_hint="wl-clipboard"
-    else
-        backend="X11"
-        cmd_name="xclip"
-        pkg_hint="xclip"
-    fi
-
-    echo -e "${GREEN}  Clipboard backend: $backend ($cmd_name)${NC}"
-
-    if [ -n "$pkg_hint" ] && ! command -v "$cmd_name" >/dev/null 2>&1; then
-        if command -v apt-get >/dev/null 2>&1; then
-            install_hint="sudo apt-get install $pkg_hint"
-        elif command -v dnf >/dev/null 2>&1; then
-            install_hint="sudo dnf install $pkg_hint"
-        elif command -v pacman >/dev/null 2>&1; then
-            install_hint="sudo pacman -S $pkg_hint"
-        elif command -v zypper >/dev/null 2>&1; then
-            install_hint="sudo zypper install $pkg_hint"
-        else
-            install_hint="install '$pkg_hint' via your package manager"
-        fi
-        echo -e "${YELLOW}  ⚠ '$cmd_name' not found — copy will rely on terminal OSC 52.${NC}"
-        echo -e "${YELLOW}    For reliable copy: $install_hint${NC}"
-    fi
-
-    case "$cmd_name" in
-        xclip)
-            sed -i.bak -E 's|^// (copy_command "xclip[^"]*"[[:space:]]*// x11)$|\1|' "$config"
-            ;;
-        wl-copy)
-            sed -i.bak -E 's|^// (copy_command "wl-copy"[[:space:]]*// wayland)$|\1|' "$config"
-            ;;
-        pbcopy)
-            sed -i.bak -E 's|^// (copy_command "pbcopy"[[:space:]]*// osx)$|\1|' "$config"
-            ;;
-    esac
-    rm -f "${config}.bak"
-    echo -e "${GREEN}  ✓ copy_command set for $backend${NC}"
-}
+select_dashboard_preset
 
 # ── Step 1: Prerequisites ─────────────────────────────────────────────
 echo -e "${GREEN}[1/14] Checking prerequisites...${NC}"
 
 MISSING=()
 
-if ! command -v zellij >/dev/null 2>&1; then
-    MISSING+=("zellij (>= 0.40)")
-else
-    echo -e "${GREEN}  ✓ zellij $(zellij --version 2>/dev/null | awk '{print $2}')${NC}"
-fi
+check_zellij_version || exit 1
 
 if ! command -v rustc >/dev/null 2>&1; then
     MISSING+=("rustc")
@@ -238,55 +185,13 @@ echo -e "${GREEN}[5/14] Installing layouts...${NC}"
 LAYOUT_DIR="$HOME/.config/zellij/layouts"
 mkdir -p "$LAYOUT_DIR"
 
-for layout in dashboard.kdl dashboard-vox.kdl dashboard-tiled.kdl dashboard-tiled-vox.kdl agent-single.kdl agent-multi.kdl; do
-    SRC="$SCRIPT_DIR/layouts/$layout"
-    DST="$LAYOUT_DIR/$layout"
-    if [ -f "$SRC" ]; then
-        cp "$SRC" "$DST"
-        echo -e "${GREEN}  ✓ $layout${NC}"
-    fi
-done
-echo ""
+bash "$SCRIPT_DIR/install-ui.sh"
+echo -e "${GREEN}  ✓ Layouts and launcher installed${NC}"
 
-# ── Step 6: Zellij keybinding configuration ──────────────────────────
-echo -e "${GREEN}[6/14] Zellij keybinding configuration...${NC}"
-
-ZELLIJ_CONFIG="$HOME/.config/zellij/config.kdl"
-LINCE_ZELLIJ_CONFIG="$SCRIPT_DIR/zellij-config/config.kdl"
-
-if [ -f "$LINCE_ZELLIJ_CONFIG" ]; then
-    if [ -f "$ZELLIJ_CONFIG" ]; then
-        echo -e "${YELLOW}  Existing Zellij config found: $ZELLIJ_CONFIG${NC}"
-        echo ""
-        echo "  LINCE includes keybindings optimized for AI coding agents"
-        echo "  (Ctrl+O disabled to avoid conflicts, custom mode bindings)."
-        echo "  Your current config will be backed up."
-        echo ""
-        if confirm "  Install LINCE keybindings?"; then
-            BACKUP="${ZELLIJ_CONFIG}.bak.$(date +%Y%m%d-%H%M%S)"
-            cp "$ZELLIJ_CONFIG" "$BACKUP"
-            echo -e "${GREEN}  ✓ Backup: $BACKUP${NC}"
-            cp "$LINCE_ZELLIJ_CONFIG" "$ZELLIJ_CONFIG"
-            echo -e "${GREEN}  ✓ LINCE keybindings installed${NC}"
-            setup_clipboard_backend "$ZELLIJ_CONFIG"
-        else
-            echo -e "${YELLOW}  Skipped — keeping your existing config${NC}"
-            echo -e "${YELLOW}  Note: some keybindings may conflict with AI coding agents${NC}"
-        fi
-    else
-        echo "  No existing Zellij config found."
-        if confirm "  Install LINCE keybindings? (Ctrl+O disabled for agent compatibility)"; then
-            mkdir -p "$(dirname "$ZELLIJ_CONFIG")"
-            cp "$LINCE_ZELLIJ_CONFIG" "$ZELLIJ_CONFIG"
-            echo -e "${GREEN}  ✓ LINCE keybindings installed${NC}"
-            setup_clipboard_backend "$ZELLIJ_CONFIG"
-        else
-            echo -e "${YELLOW}  Skipped${NC}"
-        fi
-    fi
-else
-    echo -e "${YELLOW}  ⚠ zellij-config/config.kdl not found — skipping${NC}"
-fi
+# ── Step 6: Session-scoped Zellij configuration ─────────────────────────
+echo -e "${GREEN}[6/14] LINCE session keybindings...${NC}"
+LINCE_SESSION_CONFIG="$HOME/.config/lince-dashboard/zellij.kdl"
+echo "  LINCE uses $LINCE_SESSION_CONFIG; your global Zellij config is unchanged."
 echo ""
 
 # ── Step 7: Install config ────────────────────────────────────────────
@@ -302,7 +207,7 @@ if [ -f "$CONFIG_DST" ]; then
     cp "$CONFIG_DST" "$BACKUP"
     echo -e "${YELLOW}  Existing config backed up → $(basename "$BACKUP")${NC}"
 fi
-cp "$SCRIPT_DIR/config.toml" "$CONFIG_DST"
+write_dashboard_preset_config "$SCRIPT_DIR/config.toml" "$CONFIG_DST"
 echo -e "${GREEN}  ✓ Installed: $CONFIG_DST${NC}"
 echo ""
 
@@ -461,9 +366,12 @@ echo ""
 # ── Step 13: Shell aliases ────────────────────────────────────────────
 echo -e "${GREEN}[13/14] Setting up shell aliases...${NC}"
 
-ALIAS_LINES='alias lince="zellij --layout dashboard-tiled"
-alias lince-floating="zellij --layout dashboard"
-alias zd="zellij --layout dashboard-tiled"
+ALIAS_LINES='alias lince-classic="lince-dashboard-launch --preset classic"
+alias lince-minimal="lince-dashboard-launch --preset minimal"
+alias lince-statusline="lince-dashboard-launch --preset statusline"
+alias lince="lince-dashboard-launch"
+alias lince-floating="lince-dashboard-launch --layout dashboard"
+alias zd="lince-dashboard-launch"
 alias z="zellij"
 alias zn="zellij attach -c"'
 ALIAS_COMMENT="# LINCE aliases"
@@ -481,6 +389,9 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
             "${_sed_inplace[@]}" '/# LINCE aliases/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince=/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince-floating=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-classic=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-minimal=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-statusline=/d' "$rc"
             "${_sed_inplace[@]}" '/alias zd=/d' "$rc"
             "${_sed_inplace[@]}" '/alias z="zellij"/d' "$rc"
             "${_sed_inplace[@]}" '/alias zn=/d' "$rc"
@@ -493,26 +404,28 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
 done
 echo ""
 
-# ── Step 14: VoxCode layout selection ─────────────────────────────────
-echo -e "${GREEN}[14/14] VoxCode layout configuration...${NC}"
-
+# ── Step 14: Optional VoxCode integration ─────────────────────────────
+echo -e "${GREEN}[14/14] VoxCode integration...${NC}"
 if command -v voxcode >/dev/null 2>&1; then
-    echo -e "${GREEN}  ✓ voxcode detected${NC}"
-    echo "  Setting dashboard-vox.kdl as default layout (includes VoxCode pane)."
-    if [ -f "$LAYOUT_DIR/dashboard-vox.kdl" ]; then
-        cp "$LAYOUT_DIR/dashboard-vox.kdl" "$LAYOUT_DIR/dashboard.kdl"
-        echo -e "${GREEN}  ✓ Dashboard layout updated with VoxCode pane${NC}"
-    fi
-    # Also update tiled layout to VoxCode variant
-    if [ -f "$LAYOUT_DIR/dashboard-tiled-vox.kdl" ]; then
-        cp "$LAYOUT_DIR/dashboard-tiled-vox.kdl" "$LAYOUT_DIR/dashboard-tiled.kdl"
-        echo -e "${GREEN}  ✓ Tiled layout updated with VoxCode pane${NC}"
+    if [ -z "${LINCE_VOXCODE_ENABLED:-}" ]; then
+        echo "  Alt+v opens voice settings; Alt+m mutes, Alt+t / Ctrl+Space toggles PTT. No permanent voice pane."
+        read -r -p "  Enable VoxCode integration? [Y/n]: " VOICE_REPLY || VOICE_REPLY=""
+        case "$VOICE_REPLY" in n|N|no|No) LINCE_VOXCODE_ENABLED=false ;; *) LINCE_VOXCODE_ENABLED=true ;; esac
     fi
 else
-    echo -e "${YELLOW}  VoxCode not found — using standard dashboard layout${NC}"
-    echo "  For voice input, install VoxCode separately:"
-    echo "    https://github.com/RisorseArtificiali/voxcode"
+    echo "  VoxCode not installed. Install it later: https://github.com/RisorseArtificiali/voxcode"
 fi
+case "${LINCE_VOXCODE_ENABLED:-true}" in
+    true|false) ;;
+    *) echo "LINCE_VOXCODE_ENABLED must be true or false" >&2; exit 1 ;;
+esac
+python3 - "$CONFIG_DST" "${LINCE_VOXCODE_ENABLED:-true}" <<'VOICEPY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+p.write_text(p.read_text().replace('voxcode_enabled = true', 'voxcode_enabled = ' + sys.argv[2]))
+VOICEPY
+echo "  Settings: Alt+v. Microphone stays off until you start VoxCode."
 echo ""
 
 # ── Sandbox backend check ─────────────────────────────────────────────

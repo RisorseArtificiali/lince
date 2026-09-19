@@ -1,18 +1,6 @@
-// Main dashboard layout for lince-dashboard Zellij plugin.
-//
-// Usage:
-//   zellij --layout ./layouts/dashboard.kdl
-//
-// Structure:
-//   ┌───────────────────────────────────┐
-//   │ tab-bar (borderless, size=1)      │
-//   ├───────────────────────────────────┤
-//   │ Dashboard Plugin (60%)            │
-//   ├─────────────────┬─────────────────┤
-//   │ VoxCode (50%)   │ Shell (50%)     │
-//   ├─────────────────┴─────────────────┤
-//   │ status-bar (borderless, size=2)   │
-//   └───────────────────────────────────┘
+// Compatibility layout: VoxCode uses Alt+v and the status bar.
+// No dedicated voice process is started. The launcher removes the auxiliary
+// sidebar shell when dashboard.voxcode_enabled is true.
 
 layout {
     default_tab_template {
@@ -27,18 +15,12 @@ layout {
 
     tab name="dashboard" {
         pane split_direction="horizontal" {
-            pane size="60%" {
+            pane size="60%" name="lince-controller" {
                 plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
                     config_path "~/.config/lince-dashboard/config.toml"
                 }
             }
-            pane split_direction="vertical" {
-                pane size="50%" {
-                    command "voxcode"
-                    args "--use-pipe"
-                }
-                pane size="50%" {
-                }
+            pane {
             }
         }
     }

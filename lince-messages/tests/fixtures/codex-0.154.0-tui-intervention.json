@@ -1,0 +1,40 @@
+{
+  "source": "Real original codex 0.154.0 TUI in a PTY on Linux, 2026-09-18. Peer work was accepted by the fixture before a real human prompt; actual PermissionRequest observed with no approval or file creation.",
+  "human_pause": true,
+  "permission_queued": true,
+  "events": [
+    {
+      "hook_event_name": "SessionStart",
+      "session_id": "01a0b5d9-cf46-7d13-8edf-cd44e9d2037e",
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "01a0b5d9-cf46-7d13-8edf-cd44e9d2037e",
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "01a0b5d9-cf46-7d13-8edf-cd44e9d2037e",
+      "stop_hook_active": false,
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "01a0b5d9-cf46-7d13-8edf-cd44e9d2037e",
+      "permission_mode": "default"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "01a0b5d9-cf46-7d13-8edf-cd44e9d2037e",
+      "permission_mode": "default",
+      "tool_name": "Bash"
+    },
+    {
+      "hook_event_name": "PermissionRequest",
+      "session_id": "01a0b5d9-cf46-7d13-8edf-cd44e9d2037e",
+      "permission_mode": "default",
+      "tool_name": "Bash"
+    }
+  ]
+}

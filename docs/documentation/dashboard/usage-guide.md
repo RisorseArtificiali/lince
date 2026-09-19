@@ -10,20 +10,22 @@ Start the dashboard with the `lince` shell alias (installed by `install.sh`):
 lince
 ```
 
-For the tiled (3-pane) layout:
+When no preset is specified, LINCE uses minimal: a compact sidebar, no frames or
+standard Zellij bars, and a persistent two-row attention bar. Existing configurations
+without a preset also default to minimal on upgrade.
 
 ```bash
-lince            # tiled is the default
-lince-floating   # floating overlay layout
+lince-dashboard-launch --preset minimal
+lince-dashboard-launch --preset statusline  # controller opened with Alt+d
+lince-dashboard-launch --preset classic
+lince-floating                            # floating agent window variant
 ```
 
-This opens Zellij with the dashboard layout. The plugin loads in a dedicated pane, ready to spawn and manage agents. If a `.lince-dashboard` state file exists in the current directory, saved agents are automatically restored.
-
-For the tiled layout variant:
-
-```bash
-zellij --layout ~/.config/zellij/layouts/dashboard-tiled.kdl
-```
+The plugin restores saved agents when `.lince-dashboard` exists in the launch
+directory. Start in a fresh directory for an empty session. Use the launcher to
+apply presets and the LINCE session config; direct `zellij --layout` launches
+bypass those settings. See [Views and Themes](dashboard/views-and-themes.md)
+for density, sidebar width, frame overrides, palettes and upgrade behavior.
 
 ## Keybindings
 
@@ -36,30 +38,43 @@ zellij --layout ~/.config/zellij/layouts/dashboard-tiled.kdl
 | `r` | Rename the selected agent |
 | `x` | Kill (stop) the selected agent and close its pane |
 | `f` | Focus: show the selected agent's pane |
-| `Enter` | Toggle detail panel for the selected agent |
+| `Enter` | Focus the selected agent |
 | `h` / `Esc` | Hide: return focus from agent pane to dashboard |
-| `Q` | Save agent state to `.lince-dashboard` and quit Zellij |
+| `Alt+q` / `Q` | Save agent state and quit (`Alt+q` works from any pane) |
+| `q` in the `Alt+d` list | Quit without saving |
 | `j` / `Down` | Select next agent in list |
-| `Up` | Select previous agent in list |
+| `k` / `Up` | Select previous agent in list |
 | `]` | Focus next agent directly (without returning to dashboard) |
 | `[` | Focus previous agent directly |
-| `i` | Toggle info/detail panel |
+| `i` | Toggle info/detail view (`PageUp` / `PageDown` scroll) |
+| `?` | Show help |
+| `Alt+d` | Open the detailed agent list from any pane |
+| `Alt+i` / `Alt+h` / `Alt+?` | Open information / help directly |
+| `Alt+s` | Toggle the sidebar (minimal/statusline) |
+| `Alt+n` | Open the creation wizard from any pane |
+| `Alt+1`–`Alt+9` | Focus an agent from any pane |
+| `Alt+k` / `Alt+j` | Previous / next agent in status bar order, including locked mode |
+| `Alt+PageUp` / `Alt+PageDown` | Cycle agents from any pane |
+| `Alt+x` | Kill the focused agent and focus the next agent, if any |
+| `Alt+r` | Rename the focused agent from any pane |
 
 ### Inline Name Prompt
 
-Pressing `n` shows a blue prompt bar at the bottom of the dashboard:
+Pressing `n` opens a name prompt (a popup in the minimal view):
 
 ```
-Name: my-agent          (default: agent-3)  [Enter] OK  [Esc] Cancel
+Name: my-agent          (default: myproject-3)  [Enter] OK  [Esc] Cancel
 ```
 
-- Type a custom name or press `Enter` to accept the default (`agent-N`).
+- Type a custom name or press `Enter` to accept the default (`project-N`).
 - `Esc` cancels without spawning.
 - Provider and project directory use config defaults. Use `N` (wizard) for full control.
 
 ### Wizard Mode
 
-Pressing `N` (Shift+N) opens a multi-step wizard. Navigation keys:
+Pressing `Alt+n` anywhere or `N` (Shift+N) in the list opens a multi-step wizard.
+Press `n` immediately on opening or in a selection/review step to use the defaults and enter only a name;
+name and path text fields continue accepting `n` as text. Navigation keys:
 
 | Key | Action |
 |-----|--------|
@@ -85,7 +100,7 @@ when only one is installed, `Sandbox Level` for unsandboxed agents,
 
 **Step 3: Sandbox Level (Profile)** -- Pick the isolation posture: `paranoid`, `normal`, `permissive`, or any custom level discovered on disk. This is the **sandbox profile** axis (gh#81) — the wizard label is "Sandbox Level" but the value also appears as `Profile:` in the detail pane. Skipped for unsandboxed runs.
 
-**Step 4: Agent Name** -- Text input for a custom name. Leave empty and press `Enter` to accept the auto-generated default (e.g. `agent-3`).
+**Step 4: Agent Name** -- Text input for a custom name. Leave empty and press `Enter` to accept the auto-generated default (e.g. `myproject-3`).
 
 **Step 5: Provider** -- Conditional step, shown only when the selected agent type has providers configured (`providers = ["__discover__"]` or an explicit list in `agents-defaults.toml`). Pick a provider name (env-var bundle: `vertex`, `anthropic`, `zai`, …) discovered from `~/.agent-sandbox/config.toml`. The Provider axis is **independent** of Sandbox Level — combine freely. Was named "Profile" pre-#81.
 
@@ -101,8 +116,8 @@ when only one is installed, `Sandbox Level` for unsandboxed agents,
 4. Status hooks report via Zellij pipe. The status updates to **Running** (green) when the agent starts working.
 5. When the agent needs user input, the status shows **INPUT** (bold yellow).
 6. When the agent asks for permission/approval, the status shows **PERMISSION** (bold red).
-7. Press `f` to show the agent's pane. Interact with the agent, then press `h` to hide it.
-8. Press `Enter` to view the detail panel (project dir, profile, provider, elapsed time).
+7. Press `f` to show the agent's pane. Interact with the agent, then press `Alt+d` to return to the controller.
+8. Press `i` to view details (full name, project directory, sandbox and provider).
 9. Press `x` to kill the agent and close its pane. Status becomes **Stopped** (dim).
 
 ### Agent Statuses
@@ -119,7 +134,7 @@ These are the only five canonical states. Tier B (wrapper-only) agents stay at `
 
 ## Agent Detail Panel
 
-Press `i` to toggle a detail panel below the table. It displays:
+Press `i` to open the detail view, shown in a larger popup in the minimal preset. It displays:
 
 - **Agent type** -- display name with color. Red `[UNSANDBOXED]` warning if applicable.
 - **Status** -- current status with color coding (`-`, Running, INPUT, PERMISSION, Stopped).
@@ -128,7 +143,7 @@ Press `i` to toggle a detail panel below the table. It displays:
 - **Project directory** -- the working directory path.
 - **Started at** -- timestamp when the agent was spawned.
 
-Press `Enter` again to close the panel. `f` still focuses the agent pane.
+Use `PageUp`/`PageDown` to scroll long details. Press `i` or `Esc` to close them; `Enter` or `f` focuses the agent.
 
 ## Swimlane Grouping
 
@@ -148,13 +163,13 @@ When agents span multiple project directories, the dashboard automatically group
 - Unsandboxed agents show a red `!` suffix (e.g. `CLU!`).
 - Agents are grouped by `project_dir` and sorted by name within each group.
 - Swimlane headers show shortened paths (`~` replaces `$HOME`).
-- When all agents share the same directory, no headers are shown (flat list).
+- The full table omits headers for a single directory; the compact view retains a project heading.
 - Group names appear as dim suffixes when set: `agent-1 [web-stack]`.
 - Navigation (`j`/`k`) moves through agents only. Headers are visual-only separators.
 
 ## Session Save and Restore
 
-Press `Q` to save the current agent configuration and quit Zellij. On next launch from the same directory, agents are automatically re-spawned with their saved names, providers, and project directories. (Pre-#81 saved-state files use `profile` as the field name; they continue to load thanks to a serde alias on `provider`. Pre-m-15 state files may also include legacy fields like `tokens_in` / `tokens_out` — they are now ignored.)
+Press `Alt+q` from any pane (or `Q` in the list) to save the current agent configuration and quit after the write succeeds. To quit without saving, press `Alt+d`, then lowercase `q`; previous saved state remains intact. On next launch from the same directory, agents are automatically re-spawned with their saved names, providers, and project directories. (Pre-#81 saved-state files use `profile` as the field name; they continue to load thanks to a serde alias on `provider`. Pre-m-15 state files may also include legacy fields like `tokens_in` / `tokens_out` — they are now ignored.)
 
 - State is saved to `.lince-dashboard` in the directory where `lince` was launched.
 - Different directories maintain independent state. Launch from `~/project-a` and `~/project-b` for separate sessions.
@@ -163,46 +178,37 @@ Press `Q` to save the current agent configuration and quit Zellij. On next launc
 
 ## Tiled Pane Layout
 
-Set `agent_layout = "tiled"` in `config.toml` and launch with `lince` for a fixed three-pane layout:
+The launcher defaults to `dashboard-tiled`, with the controller and a shell on
+the left and the agent viewport on the right. The selected preset controls the
+column width and surrounding bars.
 
-```
-┌──────────────┬─────────────────────┐
-│              │                     │
-│  Dashboard   │  Shell / VoxCode    │
-│  plugin      │                     │
-├──────────────┤                     │
-│  Agent       │                     │
-│  viewport    │                     │
-└──────────────┴─────────────────────┘
+```text
+Controller       | Agent viewport
+                 | (focused agent)
+-----------------|
+Shell / VoxCode  |
+-----------------+----------------
+Attention row (minimal preset)
 ```
 
-- The dashboard plugin occupies the top-left pane (A).
-- The bottom-left pane (C) is the **agent viewport** — an ASCII art placeholder that is covered by the focused agent's floating pane.
-- The right column (B) is the agent viewport — covered by the focused agent's floating pane.
-- Press `f` to focus an agent — its pane overlays the viewport. Press `h` to unfocus and return to the placeholder.
+Press `Enter` or `f` in the controller to show the selected agent over the right
+viewport. `Alt+d` returns to the controller. Resizing the viewport updates agent
+geometry. The VoxCode variant replaces the lower-left shell with the voice pane:
+
+```bash
+lince-dashboard-launch --preset minimal --layout dashboard-tiled-vox
+```
 
 ## Voice Relay
 
-[VoxCode](https://github.com/RisorseArtificiali/voxcode) runs in the fixed bottom-left pane and provides voice-to-text input for agents. When configured with pipe mode, transcribed text flows through the dashboard to the active agent:
+VoxCode is now available on demand in any layout. Press `Alt+v` to configure,
+start, mute or stop it. `Alt+m` mutes/unmutes VoxCode; `Alt+t` / `Ctrl+Space` toggles PTT recording; the first row of the
+left status-bar section shows the live microphone level. Text goes to the last
+active visible agent or shell. Settings persist across dashboard restarts;
+listening never starts automatically. See [Voice input](dashboard/voice-input.md).
 
-```
-VoxCode --> zellij pipe --name "voxcode-text" --> Dashboard Plugin --> agent pane
-```
-
-To enable pipe mode, set in your VoxCode config:
-
-```toml
-[zellij]
-use_pipe = true
-```
-
-When `use_pipe = false` (default), VoxCode uses the legacy focus-switch method, which works without the dashboard.
-
-**Target priority** for voice relay:
-
-1. Focused agent (if one is currently shown).
-2. Selected agent (highlighted in the table).
-3. No agent available -- error message in the command bar.
+The explicit `*-vox` layouts remain available for the legacy standalone VoxCode
+pane, but the installer no longer selects them automatically.
 
 ## Status Detection
 
@@ -249,6 +255,18 @@ passthrough = ["ZELLIJ", "ZELLIJ_SESSION_NAME", "LINCE_AGENT_ID"]
 Agent-specific environment variables (e.g. `OPENAI_API_KEY` for Codex) are set via the `env_vars` field in the agent type configuration and passed through automatically.
 
 ## Troubleshooting
+
+### Clipboard in dashboard panes
+
+Selecting text with the mouse copies it on release by default. Installation and
+update configure `wl-copy` on Wayland, `xclip`/`xsel` on X11, or `pbcopy` on macOS
+when available, preserving an explicit `copy_command` or `copy_on_select` choice.
+Without an available native backend, Zellij relies on terminal OSC 52 support.
+Install `wl-clipboard` (Wayland) or `xclip` (X11), then rerun the dashboard update
+and start a fresh session if selection does not reach the clipboard.
+`Ctrl+Shift+C` is bound to Copy in normal and locked modes when the terminal sends
+a distinct key event. Holding Shift while selecting lets the host terminal handle
+the selection instead; use its copy shortcut for that selection.
 
 ### Ctrl+Shift+C kills agent (Terminator + Zellij)
 

@@ -25,7 +25,7 @@ Agent definitions live under `[agents.<key>]`.
 ```toml
 [agents.codex]
 command = "codex"
-default_args = ["--full-auto"]
+default_args = ["-a", "never"]
 env = { OPENAI_API_KEY = "$OPENAI_API_KEY" }
 home_ro_dirs = [".codex"]
 home_rw_dirs = []

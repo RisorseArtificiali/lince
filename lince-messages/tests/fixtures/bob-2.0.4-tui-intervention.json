@@ -1,0 +1,47 @@
+{
+  "agent": "bob",
+  "version": "2.0.4",
+  "platform": "Linux",
+  "original_tui": true,
+  "human_pause_verified": true,
+  "fixture_ownership_released_before_permission": true,
+  "permission_dialog_observed": true,
+  "permission_detection": false,
+  "queued_without_approval": true,
+  "file_not_created": true,
+  "automatic_enable_rejected": true,
+  "events": [
+    {
+      "hook_event_name": "SessionStart",
+      "session_id": "ea75c37d248387efca3cb8029f29cebb",
+      "source": "startup"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "ea75c37d248387efca3cb8029f29cebb"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "ea75c37d248387efca3cb8029f29cebb"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "ea75c37d248387efca3cb8029f29cebb"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "ea75c37d248387efca3cb8029f29cebb"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "ea75c37d248387efca3cb8029f29cebb"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "ea75c37d248387efca3cb8029f29cebb",
+      "tool_name": "execute_command"
+    }
+  ],
+  "source": "Real Bob Shell 2.0.4 original TUI on Linux with SSO, 2026-09-18. Fixture-owned work was paused by an actual human prompt, then explicitly completed before the permission check. A real execute_command approval dialog remained open, incoming request stayed queued, no approval was submitted and sample.txt was not created. No PermissionRequest event was emitted; this adapter does not infer permission readiness.",
+  "permission_dialog_excerpt": "  Execute Command                                                                                                       \n  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  \n  Command:          touch sample.txt                                                                                    \n  Approve commands:                                                                                                     \n  \u250c\u2500\u2500\u2500\u2500\u2500\u2510                                                                                                               \n  \u2502touch\u2502                                                                                                               \n  \u2514\u2500\u2500\u2500\u2500\u2500\u2518                                                                                                               \n  \u2192 Approve Once                                                                                                        \n    Always Allow Command for task                                                                                       \n    Reject                                                                                                              \n                                                                                                                        \n    \u2191\u2193 (1/3)                                                                                                            \n                                                                                                                        \n  Wait for input after execution: No (Tab to toggle)                                                                    \n                                                                                                                        \n  Press Enter to confirm                                                                                                \n                                                                                                                        \n  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+}

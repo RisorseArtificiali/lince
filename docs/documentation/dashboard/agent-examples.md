@@ -223,7 +223,7 @@ The sandbox injects `--sandbox danger-full-access` into the Codex command, disab
 
 ```bash
 agent-sandbox run -a codex -p ~/project --dry-run
-# Output shows: ... codex --full-auto --sandbox danger-full-access
+# Output shows: ... codex -a never --sandbox danger-full-access
 ```
 
 ## Status Reporting

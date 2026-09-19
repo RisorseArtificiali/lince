@@ -86,6 +86,11 @@ auto_expose_path = true
 # exposes the GPU when its own fragment sets expose_gpu = true.
 # expose_gpu = true
 
+# Expose the local X11 display for image paste (also on Xwayland).
+# Disabled when security.unshare_net is true. X11 access includes desktop
+# access beyond the clipboard; set false to omit this automatic exposure.
+# expose_x11 = true
+
 # Extra home subdirectories to expose read-only (relative to $HOME).
 # Each is mounted only if it exists on the host, so listing a dir you
 # don't use is harmless.
@@ -144,7 +149,7 @@ use_real_config = false
 
 # [agents.codex]
 # command = "codex"
-# default_args = ["--full-auto"]
+# default_args = ["-a", "never"]
 # home_ro_dirs = [".codex"]
 # bwrap_conflict = true
 # disable_inner_sandbox_args = ["--sandbox", "danger-full-access"]
@@ -178,8 +183,7 @@ passthrough = [
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
     # Lets Chromium-based browsers use their native Wayland backend (#284).
-    # The host's Chrome typically runs on Xwayland, and the sandbox has no
-    # X11 socket, so without this it dies with "Missing X server or $DISPLAY".
+    # Also works when X11 exposure is disabled or no X11 display is available.
     "XDG_SESSION_TYPE",
 ]
 
@@ -2244,6 +2248,13 @@ def build_env_clear_command(
         for var, val in proxy_env.items():
             all_env[var] = val
 
+    # Messaging credentials come only from the supervisor's launch environment,
+    # never project/provider env tables. Keep administrative credentials private.
+    for name in list(all_env):
+        if name.startswith("LINCE_MSG_"):
+            del all_env[name]
+    all_env.update(messaging_environment())
+
     # Git wrapper PATH injection: if __LINCE_WRAPPER_PATH is present
     # (set by prepare_seatbelt_git_blocking), prepend it to PATH so the
     # git-push-blocking wrapper is found before the real git binary.
@@ -2379,6 +2390,19 @@ def generate_seatbelt_profile(
     lines.append("; Deny SSH keys unless explicitly added to home_ro_dirs")
     lines.append(f'(deny file-read* (subpath "{home}/.ssh"))')
     lines.append("")
+
+    # Messaging state is private even for agents not enrolled in a group.
+    message_private = Path.home() / ".local/state/lince-messages"
+    message_env = messaging_environment()
+    credential = message_env.get("LINCE_MSG_CREDENTIAL")
+    for protected in {str(message_private), str(message_private.resolve())}:
+        quoted = json.dumps(protected)
+        restriction = f'(subpath {quoted})'
+        if credential:
+            restriction = f'(require-all {restriction} (require-not (literal {json.dumps(credential)})))'
+        lines.append(f'(deny file-read* file-write* {restriction})')
+    if credential:
+        lines.append(f'(deny file-write* (literal {json.dumps(credential)}))')
 
     # --- Process permissions ---
     lines.append("; Process permissions")
@@ -2584,6 +2608,11 @@ def build_seatbelt_cmd(
         '; (allow file-write* (subpath "<PROJECT_DIR>"))\n',
         project_rule,
     )
+
+    message_env = messaging_environment()
+    if message_env:
+        endpoint = json.dumps(message_env["LINCE_MSG_ENDPOINT"])
+        runtime_profile += f'\n(allow network-outbound (remote unix-socket (literal {endpoint})))\n'
 
     # Write the profile to a temp file
     tmp_dir = SEATBELT_PROFILE_DIR
@@ -3004,6 +3033,79 @@ def prepare_seatbelt_git_blocking(config: dict) -> dict[str, str]:
 # bwrap command builder
 # ---------------------------------------------------------------------------
 
+def messaging_environment() -> dict[str, str]:
+    """Validate the host-provisioned, per-process messaging endpoint/credential.
+
+    Environment configuration inside repository TOML cannot select these paths.
+    The supervisor passes the two variables directly to agent-sandbox. Only one
+    credential file is exposed, never its directory or the authoritative store.
+    """
+    endpoint = os.environ.get("LINCE_MSG_ENDPOINT")
+    credential = os.environ.get("LINCE_MSG_CREDENTIAL")
+    if not endpoint and not credential:
+        return {}
+    if not endpoint or not credential:
+        raise ValueError("Incomplete supervisor messaging configuration")
+    public_root = Path(f"/tmp/lince-msg-{os.getuid()}").resolve()
+    private_root = (Path.home() / ".local/state/lince-messages").resolve()
+    ep, cred = Path(endpoint), Path(credential)
+    if (not ep.is_absolute() or not cred.is_absolute()
+            or not ep.resolve().is_relative_to(public_root)
+            or not cred.resolve().is_relative_to(private_root / "credentials")
+            or not ep.is_socket() or not cred.is_file()
+            or cred.is_symlink() or cred.stat().st_uid != os.getuid()
+            or cred.stat().st_mode & 0o077):
+        raise ValueError("Invalid supervisor messaging endpoint or credential")
+    return {"LINCE_MSG_ENDPOINT": str(ep.resolve()), "LINCE_MSG_CREDENTIAL": str(cred.resolve())}
+
+
+def messaging_bwrap_args() -> list[str]:
+    """Applied after configurable mounts so messaging state remains host-only."""
+    args: list[str] = []
+    private = Path.home() / ".local/state/lince-messages"
+    if private.exists():
+        args += ["--tmpfs", str(private.resolve())]
+    env = messaging_environment()
+    # Do not permit project env tables to impersonate supervisor provisioning.
+    for key in ("LINCE_MSG_ENDPOINT", "LINCE_MSG_CREDENTIAL", "LINCE_MSG_TOKEN", "LINCE_MSG_ADMIN"):
+        args += ["--unsetenv", key]
+    if env:
+        args += ["--dir", "/tmp/.lince-msg",
+                 "--ro-bind", env["LINCE_MSG_ENDPOINT"], "/tmp/.lince-msg/mailbox.sock",
+                 "--ro-bind", env["LINCE_MSG_CREDENTIAL"], "/tmp/.lince-msg/credential",
+                 "--setenv", "LINCE_MSG_ENDPOINT", "/tmp/.lince-msg/mailbox.sock",
+                 "--setenv", "LINCE_MSG_CREDENTIAL", "/tmp/.lince-msg/credential"]
+    return args
+
+def x11_bwrap_args(config: dict) -> list[str]:
+    """Expose only the active local X11 socket and its authentication file.
+
+    Call after filesystem overlays and --clearenv. Network-isolated sandboxes
+    must not gain a new connection to the host desktop through a Unix socket.
+    Remote/SSH displays are deliberately not auto-exposed.
+    """
+    if (not config.get("sandbox", {}).get("expose_x11", True)
+            or config.get("security", {}).get("unshare_net", False)):
+        return []
+    display = os.environ.get("DISPLAY", "")
+    match = re.fullmatch(r"(?:unix/|unix)?:([0-9]+)(?:\.[0-9]+)?", display)
+    if not match:
+        return []
+    socket = Path(f"/tmp/.X11-unix/X{int(match.group(1))}")
+    if not socket.is_socket():
+        return []
+    args = ["--ro-bind", str(socket), str(socket),
+            "--setenv", "DISPLAY", display]
+    authority = Path(os.environ.get("XAUTHORITY") or (Path.home() / ".Xauthority"))
+    if authority.is_file():
+        # A stable tmpfs destination also handles symlinks and files beneath
+        # hidden runtime/home directories without exposing their parent dirs.
+        target = "/tmp/.lince-xauthority"
+        args += ["--ro-bind", str(authority.resolve()), target,
+                 "--setenv", "XAUTHORITY", target]
+    return args
+
+
 def build_bwrap_cmd(config: dict, project_dir: Path,
                     agent_extra_args: list[str],
                     log_file: Path | None = None,
@@ -3055,7 +3157,7 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     # --- 2b. Re-expose Zellij socket dir so hooks can use `zellij pipe` ------
     # Zellij 0.40+ stores sockets in $XDG_RUNTIME_DIR/zellij/ (not /tmp).
     zellij_socket_dir = os.path.join(runtime_dir, "zellij")
-    if os.path.isdir(zellij_socket_dir):
+    if os.path.isdir(zellij_socket_dir) and not messaging_environment():
         dest = f"/run/user/{uid}/zellij"
         cmd += ["--bind", zellij_socket_dir, dest]
 
@@ -3324,6 +3426,8 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     if "GIT_SSH_COMMAND" not in env_conf.get("extra", {}):
         cmd += ["--setenv", "GIT_SSH_COMMAND", "ssh -F /dev/null"]
 
+    cmd += x11_bwrap_args(config)
+
     # --- Wayland env vars (clipboard access for wl-paste) --------------------
     for wl_var in ("WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"):
         val = os.environ.get(wl_var)
@@ -3387,6 +3491,9 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
             cmd[-1:-1] = list(raw_bwrap_args)
         else:
             cmd += list(raw_bwrap_args)
+
+    # Messaging denies/mounts must follow configurable mounts and env overrides.
+    cmd[-1:-1] = messaging_bwrap_args()
 
     # --- Landlock hardening shim (#222) ---------------------------------------
     # Injected as the LAST bwrap argv element so its rule FDs open in the
@@ -7668,6 +7775,8 @@ def build_learn_bwrap_cmd(
     cmd += ["--setenv", "GOMODCACHE", f"{home}/.go/pkg/mod"]
     cmd += ["--setenv", "UV_CACHE_DIR", f"{home}/.uv-cache"]
     cmd += ["--setenv", "UV_TOOL_DIR", f"{home}/.uv-tools"]
+
+    cmd += x11_bwrap_args(config)
 
     # Wayland env vars
     for wl_var in ("WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"):

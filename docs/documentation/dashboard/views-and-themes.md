@@ -1,0 +1,238 @@
+# Views and themes
+
+Choose how much space LINCE uses without changing your agents or their saved state.
+A **preset** selects the layout and default density; a **theme** selects UI colors independently.
+
+The quickstart and standalone dashboard installer ask which preset to use, with a
+short description and a link to this guide. Press Enter for `minimal`. The choice
+is saved as `[dashboard] preset` in `~/.config/lince-dashboard/config.toml`.
+Quickstart asks only once; `quickstart.sh --defaults` uses `minimal`.
+For automation, set `LINCE_DASHBOARD_PRESET=minimal|statusline|classic` before
+running either installer. Updates preserve the chosen preset.
+
+## Choose a view
+
+Start a new session with the installed launcher:
+
+```bash
+lince-dashboard-launch --preset minimal
+lince-dashboard-launch --preset statusline
+lince-dashboard-launch --preset classic
+```
+
+| Preset | Presentation | Default sidebar width | Frames |
+|--------|--------------|-----------------------|--------|
+| `minimal` | Compact sidebar and a two-row attention bar; no standard Zellij bars | 15% | Off |
+| `statusline` | Same managed view, with the sidebar hidden initially | 15% when shown | Off |
+| `classic` | Full agent table and standard Zellij tab/keybinding bars | 40% | On |
+
+Minimal also removes the floating agent's entire frame and title. The bottom
+attention bar remains separate; there is no individual bottom-edge frame setting.
+Explicit `--frames` or `pane_frames = true` restores the agent frame.
+
+When no preset is specified, `minimal` is used, including for existing configurations. Minimal and statusline also differ in initial sidebar
+visibility; `Alt+s` toggles it at runtime, restoring the same column arrangement
+on every second press. With the sidebar hidden, agent panes fill the window
+above the status line. An open agent stays visible and keeps focus when the
+sidebar reappears, resizing to the narrower viewport. This also applies to the
+first toggle after switching agents with `Alt+1/2/3`; other agents stay hidden. The sidebar is always compact and popup
+lists are always expanded. `compact` applies only to the classic inline view.
+Explicit `sidebar_width` and `pane_frames` settings override preset defaults; selecting `classic` does not reset those settings.
+The `lince` alias uses the configured preset. Preset and geometry changes apply to
+new sessions, not when attaching to an existing session.
+
+Persist your choices in `~/.config/lince-dashboard/config.toml`:
+
+```toml
+[dashboard]
+preset = "minimal"
+attention_blink = false # opt in with true for alternating I/P dots
+sidebar_width = 25
+pane_frames = false
+theme = "dracula"
+```
+
+`sidebar_width` accepts integer percentages from 10 to 60. Command-line overrides
+are available for a single launch:
+
+```bash
+lince-dashboard-launch --preset minimal --sidebar-width 25 --frames
+lince-dashboard-launch --preset classic --no-frames
+lince-dashboard-launch --preset minimal --layout dashboard
+lince-dashboard-launch --preset minimal --layout dashboard-tiled-vox
+```
+
+The last command requires VoxCode. `dashboard` selects floating agent windows;
+`dashboard-tiled` (the default) fits the focused agent to the right-hand viewport.
+Use the launcher to apply these settings: launching a KDL file directly bypasses
+preset generation and the session configuration.
+
+## Compact sidebar and details
+
+Press `Alt+d` from any pane to open the detailed agent list in a bordered popup.
+The bare `d` density toggle has been removed. `Alt+s` shows or hides the sidebar
+and its shell/voice pane, preserving agents and restoring the configured column layout.
+The compact list shows the global agent number on the left, the configured
+three-cell type label (`CLA`, `CDX`, etc.) and a one-letter status. Agent names
+remain available in `i` details and in the attention row, keeping the sidebar narrow.
+Bold project headings use distinct palette colors and a horizontal rule to separate
+swimlanes; `i` reveals the full name and path.
+
+`>` marks selection, `*` marks the focused agent, and `!` flags a sandbox level
+other than `normal`, including unknown or unsandboxed runs. Details and the active
+entry in the attention bar convey the sandbox level through color; details show
+the explicit identity (`NOSB` means unsandboxed).
+
+Use `j`/`k` to select, `Enter` or `f` to focus, and `i` for details.
+In the agent list, `r` renames the selected agent; `K` (Shift+k) moves it up
+and `J` (Shift+j) moves it down, including across project directories.
+The default order is alphabetical by directory, then name. After a move,
+renaming keeps the custom order and new agents are appended. Number shortcuts
+and agent cycling follow the displayed order. Save and quit (`Alt+q` or `Q`)
+preserves it for the next session. Press `a` to restore the default order.
+`PageUp`/`PageDown` scroll long details. In the minimal view, details, help and
+creation dialogs open in a larger bordered popup without resizing the sidebar or viewport.
+`Alt+i` opens the focused agent’s information directly; `Alt+h` opens help.
+`Esc` dismisses a dialog; local `i` and `?` remain available in the list.
+
+## Attention and navigation
+
+Minimal and statusline views reserve two LINCE rows at the bottom. Its leading `!N`
+counts only agents waiting for input or permission. The compact overview that follows
+shows **all** agent slots in navigation order: `!2 1R2I3P4S5-`, for example.
+The left-hand numbers and letters use state colors: green for running, yellow for
+input, red for permission and muted for unknown/stopped. The count uses a distinct
+accent (cyan by default), including in the monochrome palette.
+
+On the right, each entry is `NUMBER NAME STATUS`, for example `2 pippo I`.
+The name is the first ten characters of the actual name, without an agent-type prefix.
+`NAME` is white with a sandbox-colored underline: red for unsandboxed, green for
+normal/default, yellow for permissive, white for paranoid or custom/unknown levels.
+The status letter has its own state color, independently of the name. These
+semantic colors follow the selected palette.
+The selected `*number` is white; other numbers share the name’s colored underline. Entries stay
+in slot order and do not show a textual sandbox level. The count and compact slot overview take priority over
+ordinary names when the terminal is narrow; the overview is clipped if it cannot fit.
+
+| Letter | State | Counted as waiting |
+|--------|-------|--------------------|
+| `R` | Running | No |
+| `I` | Waiting for input | Yes |
+| `P` | Permission required | Yes |
+| `S` | Stopped | No |
+| `-` | Unknown or no native status hooks | No |
+
+While typing in an agent, `Alt+d` opens the controller, `Alt+1`–`Alt+9` selects
+an agent, and `Alt+k`/`Alt+j` cycles agents in status bar order, wrapping
+at either end (also in locked mode). `Alt+PageUp`/`Alt+PageDown` also cycles agents. Bare letters are sent to
+the agent. With the attention row focused, digits select agents, arrow keys cycle,
+and Enter opens the controller.
+
+These shortcuts work with either preset, including while the sidebar is visible:
+
+| Key | Action |
+|-----|--------|
+| `Alt+d` | Detailed agent list in a bordered popup |
+| `Alt+i` | Focused agent information directly |
+| `Alt+h` | Help directly |
+| `Alt+s` | Hide/show the sidebar and its shell/voice pane |
+| `Alt+b` | Cycle status bar: hidden → left summary → full → agents only |
+| `Alt+n` | Agent creation wizard (replaces Zellij’s new-pane shortcut) |
+| `Alt+q` | Save the session and quit from any pane |
+| `q` in the `Alt+d` list | Quit without saving |
+
+Immediately after opening the wizard, or in its selection/review steps, `n` skips to a name-only prompt
+using the configured defaults. In name/path text fields, `n` remains ordinary text.
+There is no separate `Alt+N` binding. The list’s local `n` (default creation), `N`
+(wizard), `r` (rename), `i` (details), and `s`/`S` (relay) also remain available.
+Selecting an agent returns to its terminal. `Esc` dismisses the current dialog,
+then the underlying menu if one was open. Popup borders remain visible even with
+`pane_frames = false`.
+
+Additional Zellij tabs retain the attention row and connect to the session's
+controller. Native Zellij fullscreen or manually hiding the row can suppress it;
+leave fullscreen to return to the managed view.
+
+## Save and quit
+
+`Alt+q` saves the current agent configuration to `.lince-dashboard` in the launch
+directory, then quits only after the write succeeds. It also works in locked mode.
+To leave without saving, open the list with `Alt+d` and press lowercase `q`.
+Any previously saved state remains intact. Uppercase `Q` in the list remains a
+save-and-quit alias.
+
+## Color palettes
+
+Set `dashboard.theme` in the dashboard config, or use:
+
+```bash
+lince-config set dashboard.theme dracula --target dashboard
+```
+
+Theme changes reload in about five seconds. They affect LINCE's list, details,
+wizard and attention row; agent applications retain their own colors.
+
+| Theme | Palette |
+|-------|---------|
+| `default` | Inherits the active Zellij style; also used when the key is omitted |
+| `minimal-mono` | Restrained monochrome colors with selection and status markers |
+| `dracula` | Dark purple palette |
+| `gruvbox` | Warm, muted palette |
+
+Unknown names display a warning in the controller and fall back to `default`.
+Status letters and markers remain available without relying on color.
+
+These previews are generated from the dashboard renderer with sample agents;
+they illustrate the palettes in the full table, not the geometry of each preset.
+
+![Default palette](../../assets/dashboard-theme-default.svg)
+![Minimal mono palette](../../assets/dashboard-theme-minimal-mono.svg)
+![Dracula palette](../../assets/dashboard-theme-dracula.svg)
+![Gruvbox palette](../../assets/dashboard-theme-gruvbox.svg)
+
+## Zellij configuration and updates
+
+The launcher uses `~/.config/lince-dashboard/zellij.kdl`. Installation and updates
+preserve custom settings and refresh `zellij.kdl.dist` with shipped defaults.
+Updates migrate only the previously shipped Alt+h/i/l/n bindings and add Alt+q alongside LINCE’s wizard bindings, saving the old
+file as `zellij.kdl.bak-shortcuts`. Custom bindings remain yours; compare with
+`.dist` if they conflict with LINCE shortcuts.
+Your global `~/.config/zellij/config.kdl` is separate. To use another session config:
+
+```bash
+lince-dashboard-launch --config /path/to/zellij.kdl --preset minimal
+```
+
+Keep LINCE's `lince-ui-open`, `lince-sidebar-toggle`, `lince-save-quit`, `focus-agent` and `cycle-agent` bindings when copying
+or customizing the session configuration. See the [configuration reference](dashboard/config-reference.md)
+for all keys and the [usage guide](dashboard/usage-guide.md) for agent workflows.
+
+The attention bar reserves two rows and wraps between complete agent entries.
+Nine agents with ten-character ASCII names fit at 110 columns. Agent entries
+stay in slot order even when selected. Each reserves a marker position: the
+selected `*number` is white. Agent names and unselected numbers are white with a
+colored underline: green for normal, yellow for permissive, red for no sandbox,
+and white for paranoid or special profiles. Status letters are not underlined.
+Colored underlines require terminal support for SGR 58 and Zellij's
+`styled_underlines` option (enabled by default). Terminals without that support
+may show a plain white underline.
+
+The left-hand count and agent numbers sit on the second row; the first row is
+reserved for optional VoxCode status. Green `R` remains static. Yellow **I** and
+red **P** are bold and static by default, in both bar sections and the compact
+sidebar. Set `[dashboard] attention_blink = true` to alternate I with a red `●`
+and P with a yellow `●`; R remains static even with this option enabled.
+Existing configurations that explicitly set `true` retain that preference;
+set it to `false` to disable the animation. Numbers and names stay stationary.
+The reserved left column keeps names and wrapping stationary, even with nine agents.
+
+`Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/statusline, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/statusline preset. Older saved sessions keep the preset defaults. `Alt+d`, then `q`, leaves the previous saved view unchanged.
+
+In the minimal sidebar, slot numbers and agent types use the sandbox profile’s
+foreground color, independently of the status letter. Right-hand status-bar
+names continue to use white text with colored underlines.
+
+With `dashboard.voxcode_enabled=true` (the default), the sidebar uses the full
+available height: the old auxiliary shell/voice pane is omitted, including in
+the restore layout used by Alt+s. Set the option to false to retain the auxiliary
+shell. Legacy `-vox` layouts no longer start a separate VoxCode process; use Alt+v.

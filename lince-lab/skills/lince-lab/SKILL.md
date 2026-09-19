@@ -53,16 +53,30 @@ a **recipe** and the broker decides what that intent is allowed to become.
 6. **Always validate before run.** A failed `validate` (exit 65) tells you the
    exact key/table to fix; do not run an invalid recipe.
 
-## Preconditions to check first
+## Preconditions to check first — the broker is the operator's, not yours
+
+You typically run **inside the agent-sandbox**, which by design has no `/dev/kvm`
+and never owns `limactl`/QEMU. The broker is a **host-side process the human
+operator starts**; you only ever talk to its unix socket. So the **first action of
+any lince-lab session** is to confirm the broker is reachable — and if it is not,
+**ask the operator to start it on the host**. Do not try to start it yourself from
+the sandbox: it cannot work, and the failure looks like a missing `/dev/kvm`.
 
 ```bash
 lince-lab lab doctor          # broker reachable? limactl present?
 ```
 
-If the broker is unreachable, start it: `lince-lab lab broker start &` (host-side;
-add `LINCE_LAB_FAKE=1` to test the whole path with no VM). If `limactl` is
-missing, report that the host needs Lima + `qemu-img` + `/dev/kvm` — do not try to
-work around it.
+If the broker is unreachable, stop and ask the operator to run, **on the host (not
+in the sandbox)**:
+
+```bash
+lince-lab lab broker start &  # host-side; add LINCE_LAB_FAKE=1 for a VM-free dry run
+```
+
+Only when you have confirmed you are running **directly on a KVM-capable host**
+(not sandboxed) may you start the broker yourself. If `limactl` is missing or
+`/dev/kvm` is absent on that host, report that it needs Lima + `qemu-img` +
+`/dev/kvm` — do not try to work around it.
 
 ## Reading the result
 

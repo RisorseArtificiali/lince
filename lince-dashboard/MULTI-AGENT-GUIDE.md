@@ -98,7 +98,12 @@ Claude Code has native hooks that report rich status (tool usage, tokens, subage
 
 The dashboard injects this wrapper automatically for agents with `has_native_hooks = false`. You don't need to do anything.
 
-Codex can also use its native `notify` command hook to emit `idle` when a turn completes. The dashboard install/update scripts configure that automatically when possible.
+Codex uses lifecycle hooks to report `RUNNING`, `INPUT`, `PERMISSION`, and
+`STOPPED`. Dashboard install/update merges Lince handlers into
+`$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`), preserving user hooks.
+Open `/hooks` in Codex to review/trust the handlers, then start a new session.
+The legacy `notify` hook remains a turn-completion fallback; by itself it
+cannot report when work starts. See [Codex troubleshooting](README.md#status-not-updating).
 
 Pi (`@mariozechner/pi-coding-agent`) supports lince's full status protocol via a TypeScript extension installed at `~/.pi/agent/extensions/lince-pi-hook.ts`. The extension subscribes to Pi's `session_start`, `turn_start`, `tool_call`, `turn_end`, and `session_shutdown` events and emits the same JSON status schema the dashboard parses for Claude. As a result Pi runs with `has_native_hooks = true` — current tool name and idle/running transitions appear in real time, identical to Claude Code. The dashboard install/update scripts copy the extension automatically.
 
@@ -248,7 +253,7 @@ For sandboxed agents, `env_unset` is a no-op because `--clearenv` already starts
 | Field | Purpose | Example |
 |-------|---------|---------|
 | `command` | Binary to execute | `"codex"` |
-| `default_args` | Default CLI args | `["--full-auto"]` |
+| `default_args` | Default CLI args | `["-a", "never"]` |
 | `env` | Env vars to set | `{ OPENAI_API_KEY = "$OPENAI_API_KEY" }` |
 | `home_ro_dirs` | Home dirs to mount read-only | `[".codex", ".config/codex"]` |
 | `home_rw_dirs` | Home dirs to mount read-write | `[]` |
@@ -284,7 +289,7 @@ Use `--dry-run` to verify what gets injected:
 
 ```bash
 agent-sandbox run -a codex-bwrap -p ~/project --dry-run
-# Shows: ... codex --full-auto --sandbox danger-full-access
+# Shows: ... codex -a never --sandbox danger-full-access
 ```
 
 ## Status Pipes
@@ -294,7 +299,7 @@ The dashboard now listens on two pipe names:
 | Pipe | Used by | Events |
 |------|---------|--------|
 | `claude-status` | Claude Code (native hooks) | Rich: idle, running, permission, PreToolUse, tokens, subagents |
-| `lince-status` | All other agents (via wrapper) | Lifecycle: start, stopped |
+| `lince-status` | Other agents, including Codex native hooks | Native lifecycle events; `stopped` from the generic wrapper |
 
 Both pipes are active simultaneously. No configuration needed.
 

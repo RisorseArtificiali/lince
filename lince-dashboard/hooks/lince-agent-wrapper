@@ -6,7 +6,7 @@
 #   lince-agent-wrapper <AGENT_ID> <PIPE_NAME> <command> [args...]
 #
 # Example:
-#   lince-agent-wrapper agent-5 lince-status codex --full-auto
+#   lince-agent-wrapper agent-5 lince-status codex -a never
 #
 # On exit: sends {"agent_id":"<AGENT_ID>","event":"stopped"} via zellij pipe
 #

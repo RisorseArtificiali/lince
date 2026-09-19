@@ -1,5 +1,7 @@
 # Configuration Reference
 
+For a guided introduction, see [Views and Themes](dashboard/views-and-themes.md).
+
 Complete reference for all LINCE Dashboard configuration files, keys, and merge behavior.
 
 ## Overview
@@ -23,6 +25,13 @@ Created by `install.sh`. Holds dashboard-wide settings and optional agent type o
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `preset` | string | `"minimal"` | `minimal`, `statusline`, or `classic`; minimal when unspecified. Applied by the launcher. |
+| `voxcode_enabled` | boolean | `true` | Offer on-demand VoxCode when installed. `Alt+v` configures/starts it; no automatic microphone activation. See [Voice input](dashboard/voice-input.md). |
+| `attention_blink` | boolean | `false` | Opt in to alternating I/P with opposite-colored dots in both bar sections and the compact sidebar. By default I/P are bold, static letters; R is always static. |
+| `compact` | boolean | Preset-dependent | Classic inline density only; managed sidebar is compact and popup list is full. |
+| `sidebar_width` | integer | 15 (minimal), 40 (classic) | Sidebar percentage, 10–60; applied at launch. |
+| `pane_frames` | boolean | Preset-dependent | Override frame visibility at launch. |
+| `theme` | string | `"default"` | Inherited Zellij colors, `minimal-mono`, `dracula`, or `gruvbox`. |
 | `default_provider` | string | `""` | Default provider (env-var bundle) for new agents. Empty means no `-P` flag is passed. The legacy spelling `default_profile` is still accepted (gh#81). |
 | `sandbox_config_path` | string | `"~/.agent-sandbox/config.toml"` | Path to sandbox config for provider auto-discovery. |
 | `default_project_dir` | string | `""` | Default working directory for new agents. Empty means the current directory. |
@@ -56,7 +65,12 @@ The plugin checks `config.toml` for changes every 5 seconds and applies them wit
 **Hot-reloadable** (applied immediately):
 
 - `focus_mode`, `status_method`, `max_agents`, `status_file_dir`
-- `agent_layout`, `default_provider`, `default_project_dir`, `default_agent_type`
+- `theme`, `compact`, `voxcode_enabled`, `default_provider`, `default_project_dir`, `default_agent_type`
+
+**New session required**:
+
+- `preset`, `sidebar_width`, `pane_frames` and the session Zellij config
+- Agent layout is selected by the launcher/layout; its plugin override takes precedence over `agent_layout` in TOML.
 
 **Not hot-reloadable** (requires restart, only affects new agents):
 
@@ -72,7 +86,7 @@ Override an existing agent (e.g. change Codex model):
 
 ```toml
 [agents.codex]
-command = ["codex", "--full-auto", "--model", "o4-mini"]
+command = ["codex", "--sandbox", "workspace-write", "-a", "never", "--model", "o4-mini"]
 pane_title_pattern = "codex"
 status_pipe_name = "lince-status"
 display_name = "OpenAI Codex (o4-mini)"
@@ -231,3 +245,95 @@ This means you can safely update `agents-defaults.toml` (via `update.sh`) withou
 - [Sandbox CLI Reference](sandbox/cli-reference.md) -- the `agent-sandbox` command
 - [lince-config CLI](https://github.com/RisorseArtificiali/lince/blob/main/lince-config/README.md) -- structured CLI for reading and editing LINCE configuration
 - [Multi-Agent Guide](https://github.com/RisorseArtificiali/lince/blob/main/lince-dashboard/MULTI-AGENT-GUIDE.md) -- migration guide for multi-agent support
+
+### Dashboard palettes
+
+Set `[dashboard] theme = "dracula"` in `~/.config/lince-dashboard/config.toml`
+(or use `lince-config set dashboard.theme dracula --target dashboard`). Changes
+are picked up by the existing config reload. Unknown names display a warning
+and fall back to `default`. An omitted theme inherits Zellij's active **colors**
+through `ModeUpdate`; the plugin does not need or infer the Zellij theme name.
+
+| Role | Palette entry |
+|---|---|
+| Running / input / permission | Green / yellow / red |
+| Unknown / stopped | Muted gray; labels remain distinct |
+| Headings / project groups | Blue, cycling accent colors |
+| Keys / labels | Cyan accent |
+| Selection / prompts | Accent background, contrasting foreground |
+
+`minimal-mono` uses neutral colors; status labels and selection still identify
+meaning without color. Sandbox color names map through the selected palette.
+The theme affects LINCE UI, not the agent terminal's own colors.
+
+The following terminal captures are generated from the actual Rust renderer
+with deterministic sample agents, using `tests/render-theme-previews.py`:
+
+![Default palette](../../assets/dashboard-theme-default.svg)
+![Minimal mono palette](../../assets/dashboard-theme-minimal-mono.svg)
+![Dracula palette](../../assets/dashboard-theme-dracula.svg)
+![Gruvbox palette](../../assets/dashboard-theme-gruvbox.svg)
+
+### Sidebar density and width
+
+Minimal and statusline use the same managed layout, with the sidebar initially
+visible or hidden respectively. `Alt+s` toggles it at runtime. The sidebar always
+shows global agent numbers, configured type labels (`CLA`, `CDX`, etc.) and status,
+with bold colored project headings. `Alt+d` always opens an expanded, bordered
+list; there is no bare `d` density toggle. `compact` affects only classic inline rendering.
+
+`Alt+i`, `Alt+h` and `Alt+n` open information, help and the creation wizard directly.
+`Alt+q` saves and quits from any pane; `Alt+d`, then `q`, quits without saving.
+All popups draw borders even when `pane_frames = false`. Immediately on opening the wizard, or in selection/review
+steps, `n` jumps to default creation with only the name prompt.
+
+The attention row’s left overview uses state-colored numbers and letters for all
+agents (`1R 2I 3P 4S 5-`); only `I`/`P` contribute to the distinctly colored `!N`.
+On the right, names use the first ten real-name characters without an agent-type prefix
+(`pippo I`), with no automatic-name abbreviation. The white name is underlined using sandbox-level
+colors (red unsandboxed, green normal, yellow permissive, white paranoid/custom),
+while the trailing state letter keeps its state color. Colors follow the UI palette.
+
+`sidebar_width = 15` sets the percentage used by `lince-dashboard-launch` at
+startup (10–60). `--sidebar-width 25` overrides it for one launch. Changing the
+width does not move agent overlays out of alignment: their rectangle follows
+the named viewport, including when panes are resized interactively.
+
+### Presentation presets and Zellij chrome
+
+`lince-dashboard-launch --preset minimal` replaces Zellij's top tab bar and
+bottom keybinding strip with the two-row LINCE attention bar. `--preset statusline`
+also removes the sidebar. `--preset classic` restores the standard bars at the
+next launch; `Alt+h` provides help without permanently showing them.
+Use `[dashboard] preset = "minimal"` to persist the launch choice.
+
+The launcher uses `~/.config/lince-dashboard/zellij.kdl`, independently of your
+global Zellij configuration. Edit that file for LINCE-specific bindings. Install
+and update preserve custom settings and provide new defaults in `zellij.kdl.dist`.
+Previously shipped Alt+h/i/l/n bindings are migrated with a `.kdl.bak-shortcuts` backup.
+`--zellij-config /path/to/config.kdl` explicitly selects another configuration;
+include LINCE's `lince-ui-open`, `lince-sidebar-toggle`, `lince-save-quit`, `focus-agent`, and `cycle-agent` bindings when
+using a custom file. All layout variants are installed and updated together.
+Presentation changes take effect when starting a new session, not by attaching
+to an existing one.
+
+### Minimal defaults and reverting
+
+Fresh installs select `preset = "minimal"`: a compact sidebar, one attention
+row, no pane frames, and simplified Zellij UI. Existing configs without a
+preset are upgraded to `classic`, preserving the old full table and bars.
+Explicit `compact`, `theme`, `sidebar_width` and preset choices remain intact.
+
+To restore frames for one session:
+
+```bash
+lince-dashboard-launch --preset minimal --frames
+```
+
+Or persist `[dashboard] pane_frames = true`. `--preset classic` restores the
+full presentation. The `--no-frames` override works with any preset. These
+options affect new sessions; ordinary Zellij launches use their own config.
+Sandbox identity survives frame removal in the compact row's `!` marker,
+the selected agent's `i` details, and the active agent's statusline label.
+
+`Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/statusline, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/statusline preset. Older saved sessions keep the preset defaults. `Alt+d`, then `q`, leaves the previous saved view unchanged.

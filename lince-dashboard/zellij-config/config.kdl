@@ -1,5 +1,29 @@
 keybinds clear-defaults=true {
+    shared_among "normal" "locked" {
+        // Send LF (Ctrl+J) to the composer even without enhanced keyboard
+        // support inside the pane. The host must distinguish Shift+Enter.
+        bind "Shift Enter" { Write 10; }
+    }
     locked {
+        bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Alt left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Alt right" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Ctrl Shift c" { Copy; }
+        bind "Alt d" { MessagePlugin { name "lince-ui-open"; }; }
+        bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
+        bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
+        bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }
+        bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }
+        bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }
+        bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
+        bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
+        bind "Alt n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
         bind "Ctrl l" { SwitchToMode "normal"; }
     }
     pane {
@@ -134,10 +158,10 @@ keybinds clear-defaults=true {
         }
     }
     shared_except "locked" {
-        bind "Alt left" { MoveFocusOrTab "left"; }
+        bind "Alt left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
         bind "Alt down" { MoveFocus "down"; }
         bind "Alt up" { MoveFocus "up"; }
-        bind "Alt right" { MoveFocusOrTab "right"; }
+        bind "Alt right" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
         bind "Alt +" { Resize "Increase"; }
         bind "Alt -" { Resize "Decrease"; }
         bind "Alt =" { Resize "Increase"; }
@@ -152,6 +176,9 @@ keybinds clear-defaults=true {
                 name "cycle-agent"
                 payload "prev"
             }
+        }
+        bind "Alt d" {
+            MessagePlugin { name "lince-ui-open"; }
         }
         bind "Alt f" { ToggleFloatingPanes; }
         // Alt+1-9: broadcast focus-agent pipe to all running plugins.
@@ -214,12 +241,21 @@ keybinds clear-defaults=true {
             }
         }
         bind "Ctrl l" { SwitchToMode "locked"; }
-        bind "Alt h" { MoveFocusOrTab "left"; }
-        bind "Alt i" { MoveTab "left"; }
-        bind "Alt j" { MoveFocus "down"; }
-        bind "Alt k" { MoveFocus "up"; }
-        bind "Alt l" { MoveFocusOrTab "right"; }
-        bind "Alt n" { NewPane; }
+        bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
+        bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }
+        bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }
+        bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }
+        bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
+        bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
+        bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
+        bind "Alt n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
         bind "Alt o" { MoveTab "right"; }
         bind "Alt p" { TogglePaneInGroup; }
         bind "Alt Shift p" { ToggleGroupMarking; }
@@ -611,3 +647,7 @@ copy_on_select true
 
 // Scrollback buffer
 scroll_buffer_size 10000
+
+// LINCE supplies its own onboarding/help through Alt+d and ?.
+show_startup_tips false
+show_release_notes false

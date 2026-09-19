@@ -1,6 +1,20 @@
 # Lince Dashboard Configuration
 
 [dashboard]
+# Default: compact sidebar and a two-row LINCE attention bar.
+preset = "minimal"
+# Alternate I/P with opposite-colored dots; false keeps the status letters steady
+attention_blink = false
+# Offer VoxCode if installed; microphone is never started automatically
+voxcode_enabled = true
+# Plugin colors: default (inherit Zellij), minimal-mono, dracula, gruvbox
+# theme = "default"
+# Classic inline density; managed sidebar stays compact, popup list stays full
+# compact = true
+# Used by lince-dashboard-launch; restart to change the layout
+# sidebar_width = 15
+# Override preset frame choice (otherwise minimal/statusline=false, classic=true)
+# pane_frames = false
 # Default sandbox profile for new agents (empty = no -P flag)
 # default_profile = ""
 
@@ -52,7 +66,7 @@ sandbox_backend = "auto"
 #
 # Example: override codex to use a custom model
 # [agents.codex]
-# default_args = ["--full-auto", "--model", "o4-mini"]
+# default_args = ["-a", "never", "--model", "o4-mini"]
 #
 # Example: add a custom agent
 # [agents.custom-agent]

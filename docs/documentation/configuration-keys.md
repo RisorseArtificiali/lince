@@ -25,6 +25,7 @@ Filesystem exposure and backend selection.
 | `ro_dirs` | list[string] | `["~/project"]` | Directories with read-only access |
 | `persist_toolchains` | bool | `true` | Persist cargo/npm/go/uv caches between sessions |
 | `auto_expose_path` | bool | `true` | Auto-detect $PATH entries under $HOME and expose them read-only |
+| `expose_x11` | bool | `true` | Expose the active local X11 socket and authentication for image paste; disabled when security.unshare_net is true. Grants display access beyond the clipboard. |
 | `expose_gpu` | bool | `true` | Expose host GPU device nodes (/dev/nvidia*, /dev/dri) inside the bwrap sandbox (#280); ignored at paranoid unless the paranoid fragment itself opts in |
 | `home_ro_dirs` | list[string] | `[".config/gcloud"]` | Extra home subdirectories to expose read-only (relative to $HOME) |
 | `home_rw_dirs` | list[string] | `[]` | Real home subdirectories to mount read-write (relative to $HOME); shadows any isolated toolchain cache in the same subtree (#286) |
@@ -155,6 +156,13 @@ Dashboard behavior and defaults.
 | `sandbox_colors` | table | — | Color per sandbox level (paranoid/normal/permissive/default) |
 | `project_search_roots` | list[string] | — | Roots scanned recursively by the wizard's Tab completion |
 | `project_search_max_depth` | int | `3` | find -maxdepth for project_search_roots |
+| `pane_frames` | bool | — | Override the preset frame choice at launch |
+| `preset` | `"classic"` \| `"minimal"` \| `"statusline"` | `"minimal"` | Presentation preset at launch; independent of theme (minimal when unspecified) |
+| `voxcode_enabled` | bool | `true` | Offer on-demand VoxCode integration when installed; never auto-start the microphone |
+| `attention_blink` | bool | `false` | Alternate I/P with opposite-colored dots in the status bar and compact sidebar |
+| `compact` | bool | `false` | Classic inline density; managed sidebar is always compact and popups are always full |
+| `sidebar_width` | int | `15` | Sidebar width percentage at launch (10-60) |
+| `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | Pool of per-instance marker glyphs (#166); empty disables markers |
 
 ### `[agents.<name>]`
@@ -261,6 +269,13 @@ User intent, versioned, default-deny — design config-v2 §2. Project overlays 
 | `sandbox_colors` | table | — | — |
 | `project_search_roots` | list[string] | — | — |
 | `project_search_max_depth` | int | — | — |
+| `pane_frames` | bool | — | Override the preset frame choice at launch |
+| `preset` | `"classic"` \| `"minimal"` \| `"statusline"` | `"minimal"` | Presentation preset at launch; independent of theme (minimal when unspecified) |
+| `voxcode_enabled` | bool | `true` | Offer on-demand VoxCode integration when installed; never auto-start the microphone |
+| `attention_blink` | bool | `false` | Alternate I/P with opposite-colored dots in the status bar and compact sidebar |
+| `compact` | bool | `false` | Classic inline density; managed sidebar is always compact and popups are always full |
+| `sidebar_width` | int | `15` | Sidebar width percentage at launch (10-60) |
+| `theme` | str | `"default"` | Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox |
 | `instance_icons` | list[string] | — | — |
 
 ### `[experimental]`

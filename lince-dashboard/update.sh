@@ -9,6 +9,9 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/check-zellij.sh
+source "$SCRIPT_DIR/../scripts/check-zellij.sh"
+
 # Pick a backup path that never clobbers an earlier backup, even when two
 # updates run within the same second (timestamp collision → -1, -2, ... suffix).
 unique_backup_path() {
@@ -31,6 +34,8 @@ echo ""
 # Ensure rustup toolchain takes precedence
 export PATH="$HOME/.cargo/bin:$PATH"
 
+check_zellij_version || exit 1
+
 # ── Build ──────────────────────────────────────────────────────────────
 echo -e "${GREEN}[1/8] Building plugin...${NC}"
 if ! "$SCRIPT_DIR/plugin/build.sh"; then
@@ -51,13 +56,8 @@ echo ""
 echo -e "${GREEN}[3/8] Updating layouts...${NC}"
 LAYOUT_DIR="$HOME/.config/zellij/layouts"
 mkdir -p "$LAYOUT_DIR"
-for layout in dashboard.kdl agent-single.kdl agent-multi.kdl; do
-    SRC="$SCRIPT_DIR/layouts/$layout"
-    if [ -f "$SRC" ]; then
-        cp "$SRC" "$LAYOUT_DIR/$layout"
-        echo -e "${GREEN}  ✓ $layout${NC}"
-    fi
-done
+bash "$SCRIPT_DIR/install-ui.sh"
+echo -e "${GREEN}  ✓ All layout variants and launcher updated${NC}"
 echo ""
 
 # ── Config ─────────────────────────────────────────────────────────────

@@ -1076,6 +1076,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+ "unicode-width",
  "zellij-tile",
 ]
 

@@ -324,6 +324,13 @@ LINCE_SCHEMA = {
                 "sandbox_colors": _STR_MAP,
                 "project_search_roots": _STR_LIST,
                 "project_search_max_depth": _INT,
+                "pane_frames": _d(_BOOL, "Override the preset frame choice at launch"),
+                "preset": _d({"type": "string", "enum": ["classic", "minimal", "statusline"]}, "Presentation preset at launch; independent of theme (minimal when unspecified)", "minimal"),
+                "voxcode_enabled": _d(_BOOL, "Offer on-demand VoxCode integration when installed; never auto-start the microphone", True),
+                "attention_blink": _d(_BOOL, "Alternate I/P with opposite-colored dots in the status bar and compact sidebar", False),
+                "compact": _d(_BOOL, "Classic inline density; managed sidebar is always compact and popups are always full", False),
+                "sidebar_width": _d({"type": "integer", "minimum": 10, "maximum": 60}, "Sidebar width percentage at launch (10-60)", 15),
+                "theme": _d(_STR, "Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox", "default"),
                 "instance_icons": _STR_LIST,
             },
             "additionalProperties": False,
@@ -438,6 +445,7 @@ SANDBOX_CONFIG_SCHEMA = {
                                                 "between sessions", True),
                 "auto_expose_path": _d(_BOOL, "Auto-detect $PATH entries under $HOME "
                                               "and expose them read-only", True),
+                "expose_x11": _d(_BOOL, "Expose the active local X11 socket and authentication for image paste; disabled when security.unshare_net is true. Grants display access beyond the clipboard.", default=True),
                 "expose_gpu": _d(_BOOL, "Expose host GPU device nodes "
                                         "(/dev/nvidia*, /dev/dri) inside the "
                                         "bwrap sandbox (#280); ignored at "
@@ -665,6 +673,13 @@ DASHBOARD_CONFIG_SCHEMA = {
                                                       "the wizard's Tab completion"),
                 "project_search_max_depth": _d(_INT, "find -maxdepth for "
                                                      "project_search_roots", 3),
+                "pane_frames": _d(_BOOL, "Override the preset frame choice at launch"),
+                "preset": _d({"type": "string", "enum": ["classic", "minimal", "statusline"]}, "Presentation preset at launch; independent of theme (minimal when unspecified)", "minimal"),
+                "voxcode_enabled": _d(_BOOL, "Offer on-demand VoxCode integration when installed; never auto-start the microphone", True),
+                "attention_blink": _d(_BOOL, "Alternate I/P with opposite-colored dots in the status bar and compact sidebar", False),
+                "compact": _d(_BOOL, "Classic inline density; managed sidebar is always compact and popups are always full", False),
+                "sidebar_width": _d({"type": "integer", "minimum": 10, "maximum": 60}, "Sidebar width percentage at launch (10-60)", 15),
+                "theme": _d(_STR, "Dashboard palette: default (inherit Zellij), minimal-mono, dracula, gruvbox", "default"),
                 "instance_icons": _d(_STR_LIST, "Pool of per-instance marker glyphs "
                                                 "(#166); empty disables markers"),
             },

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# update-codex-hooks.sh — Refresh Codex notify integration.
+# update-codex-hooks.sh — Refresh Codex lifecycle and notify integration.
 
 set -euo pipefail
 

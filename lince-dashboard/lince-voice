@@ -1,0 +1,495 @@
+#!/usr/bin/env python3
+"""LINCE's session-scoped VoxCode adapter: no terminal UI and no clipboard output.
+
+The client uses stdlib Python; the worker runs in VoxCode's installed Python
+runtime and reuses its audio, VAD, transcription and voice-command modules.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import queue
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+import tomllib
+
+CONFIG = Path.home() / ".config/lince-dashboard/voice.json"
+VOX_CONFIG = Path.home() / ".config/voxcode/config.toml"
+
+
+def defaults():
+    data = tomllib.loads(VOX_CONFIG.read_text()) if VOX_CONFIG.exists() else {}
+    return dict(
+        configured=False,
+        mode=data.get("general", {}).get("mode", "ptt"),
+        microphone=str(
+            data.get("audio", {}).get("device") if data.get("audio", {}).get("device") is not None else "default"
+        ),
+        language=data.get("general", {}).get("language", "auto"),
+        model=data.get("whisper", {}).get("model", "small"),
+        device=data.get("whisper", {}).get("device", "cpu"),
+        auto_send=data.get("general", {}).get("auto_send", False),
+    )
+
+
+def validate(settings):
+    if settings["mode"] not in ("ptt", "vad"):
+        raise ValueError("Mode must be ptt or vad")
+    if settings["device"] not in ("cpu", "cuda"):
+        raise ValueError("Compute device must be cpu or cuda")
+    for key in ("microphone", "language", "model"):
+        if not isinstance(settings[key], str) or not settings[key].strip() or len(settings[key]) > 200:
+            raise ValueError(f"Invalid {key}")
+    if not isinstance(settings["auto_send"], bool):
+        raise ValueError("auto_send must be a boolean")
+    return {key: settings[key] for key in defaults()} | {"configured": True}
+
+
+def load_settings():
+    result = defaults()
+    if CONFIG.exists():
+        result = validate(result | json.loads(CONFIG.read_text()))
+    return result
+
+
+def save_settings(settings):
+    settings = validate(settings)
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    import tempfile
+
+    fd, temporary = tempfile.mkstemp(dir=CONFIG.parent, prefix=".voice-")
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(settings, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, CONFIG)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return settings
+
+
+def interpreter():
+    executable = shutil.which("voxcode")
+    if not executable:
+        return sys.executable
+    # pip/uv entry points carry the exact venv interpreter, including symlinks.
+    first = Path(executable).read_text().splitlines()[0]
+    if first.startswith("#!"):
+        words = shlex.split(first[2:])
+        if words and Path(words[0]).name.startswith("python"):
+            return words[0]
+    raise RuntimeError(
+        "Unsupported voxcode launcher; reinstall VoxCode with its installer (pip/uv entry point required)"
+    )
+
+
+class Session:
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.settings = load_settings()
+        self.installed = shutil.which("voxcode") is not None
+        self.status = "stopped"
+        self.level = 0
+        self.error = ""
+        self.buffer = ""
+        self.devices = []
+        self.events = []
+        self.sequence = time.time_ns()
+        self.epoch = 0
+        self.active = False
+        self.muted = False
+        self.recording = False
+        self.ptt_delivery = None
+        self.shutdown = False
+        self.thread = None
+        self.probing = False
+
+    def emit(self, text, delivery=None):
+        if text:
+            if len(self.events) >= 128:
+                raise ValueError("Too many undelivered voice messages; focus a terminal before continuing")
+            self.sequence += 1
+            self.events.append({"sequence": self.sequence, "text": text, **(delivery or {})})
+
+    def fail(self, error):
+        self.error = str(error)
+        self.status = "error"
+        self.active = False
+        self.level = 0
+        self.epoch += 1
+
+    def snapshot(self):
+        return dict(
+            installed=self.installed,
+            settings=self.settings,
+            status=self.status,
+            level=self.level,
+            error=self.error,
+            buffer=self.buffer,
+            devices=self.devices,
+            events=self.events,
+        )
+
+    def request(self, message):
+        with self.lock:
+            self.events = [event for event in self.events if event["sequence"] > message.get("ack", 0)]
+            action = message.get("action", "status")
+            try:
+                if action == "save":
+                    if self.active or (self.thread and self.thread.is_alive()):
+                        raise ValueError("Stop VoxCode before changing configuration")
+                    self.settings = save_settings(message["settings"])
+                    self.error = ""
+                    self.status = "stopped"
+                elif action in ("start", "ptt"):
+                    if not self.installed:
+                        raise ValueError("VoxCode is not installed; install it and restart the dashboard")
+                    if not self.settings["configured"]:
+                        raise ValueError("Select a microphone and save the configuration first")
+                    if action == "ptt" and self.settings["mode"] != "ptt":
+                        raise ValueError("Alt+t / Ctrl+Space is available in PTT mode; use Alt+v for voice activation")
+                    if not self.active:
+                        if self.thread and self.thread.is_alive():
+                            raise ValueError("VoxCode is still stopping; try again shortly")
+                        self.active = True
+                        self.muted = False
+                        self.recording = action == "ptt"
+                        self.error = ""
+                        self.status = "loading"
+                        self.epoch += 1
+                        self.thread = threading.Thread(target=self.run_audio, daemon=True)
+                        self.thread.start()
+                    elif action == "ptt" and not self.muted:
+                        self.recording = not self.recording
+                        if not self.recording:
+                            self.ptt_delivery = dict(pinned=True, target=message.get("target"),
+                                                     submit=bool(message.get("submit", False)))
+                elif action in ("mute", "pause"):
+                    if self.active:
+                        self.muted = not self.muted
+                        self.recording = False
+                        self.epoch += 1  # discard in-flight speech/results when muting
+                        self.level = 0
+                        self.status = "muted" if self.muted else "listening"
+                elif action in ("stop", "shutdown"):
+                    self.active = False
+                    self.recording = False
+                    self.muted = False
+                    self.epoch += 1
+                    self.level = 0
+                    self.status = "stopped"
+                    self.buffer = ""
+                    self.shutdown = True
+                elif action == "send":
+                    self.emit(self.buffer.strip())
+                    self.buffer = ""
+                elif action == "clear":
+                    self.buffer = ""
+                elif action == "devices" and not self.probing:
+                    self.probing = True
+                    threading.Thread(target=self.probe, daemon=True).start()
+                elif action not in ("status", "devices"):
+                    raise ValueError("Unknown voice action")
+            except Exception as error:
+                self.error = str(error)
+            return self.snapshot()
+
+    def probe(self):
+        try:
+            import sounddevice as sd
+
+            devices = [
+                dict(id=str(i), name=d["name"])
+                for i, d in enumerate(sd.query_devices())
+                if d["max_input_channels"] > 0
+            ]
+            with self.lock:
+                self.devices = devices
+        except Exception as error:
+            with self.lock:
+                self.error = f"Microphone discovery: {error}"
+        finally:
+            self.probing = False
+
+    def run_audio(self):
+        audio = None
+        done = threading.Event()
+        try:
+            import numpy as np
+            import sounddevice as sd
+            from voxcode.audio import AudioCapture
+            from voxcode.config import load_config
+            from voxcode.vad import EnergyVAD, VADState
+            from voxcode.commands import parse_transcription, CommandType
+            import voxcode.transcriber as transcription
+
+            cfg = load_config(str(VOX_CONFIG))
+            settings = self.settings.copy()
+            cfg.general.language = settings["language"]
+            cfg.whisper.model = settings["model"]
+            cfg.whisper.device = settings["device"]
+            cfg.whisper.compute_type = "int8" if settings["device"] == "cpu" else "float16"
+            # Support both released VoxCode and its newer transcriber factory.
+            model = (
+                transcription.create_transcriber(cfg)
+                if hasattr(transcription, "create_transcriber")
+                else transcription.Transcriber(
+                    model_size=cfg.whisper.model, device=cfg.whisper.device, compute_type=cfg.whisper.compute_type
+                )
+            )
+            loader = getattr(model, "ensure_loaded", None) or model._ensure_model
+            loader()
+            with self.lock:
+                if not self.active:
+                    return
+            microphone = settings["microphone"]
+            if microphone == "default":
+                device = None
+            elif microphone.isdigit():
+                device = int(microphone)
+            else:
+                matches = [
+                    i
+                    for i, d in enumerate(sd.query_devices())
+                    if d["name"] == microphone and d["max_input_channels"] > 0
+                ]
+                if len(matches) != 1:
+                    raise ValueError("Saved microphone unavailable or ambiguous; select it again with Alt+v")
+                device = matches[0]
+            audio = AudioCapture(sample_rate=16000, device=device)
+            vad = EnergyVAD(
+                threshold=cfg.vad.threshold, silence_duration=cfg.vad.silence_duration, pre_roll=cfg.vad.pre_roll
+            )
+            work = queue.Queue(maxsize=2)
+            results = queue.Queue()
+            outstanding = 0
+
+            def transcribe():
+                while not done.is_set():
+                    try:
+                        epoch, samples, delivery = work.get(timeout=0.1)
+                    except queue.Empty:
+                        continue
+                    try:
+                        results.put((epoch, model.transcribe(samples, settings["language"]), None, delivery))
+                    except Exception as error:
+                        results.put((epoch, None, error, delivery))
+
+            threading.Thread(target=transcribe, daemon=True).start()
+            frames = []
+            stream_open = False
+            previous_epoch = self.epoch
+            while self.active:
+                with self.lock:
+                    epoch, muted, recording = self.epoch, self.muted, self.recording
+                if previous_epoch != epoch:
+                    frames.clear()
+                    vad.reset()
+                    previous_epoch = epoch
+                if muted:
+                    if stream_open:
+                        audio.stop()
+                        stream_open = False
+                    time.sleep(0.05)
+                    continue
+                if not stream_open:
+                    # Drop buffered audio from before muting, never replay it.
+                    while not audio.audio_queue.empty():
+                        audio.audio_queue.get_nowait()
+                    audio.start()
+                    stream_open = True
+                try:
+                    frame = audio.get_frame(timeout=0.1)
+                except queue.Empty:
+                    continue
+                samples = None
+                with self.lock:
+                    if not self.active:
+                        break
+                    if self.muted or epoch != self.epoch:
+                        continue
+                    recording = self.recording
+                    delivery = self.ptt_delivery if settings["mode"] == "ptt" else None
+                    self.level = min(6, max(0, round(AudioCapture.get_level(frame) * 60)))
+                    self.status = "recording" if recording else ("transcribing" if outstanding else "listening")
+                if settings["mode"] == "ptt":
+                    if recording:
+                        frames.append(frame)
+                        if sum(len(f) for f in frames) > 16000 * 120:
+                            raise ValueError("Recording limit reached (120 seconds); start a new recording")
+                    elif frames:
+                        samples = np.concatenate(frames)
+                        frames.clear()
+                else:
+                    _, samples = vad.process_frame(frame)
+                    if vad.state == VADState.SPEECH:
+                        self.status = "recording"
+                if samples is not None and len(samples):
+                    work.put_nowait((epoch, samples, delivery))
+                    outstanding += 1
+                    self.status = "transcribing"
+                while not results.empty():
+                    result_epoch, result, error, delivery = results.get_nowait()
+                    outstanding = max(0, outstanding - 1)
+                    with self.lock:
+                        if result_epoch != self.epoch or not self.active or self.muted:
+                            continue
+                        if error:
+                            raise error
+                        parsed = parse_transcription(
+                            result.text, prefix=cfg.commands.prefix, enabled=cfg.commands.enabled
+                        )
+                        if parsed.is_command:
+                            if parsed.command == CommandType.SEND:
+                                self.emit(self.buffer.strip(), delivery)
+                                self.buffer = ""
+                            elif parsed.command == CommandType.CANCEL:
+                                self.buffer = ""
+                            elif parsed.command == CommandType.PAUSE:
+                                self.request({"action": "mute"})
+                        else:
+                            if len(self.buffer) + len(parsed.text) > 65536:
+                                raise ValueError("Voice buffer is full; insert or clear it")
+                            self.buffer += (" " if self.buffer else "") + parsed.text
+                            if settings["auto_send"] or delivery is not None:
+                                self.emit(self.buffer.strip(), delivery)
+                                self.buffer = ""
+            done.set()
+        except Exception as error:
+            with self.lock:
+                self.fail(error)
+        finally:
+            done.set()
+            if audio:
+                audio.stop()
+            # The process releases the model on stop: manager starts a fresh
+            # worker next time, with persisted settings and microphone closed.
+            if self.status == "stopped":
+                self.shutdown = True
+
+
+def receive(connection):
+    data = b""
+    while b"\n" not in data:
+        block = connection.recv(65536)
+        if not block:
+            break
+        data += block
+        if len(data) > 1024 * 1024:
+            raise ValueError("Voice message too large")
+    return json.loads(data)
+
+
+def serve(path, controller="0"):
+    session = Session()
+
+    # Suppressed Zellij plugins may stop receiving timer events. A small wake
+    # pipe keeps delivery and the lease alive even when both UI bars are hidden.
+    def wake_controller():
+        while not session.shutdown:
+            time.sleep(1)
+            if session.shutdown:
+                break
+            if not session.active and not session.error:
+                continue
+            try:
+                subprocess.run(
+                    ["zellij", "pipe", "--name", "lince-voice-wake", "--", controller],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+
+    if os.environ.get("ZELLIJ_SESSION_NAME"):
+        threading.Thread(target=wake_controller, daemon=True).start()
+    last_request = time.monotonic()
+    with socket.socket(socket.AF_UNIX) as server:
+        server.bind(str(path))
+        server.listen(4)
+        server.settimeout(1)
+        try:
+            while not session.shutdown and time.monotonic() - last_request < 20:
+                try:
+                    connection, _ = server.accept()
+                except TimeoutError:
+                    continue
+                with connection:
+                    connection.settimeout(3)
+                    response = session.request(receive(connection))
+                    connection.sendall((json.dumps(response) + "\n").encode())
+                    last_request = time.monotonic()
+        finally:
+            session.request({"action": "shutdown"})
+            path.unlink(missing_ok=True)
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--worker", type=Path)
+    parser.add_argument("--controller", default="0")
+    parser.add_argument("--request", default='{"action":"status"}')
+    args = parser.parse_args()
+    if args.worker:
+        serve(args.worker, args.controller)
+        return
+    name = os.environ.get("ZELLIJ_SESSION_NAME", "standalone") + ":" + args.controller
+    digest = hashlib.sha256(name.encode()).hexdigest()[:24]
+    root = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"lince-voice-{os.getuid()}"
+    root.mkdir(mode=0o700, exist_ok=True)
+    if root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
+        raise RuntimeError("Voice runtime directory must be private to the current user")
+    path = root / (digest + ".sock")
+    with (root / (digest + ".lock")).open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for attempt in range(40):
+            try:
+                with socket.socket(socket.AF_UNIX) as client:
+                    client.settimeout(3)
+                    client.connect(str(path))
+                    client.sendall((args.request + "\n").encode())
+                    print(json.dumps(receive(client)))
+                    return
+            except (FileNotFoundError, ConnectionRefusedError):
+                if attempt == 0:
+                    path.unlink(missing_ok=True)
+                    subprocess.Popen(
+                        [
+                            interpreter(),
+                            str(Path(__file__).resolve()),
+                            "--worker",
+                            str(path),
+                            "--controller",
+                            args.controller,
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                        close_fds=True,
+                    )
+                time.sleep(0.05)
+    raise RuntimeError("VoxCode worker failed to start; check its installation and voice configuration")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        print(json.dumps({"error": str(error)}))
+        sys.exit(1)

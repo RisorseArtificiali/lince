@@ -6,6 +6,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}   LINCE Dashboard — Uninstaller${NC}"
@@ -23,6 +24,7 @@ PLUGIN="$HOME/.config/zellij/plugins/lince-dashboard.wasm"
 if [ -f "$PLUGIN" ]; then
     echo -e "${YELLOW}Found: $PLUGIN${NC}"
     if confirm "  Remove plugin?"; then
+        bash "$SCRIPT_DIR/../lince-messages/uninstall.sh"
         rm -f "$PLUGIN" "${PLUGIN}.bak."* 2>/dev/null
         echo -e "${GREEN}  ✓ Removed${NC}"
     fi
@@ -33,7 +35,7 @@ echo ""
 
 # ── Layouts ────────────────────────────────────────────────────────────
 LAYOUT_DIR="$HOME/.config/zellij/layouts"
-LAYOUTS=("dashboard.kdl" "agent-single.kdl" "agent-multi.kdl")
+LAYOUTS=("dashboard.kdl" "dashboard-vox.kdl" "dashboard-tiled.kdl" "dashboard-tiled-vox.kdl" "dashboard-statusline.kdl" "agent-single.kdl" "agent-multi.kdl")
 FOUND_LAYOUTS=()
 for l in "${LAYOUTS[@]}"; do
     [ -f "$LAYOUT_DIR/$l" ] && FOUND_LAYOUTS+=("$l")
@@ -91,6 +93,11 @@ fi
 echo ""
 
 # ── Agent wrapper ─────────────────────────────────────────────────────
+if [ -f "$HOME/.local/bin/lince-dashboard-launch" ]; then
+    if confirm "  Remove LINCE presentation launcher?"; then
+        rm -f "$HOME/.local/bin/lince-dashboard-launch"
+    fi
+fi
 WRAPPER="$HOME/.local/bin/lince-agent-wrapper"
 if [ -f "$WRAPPER" ]; then
     echo -e "${YELLOW}Found: $WRAPPER${NC}"
@@ -218,7 +225,7 @@ fi
 echo ""
 
 # ── Codex notify in config.toml ────────────────────────────────────────
-CODEX_CONFIG="$HOME/.codex/config.toml"
+CODEX_CONFIG="${CODEX_HOME:-$HOME/.codex}/config.toml"
 CODEX_BLOCK_START="# >>> LINCE Dashboard Codex notify >>>"
 CODEX_BLOCK_END="# <<< LINCE Dashboard Codex notify <<<"
 if [ -f "$CODEX_CONFIG" ]; then
@@ -242,6 +249,14 @@ else
 fi
 echo ""
 
+CODEX_HOOKS="${CODEX_HOME:-$HOME/.codex}/hooks.json"
+if [ -f "$CODEX_HOOKS" ] && grep -Fq 'codex-status-hook.sh' "$CODEX_HOOKS"; then
+    if confirm "  Remove Lince Codex lifecycle handlers from $CODEX_HOOKS?"; then
+        python3 "$SCRIPT_DIR/hooks/codex-hooks-config.py" "$CODEX_HOOKS" --remove
+        echo -e "${GREEN}  ✓ Removed Lince handlers (other hooks preserved)${NC}"
+    fi
+fi
+
 # ── Shell aliases ────────────────────────────────────────────────
 ALIAS_REMOVED=false
 for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
@@ -252,6 +267,9 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
             sed -i '/# LINCE aliases/d' "$rc"
             sed -i '/alias lince=/d' "$rc"
             sed -i '/alias lince-floating=/d' "$rc"
+            sed -i '/alias lince-classic=/d' "$rc"
+            sed -i '/alias lince-minimal=/d' "$rc"
+            sed -i '/alias lince-statusline=/d' "$rc"
             
             
             sed -i '/alias zd=/d' "$rc"
@@ -281,6 +299,18 @@ if [ -n "$STATUS_FILES" ] || [ "$STATUS_DIR_EXISTS" = true ]; then
     fi
 fi
 echo ""
+
+
+if [ -f "$HOME/.local/bin/lince-voice" ]; then
+    if confirm "Remove VoxCode dashboard adapter?"; then
+        rm -f "$HOME/.local/bin/lince-voice"
+    fi
+fi
+if [ -f "$HOME/.config/lince-dashboard/voice.json" ]; then
+    if confirm "Remove saved VoxCode dashboard settings?"; then
+        rm -f "$HOME/.config/lince-dashboard/voice.json"
+    fi
+fi
 
 # ── Done ───────────────────────────────────────────────────────────────
 echo -e "${BLUE}================================================${NC}"

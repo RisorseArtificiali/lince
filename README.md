@@ -12,26 +12,11 @@ A toolkit that turns your terminal into a multi-agent engineering workstation �
 
 ## The Dashboard
 
-The primary way to use LINCE is the **TUI Dashboard** — a Zellij WASM plugin that acts as a command center for multiple Claude Code agents.
+The primary way to use LINCE is the **TUI Dashboard** — a Zellij WASM plugin that acts as a command center for multiple AI coding agents.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  LINCE Dashboard                                        │
-│ ┌───┬────────────┬──────────┬────────┬───────┐          │
-│ │ # │ Name       │ Status   │Profile │Project│          │
-│ ├───┼────────────┼──────────┼────────┼───────┤          │
-│ │ 1 │ backend    │ Running  │ vertex │ api/  │          │
-│ │>2 │ frontend   │ INPUT    │        │ web/  │          │
-│ │ 3 │ tester     │   -      │ zai    │ tests/│          │
-│ └───┴────────────┴──────────┴────────┴───────┘          │
-├───────────────────────┬─────────────────────────────────┤
-│                       │                                 │
-│   VoxCode             │   Shell                         │
-│   Voice input →       │                                 │
-│   relayed to agents   │                                 │
-│                       │                                 │
-└───────────────────────┴─────────────────────────────────┘
-```
+New installations use a compact sidebar and a two-row attention bar. Choose a
+statusline-only view or restore the full table with a preset; colors are independent.
+See [Views and Themes](https://lince.sh/documentation/#/dashboard/views-and-themes).
 
 What the dashboard gives you:
 
@@ -50,7 +35,7 @@ For a detailed step-by-step guide with scenarios (Mini/Full/Custom), troubleshoo
 ### Prerequisites
 
 - **Linux** (tested on Fedora 43, works on Ubuntu/Debian/Arch)
-- **Zellij** >= 0.40
+- **Zellij** >= 0.45.1
 - **Claude Code** (`npm install -g @anthropic-ai/claude-code`)
 - **bubblewrap** (`sudo dnf install bubblewrap` / `sudo apt install bubblewrap`)
 - **Rust** with `wasm32-wasip1` target (for building the dashboard plugin)
@@ -124,6 +109,14 @@ The multi-agent TUI dashboard — a Zellij WASM plugin (Rust, ~900 KB) that mana
 
 Documentation: [Usage Guide](https://lince.sh/documentation/#/dashboard/usage-guide) | [Configuration](https://lince.sh/documentation/#/dashboard/config-reference) | [Agent Examples](https://lince.sh/documentation/#/dashboard/agent-examples)
 
+### [lince-messages/](lince-messages/)
+
+Host-controlled peer messaging and delegation for existing agent panes, with a
+durable mailbox, restricted `lince-msg` CLI, status-line provenance and Alt+d
+controls. Original agent TUIs are preserved. See the [operator guide](docs/agent-messaging.md)
+and [validation ledger](docs/agent-messaging-validation.md) for version-specific
+capabilities and outstanding real-agent/platform checks.
+
 ### [lince-config/](lince-config/)
 
 Structured CLI for reading and editing LINCE configuration files (`~/.agent-sandbox/config.toml` and `~/.config/lince-dashboard/config.toml`). Preserves comments and formatting via `tomlkit`. Installed to `~/.local/bin/lince-config`.
@@ -157,3 +150,14 @@ An [agentskills.io](https://agentskills.io)-compliant skill for natural-language
 ## License
 
 MIT
+
+### Dashboard presentation
+
+New installs use a minimal dashboard: compact sidebar, no frames, and a
+two-row status bar. `lince-dashboard-launch --preset classic` restores the full
+presentation; `--preset statusline` uses an on-demand menu with no sidebar.
+`--frames` restores pane frames. `Alt+d` opens the expanded list, `Alt+i` information, `Alt+h` help, and `Alt+n`
+the wizard. `Alt+s` toggles the 15% sidebar and `Alt+b` cycles the status bar: hidden → left summary → full → agents only in either managed preset. `Alt+q` saves
+agents, sidebar visibility and the status bar mode for the next launch, then quits; `Alt+d`, then `q`, quits without saving.
+See the [presentation settings](docs/documentation/dashboard/config-reference.md)
+and [epic #312 smoke tests](docs/design/dashboard-312-smoke-tests.md).
