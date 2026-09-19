@@ -165,6 +165,19 @@ unshare_pid = true
 # May interfere with Ctrl+C propagation. Disable if you have issues.
 new_session = false
 
+# Graceful Ctrl+C: when true (default), the first Ctrl+C while the agent
+# is working does NOT terminate the sandbox. agent-sandbox forwards
+# SIGINT into it (the sandbox runs in its own session and never sees the
+# terminal's signal) and the agent is expected to handle it — e.g. cancel
+# the current LLM request and return to the prompt; every press is
+# acknowledged with a hint. A second Ctrl+C within 3 seconds forces
+# termination (SIGTERM → SIGKILL). Requires /proc (Linux); elsewhere this
+# falls back to terminating the sandbox on the first press.
+# Set to false to terminate the sandbox on the first Ctrl+C (SIGINT →
+# SIGTERM → SIGKILL escalation; an agent that catches SIGINT can take a
+# few seconds to die).
+graceful_interrupt = true
+
 # Block git push via a wrapper script
 block_git_push = true
 
