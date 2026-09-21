@@ -58,6 +58,23 @@ impl Snapshot {
         format!("{prefix}-{suffix} ")
     }
 }
+/// Build the paste-safe payload and submit byte for a voice delivery (#379).
+///
+/// Trailing CR/LF are stripped (a leaked newline is a literal Ctrl+J in
+/// multiline composers), the text is wrapped in a bracketed paste so internal
+/// newlines stay prompt text — the same mechanism the agent messaging
+/// transport uses — and the submit is a real Enter (CR, byte 13) sent after
+/// the paste-end sequence. Returns `None` when there is nothing to deliver.
+pub fn voice_delivery(text: &str, submit: bool) -> Option<(String, Option<Vec<u8>>)> {
+    let cleaned = text.trim_end_matches(['\r', '\n']);
+    if cleaned.trim().is_empty() {
+        return None;
+    }
+    let payload = format!("\x1b[200~{cleaned}\x1b[201~");
+    let enter = if submit { Some(vec![b'\r']) } else { None };
+    Some((payload, enter))
+}
+
 #[derive(Default)]
 pub struct Voice {
     pub open: bool,
@@ -170,5 +187,27 @@ mod tests {
         voice.edit_key(&KeyWithModifier::new(BareKey::Right));
         assert_eq!(voice.draft.mode, "vad");
         assert!(voice.dirty);
+    }
+    #[test]
+    fn voice_delivery_strips_trailing_newlines_and_submits_cr() {
+        let (payload, enter) = voice_delivery("fix the bug\n", true).unwrap();
+        assert_eq!(payload, "\x1b[200~fix the bug\x1b[201~");
+        assert_eq!(enter, Some(vec![b'\r']));
+    }
+    #[test]
+    fn voice_delivery_keeps_internal_newlines_inside_the_paste() {
+        let (payload, enter) = voice_delivery("line one\nline two\r\n", true).unwrap();
+        assert_eq!(payload, "\x1b[200~line one\nline two\x1b[201~");
+        assert_eq!(enter, Some(vec![b'\r']));
+    }
+    #[test]
+    fn voice_delivery_insert_only_sends_no_enter() {
+        let (_, enter) = voice_delivery("note to self", false).unwrap();
+        assert_eq!(enter, None);
+    }
+    #[test]
+    fn voice_delivery_empty_or_whitespace_delivers_nothing() {
+        assert!(voice_delivery(" \n \r ", true).is_none());
+        assert!(voice_delivery("", true).is_none());
     }
 }
