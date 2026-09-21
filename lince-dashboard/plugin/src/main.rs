@@ -2281,7 +2281,14 @@ impl State {
             return;
         };
 
-        write_chars_to_pane_id(text, PaneId::Terminal(pid));
+        // A voxcode "send" means the user wants it gone: same paste-safe
+        // delivery as the managed voice path, always with a final Enter (#379).
+        if let Some((payload, enter)) = voice::voice_delivery(text, true) {
+            write_chars_to_pane_id(&payload, PaneId::Terminal(pid));
+            if let Some(bytes) = enter {
+                write_to_pane_id(bytes, PaneId::Terminal(pid));
+            }
+        }
 
         // Show the agent pane after delivering text
         if pane_manager::focus_agent(
@@ -3185,9 +3192,11 @@ impl State {
             };
             return false;
         }
-        write_chars_to_pane_id(&event.text, PaneId::Terminal(id));
-        if event.submit && !event.text.trim().is_empty() {
-            write_to_pane_id(vec![b'\r'], PaneId::Terminal(id));
+        if let Some((payload, enter)) = voice::voice_delivery(&event.text, event.submit) {
+            write_chars_to_pane_id(&payload, PaneId::Terminal(id));
+            if let Some(bytes) = enter {
+                write_to_pane_id(bytes, PaneId::Terminal(id));
+            }
         }
         true
     }
