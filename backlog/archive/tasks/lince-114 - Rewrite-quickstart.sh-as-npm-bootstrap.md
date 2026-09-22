@@ -4,14 +4,12 @@ title: Rewrite quickstart.sh as npm bootstrap
 status: To Do
 assignee: []
 created_date: '2026-05-11 15:00'
-updated_date: '2026-05-11 15:01'
+updated_date: '2026-09-19 13:35'
 labels:
   - enhancement
   - epic-97
 milestone: m-14
-dependencies:
-  - LINCE-112
-  - LINCE-113
+dependencies: []
 references:
   - 'https://github.com/RisorseArtificiali/lince/issues/105'
   - 'https://github.com/RisorseArtificiali/lince/issues/97'
