@@ -173,17 +173,42 @@ plugin did not remember a target and opened the popup with
 message. Focusing the shell and reopening `Alt+v` delivered it, as documented.
 The problem did not occur once any popup had been opened and closed first.
 
+### 6. Physical Option key in Terminal.app — PASS
+
+`tests/macos-option-key-check.py` opens the same disposable session as the UI
+harness in a real Terminal.app window (profile *Basic*, *Use Option as Meta
+key* on, which is the default) and presses the shortcuts through macOS
+System Events, so Terminal.app's own Option translation produces the bytes
+Zellij sees. Result on this machine, 2026-09-22, after merging `main`:
+
+| Real key event | Result |
+|---|---|
+| `Option+v` opens the voice popup | PASS |
+| `s` saves, `a` starts listening, `Esc` closes the popup | PASS |
+| `Option+m` mutes, `Option+m` unmutes | PASS |
+| `Option+t` starts PTT, `Option+t` stops it | PASS |
+| `Option+v` then `x` stops the worker | PASS |
+| `Option+h` opens help, `Esc` closes it | PASS |
+
+Not covered by this run: Orca (the terminal used for everything else; it
+has no way to open a window on a given command from a script), iTerm2,
+Ghostty, kitty and WezTerm, none of which are installed here.
+
 ## Not verified (needs a person at the keyboard)
 
-- Terminal-specific Option-as-Meta handling: the scripted runs inject the
-  `Esc`-prefixed / CSI-u sequences directly, so `Alt+v`, `Alt+t`, `Alt+m` and the other
-  `Alt` shortcuts were not exercised through a physical Option key in Orca,
-  Terminal.app, iTerm2, Ghostty, kitty or WezTerm.
+- Option-as-Meta through a physical Option key in Orca, iTerm2, Ghostty,
+  kitty and WezTerm (Terminal.app: see section 6; the scripted runs inject the
+  `Esc`-prefixed / CSI-u sequences directly).
 - `Ctrl+Space` conflict with the macOS *Select the previous input source*
-  shortcut when it is enabled (it was disabled on this machine).
+  shortcut. On this machine the shortcut is disabled and only one keyboard
+  layout is enabled, so reproducing it needs a second input source plus the
+  system shortcut turned on, both user-level settings changes.
 - First-run microphone permission prompt for a terminal app without prior
   Microphone access, and the behaviour when access is denied (expected: level
-  meter stays at zero, no text).
+  meter stays at zero, no text). Terminal.app and Orca already hold Microphone
+  access here (`AVCaptureDevice.authorizationStatus` = authorized), so the
+  prompt only reappears after `tccutil reset Microphone <bundle id>` and a
+  click on the dialog.
 - Intel Macs and the `voxcode` standalone UI.
 
 Metal/MPS is not a pending check but a stack limitation: VoxCode transcribes
