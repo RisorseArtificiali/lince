@@ -33,14 +33,14 @@ def presentation_layout(text: str, preset: str, compact: bool, tiled: bool, voxc
     if preset != "classic":
         text = re.sub(r"    default_tab_template \{.*?\n    \}\n",
                       lambda _: ATTENTION_TEMPLATE, text, count=1, flags=re.S)
-    # Minimal and statusline share the same sidebar/controller and passive popup.
+    # Minimal and side-pane share the same sidebar/controller and passive popup.
     managed = preset != "classic"
     text = text.replace('config_path "~/.config/lince-dashboard/config.toml"',
         'config_path "~/.config/lince-dashboard/config.toml"\n'
         f'                    compact "{str(compact).lower()}"\n'
         f'                    presentation "{"managed" if managed else "classic"}"\n'
-        f'                    agent_borderless "{str(preset == "minimal").lower()}"\n'
-        f'                    sidebar_visible "{str(preset != "statusline").lower()}"\n'
+        f'                    agent_borderless "{str(managed).lower()}"\n'
+        f'                    sidebar_visible "{str(preset == "side-pane").lower()}"\n'
         f'                    agent_layout "{"tiled" if tiled else "floating"}"')
     closing = text.rfind("    }\n}")
     if managed:
@@ -76,7 +76,7 @@ def presentation_layout(text: str, preset: str, compact: bool, tiled: bool, voxc
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--layout", choices=["dashboard", "dashboard-vox", "dashboard-tiled", "dashboard-tiled-vox", "dashboard-statusline"], default="dashboard-tiled")
-    parser.add_argument("--preset", choices=["classic", "minimal", "statusline"])
+    parser.add_argument("--preset", choices=["classic", "minimal", "side-pane"])
     parser.add_argument("--sidebar-width", type=int)
     parser.add_argument("--frames", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--config", "--zellij-config", dest="zellij_config", type=Path)
@@ -85,10 +85,10 @@ def main() -> int:
     config_path = Path.home() / ".config/lince-dashboard/config.toml"
     config = tomllib.loads(config_path.read_text()).get("dashboard", {}) if config_path.exists() else {}
     preset = args.preset or config.get("preset", "minimal")
-    if preset not in ("classic", "minimal", "statusline"):
+    if preset not in ("classic", "minimal", "side-pane"):
         raise ValueError(f"unknown dashboard preset: {preset}")
     if args.layout == "dashboard-statusline":
-        preset = "statusline"
+        preset = "minimal"
     layout_name = "dashboard-tiled" if args.layout == "dashboard-statusline" else args.layout
     width = args.sidebar_width if args.sidebar_width is not None else config.get("sidebar_width", 40 if preset == "classic" else 15)
     layouts = Path.home() / ".config/zellij/layouts"
@@ -98,7 +98,7 @@ def main() -> int:
         source = Path(__file__).resolve().parent / "layouts" / f"{source_name}.kdl"
     text = sidebar_layout(source.read_text(), width)
     text = presentation_layout(text, preset, config.get("compact", preset != "classic"),
-                               "tiled" in layout_name or preset == "statusline", config.get("voxcode_enabled", True))
+                               "tiled" in layout_name or preset == "minimal", config.get("voxcode_enabled", True))
     frames = args.frames if args.frames is not None else config.get("pane_frames", preset == "classic")
     if not isinstance(frames, bool):
         raise ValueError("pane_frames must be a boolean")

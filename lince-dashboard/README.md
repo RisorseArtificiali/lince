@@ -4,21 +4,21 @@ Multi-agent TUI dashboard for managing AI coding agents in [Zellij](https://zell
 
 ## Overview
 
-New installs use a compact sidebar and a two-row attention bar, with pane frames
-and standard Zellij bars hidden. Choose the presentation independently of colors:
+New installs use the two-row attention bar with the sidebar hidden. Choose the
+presentation independently of colors:
 
 ```bash
-lince-dashboard-launch --preset minimal     # compact sidebar
-lince-dashboard-launch --preset statusline  # two rows; Alt+d opens the controller
+lince-dashboard-launch --preset minimal     # two rows; Alt+d opens the controller
+lince-dashboard-launch --preset side-pane   # compact sidebar plus attention bar
 lince-dashboard-launch --preset classic     # full table and standard bars
 ```
 
 Configurations without a preset use `minimal`, including on update. `Alt+d` opens
 the expanded list, `Alt+i` opens details, and `Alt+h` opens help in bordered popups.
-`Alt+s` toggles the 15% sidebar; `Alt+b` cycles the status bar: hidden → left summary → full → agents only; `Alt+n` opens the wizard (then `n` for defaults/name only). The bottom
+`Alt+s` toggles the 15% sidebar; `Alt+b` cycles the status bar: hidden → left summary → full → agents only; `Alt+n` opens the wizard and `Alt+N` creates with defaults/name only. The bottom
 bar identifies waiting agents and sandbox levels by color even without frames.
 `Alt+q` saves agents, sidebar visibility and status bar mode for the next launch
-in the same project; `Alt+d`, then `q`, leaves the previous saved state unchanged.
+in the same project; `Alt+Q` leaves the previous saved state unchanged from any pane.
 See [Views and Themes](https://lince.sh/documentation/#/dashboard/views-and-themes)
 for palettes, width, frame overrides and session configuration.
 
@@ -78,36 +78,38 @@ rustup target add wasm32-wasip1
 
 ## Quick Start
 
-Press `n` to spawn an agent (quick name prompt), or `N` for the full wizard (type, name, profile, directory).
+Press `n` for the full wizard (type, directory, name, sandbox and provider), or `N` to spawn with defaults after a name prompt.
 
 | Key | Action |
 |-----|--------|
-| `n` | Spawn agent with name prompt |
-| `N` | Open creation wizard |
+| `n` | Open creation wizard |
+| `N` | Spawn agent with defaults and name prompt |
 | `f` / `Enter` | Focus agent pane |
 | `h` / `Esc` | Hide agent pane |
 | `j` / `k` | Navigate agent list |
 | `i` | Toggle details; PageUp/PageDown scroll |
 | `Alt+d` | Detailed agent list popup from any pane |
 | `Alt+i` / `Alt+h` | Information / help popup |
-| `Alt+s` | Toggle sidebar (minimal/statusline) |
+| `Alt+s` | Toggle sidebar (minimal/side-pane) |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order (also in locked mode) |
 | `Alt+x` | Kill focused agent and focus the next agent, if any |
 | `Alt+r` | Rename focused agent from any pane |
-| `Alt+b` | Cycle status bar: hidden → left summary → full → agents only (minimal/statusline) |
+| `Alt+b` | Cycle status bar: hidden → left summary → full → agents only (minimal/side-pane) |
 | `Alt+n` | Creation wizard |
+| `Alt+N` | Create with defaults and name prompt |
 | `Alt+1`–`Alt+9` | Focus agent from any pane |
 | `s` | Relay last message to another agent |
 | `S` | Relay N messages (prompt for count) |
 | `x` | Kill agent |
-| `Alt+q` / `Q` | Save state & quit (`Alt+q` from any pane) |
-| `Alt+d`, then `q` | Quit without saving |
+| `Alt+q` | Save state and quit from any pane |
+| `Alt+Q` | Quit without saving from any pane |
 | `?` | Help overlay |
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| **[Keyboard Reference](https://lince.sh/documentation/#/dashboard/keyboard-reference)** | All dashboard shortcuts in Help-pane order, with context and details |
 | **[Usage Guide](https://lince.sh/documentation/#/dashboard/usage-guide)** | Keybindings, wizard, features, voice relay |
 | **[Configuration Reference](https://lince.sh/documentation/#/dashboard/config-reference)** | Dashboard config.toml and agents-defaults.toml |
 | **[Agent Examples](https://lince.sh/documentation/#/dashboard/agent-examples)** | Default agents, custom agents, multi-provider setups |
@@ -210,6 +212,6 @@ A trailing backslash is not a portable multiline shortcut for Codex.
 - Check an agent is selected/focused in the dashboard
 - Ensure VoxCode has `use_pipe = true` in its `[zellij]` config section
 
-The installer asks for a preset with descriptions and a documentation link; Enter selects `minimal`. Quickstart asks only once, and `--defaults` uses `minimal`. For unattended preset selection, set `LINCE_DASHBOARD_PRESET=minimal`, `statusline`, or `classic`. The selected preset is saved in the dashboard config.
+The installer asks for a preset with descriptions and a documentation link; Enter selects `minimal`. Quickstart asks only once, and `--defaults` uses `minimal`. For unattended preset selection, set `LINCE_DASHBOARD_PRESET=minimal`, `side-pane`, or `classic`. The selected preset is saved in the dashboard config.
 
 Voice input is available on demand with `Alt+v`, mute/unmute with `Alt+m`, and PTT with `Alt+t` / `Ctrl+Space`, without a permanent pane. Settings persist; the microphone starts only on request. See [Voice input](https://lince.sh/documentation/#/dashboard/voice-input).

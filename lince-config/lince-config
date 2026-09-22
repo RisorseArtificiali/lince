@@ -325,7 +325,7 @@ LINCE_SCHEMA = {
                 "project_search_roots": _STR_LIST,
                 "project_search_max_depth": _INT,
                 "pane_frames": _d(_BOOL, "Override the preset frame choice at launch"),
-                "preset": _d({"type": "string", "enum": ["classic", "minimal", "statusline"]}, "Presentation preset at launch; independent of theme (minimal when unspecified)", "minimal"),
+                "preset": _d({"type": "string", "enum": ["classic", "minimal", "side-pane"]}, "Presentation preset at launch; independent of theme (minimal when unspecified)", "minimal"),
                 "voxcode_enabled": _d(_BOOL, "Offer on-demand VoxCode integration when installed; never auto-start the microphone", True),
                 "attention_blink": _d(_BOOL, "Alternate I/P with opposite-colored dots in the status bar and compact sidebar", False),
                 "compact": _d(_BOOL, "Classic inline density; managed sidebar is always compact and popups are always full", False),
@@ -674,7 +674,7 @@ DASHBOARD_CONFIG_SCHEMA = {
                 "project_search_max_depth": _d(_INT, "find -maxdepth for "
                                                      "project_search_roots", 3),
                 "pane_frames": _d(_BOOL, "Override the preset frame choice at launch"),
-                "preset": _d({"type": "string", "enum": ["classic", "minimal", "statusline"]}, "Presentation preset at launch; independent of theme (minimal when unspecified)", "minimal"),
+                "preset": _d({"type": "string", "enum": ["classic", "minimal", "side-pane"]}, "Presentation preset at launch; independent of theme (minimal when unspecified)", "minimal"),
                 "voxcode_enabled": _d(_BOOL, "Offer on-demand VoxCode integration when installed; never auto-start the microphone", True),
                 "attention_blink": _d(_BOOL, "Alternate I/P with opposite-colored dots in the status bar and compact sidebar", False),
                 "compact": _d(_BOOL, "Classic inline density; managed sidebar is always compact and popups are always full", False),

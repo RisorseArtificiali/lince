@@ -105,6 +105,16 @@ class ConfigMergeTestCase(unittest.TestCase):
         doc = tomlkit.parse(self.user_file.read_text())
         self.assertEqual(doc["dashboard"]["max_agents"], 12, "user value must win")
 
+    def test_explicit_value_migration_updates_retired_dashboard_preset(self):
+        self.user_file.write_text('[dashboard]\npreset = "statusline" # old name\n', encoding="utf-8")
+        code, out = self.run_merge("--migrate", "dashboard.preset", "statusline", "minimal")
+        self.assertEqual(code, 0)
+        doc = tomlkit.parse(self.user_file.read_text())
+        self.assertEqual(doc["dashboard"]["preset"], "minimal")
+        self.assertIn("migrated: dashboard.preset: statusline -> minimal", out)
+        self.assertEqual(len(self.backups()), 1)
+        self.assertIn("# old name", self.user_file.read_text())
+
     def test_new_default_key_added(self):
         self.user_file.write_text(USER, encoding="utf-8")
         code, out = self.run_merge()

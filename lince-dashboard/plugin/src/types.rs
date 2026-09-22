@@ -159,13 +159,12 @@ pub enum WizardStep {
     Confirm,
 }
 
-/// Sub-UI mode for the ProjectDir wizard step (#127).
+/// Focus target inside the unified ProjectDir wizard step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectDirMode {
-    /// Navigable list of recent project dirs with filter-as-you-type.
+    /// Navigable list of recent project dirs shown below the input.
     List,
-    /// Free-text path input (legacy behavior; reached via `i`, or used
-    /// automatically when there are no recents yet).
+    /// Free-text path input, which owns focus when the step opens.
     Input,
 }
 
@@ -237,11 +236,11 @@ pub struct WizardState {
     /// Recent project dirs (most-recently-used first) offered by the picker.
     /// Seeded from the global recents store when the wizard opens (#127).
     pub available_project_dirs: Vec<String>,
-    /// Highlighted index into the *filtered* recents list (List mode).
+    /// Highlighted index into the *filtered* recents list.
     pub project_dir_index: usize,
     /// Filter text typed in List mode (substring / subsequence, case-insensitive).
     pub project_dir_filter: String,
-    /// Whether the ProjectDir step shows the recents list or the free-text input.
+    /// Which control owns focus inside the unified ProjectDir step.
     pub project_dir_mode: ProjectDirMode,
 }
 
@@ -524,9 +523,9 @@ impl From<&AgentInfo> for SavedAgentInfo {
     }
 }
 
-/// Per-project session defaults captured by the `N` wizard's `!` confirm
+/// Per-project session defaults captured by the `n` wizard's `!` confirm
 /// shortcut (gh#62). Persisted in `.lince-dashboard` alongside open agents
-/// and reapplied to the `n` quick-spawn shortcut. `None` means: fall back to
+/// and reapplied to the `N` quick-spawn shortcut. `None` means: fall back to
 /// `[dashboard].default_agent_type` / `default_provider` / `default_project_dir`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionDefaults {
@@ -571,7 +570,7 @@ pub struct SavedState {
     pub version: u32,
     pub agents: Vec<SavedAgentInfo>,
     pub next_agent_id: u32,
-    /// Per-project `n` quick-spawn defaults captured via wizard `!` (gh#62).
+    /// Per-project `N` quick-spawn defaults captured via wizard `!` (gh#62).
     /// Optional + serde-default so v2 state files load transparently.
     #[serde(default)]
     pub session_defaults: Option<SessionDefaults>,

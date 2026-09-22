@@ -1,4 +1,4 @@
-// Compatibility source template. The launcher maps the statusline preset to
+// Compatibility source template. The launcher maps the minimal preset to
 // the shared tiled layout with sidebar_visible=false; Alt+l restores it.
 layout {
     default_tab_template {

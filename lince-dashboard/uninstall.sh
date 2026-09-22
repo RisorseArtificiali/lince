@@ -283,6 +283,7 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
             sed -i '/alias lince-classic=/d' "$rc"
             sed -i '/alias lince-minimal=/d' "$rc"
             sed -i '/alias lince-statusline=/d' "$rc"
+            sed -i '/alias lince-side-pane=/d' "$rc"
             
             
             sed -i '/alias zd=/d' "$rc"

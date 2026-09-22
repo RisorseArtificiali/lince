@@ -111,9 +111,8 @@
           Compact views, themes and persistent attention
         </h3>
         <p class="text-sm text-muted leading-relaxed">
-          Choose a compact sidebar, a single status line or the classic view. Keep waiting agents
+          Choose the minimal status line, a compact side pane or the classic view. Keep waiting agents
           in sight, open details on demand, and select a palette independently of the layout.
-          Existing configurations keep their presentation on upgrade.
         </p>
         <p class="text-sm text-accent mt-3 group-hover:underline">Read the changelog &rarr;</p>
       </a>
@@ -158,13 +157,13 @@
       <div class="grid sm:grid-cols-3 gap-4 text-sm mb-8">
         <div class="feature-card rounded-lg p-4">
           <h3 class="font-semibold mb-2">Minimal</h3>
-          <p class="text-muted mb-3">The default for new installs: a 15%-wide numbered sidebar with colored project headings, a two-row attention bar, no frames or standard Zellij bars. Alt+s toggles the sidebar; Alt+b cycles the status bar: hidden → left summary → full → agents only. Open full details when you need them.</p>
+          <p class="text-muted mb-3">The default for new installs: a two-row attention bar with the sidebar hidden, no frames or standard Zellij bars. Alt+s restores the sidebar; Alt+d opens full details when you need them.</p>
           <code class="text-accent">--preset minimal</code>
         </div>
         <div class="feature-card rounded-lg p-4">
-          <h3 class="font-semibold mb-2">Statusline</h3>
-          <p class="text-muted mb-3">Give your agent the screen. One row shows agents and sandbox identity. The sidebar starts hidden; Alt+s restores it. Alt+d opens the detailed agent list.</p>
-          <code class="text-accent">--preset statusline</code>
+          <h3 class="font-semibold mb-2">Side pane</h3>
+          <p class="text-muted mb-3">Keep a 15%-wide numbered sidebar with colored project headings beside the agents, plus the same attention bar. Alt+s hides or restores it.</p>
+          <code class="text-accent">--preset side-pane</code>
         </div>
         <div class="feature-card rounded-lg p-4">
           <h3 class="font-semibold mb-2">Classic</h3>
@@ -174,7 +173,7 @@
       </div>
       <div class="rounded-lg border border-border bg-surface p-4 mb-8">
         <p class="font-mono text-sm mb-3 overflow-x-auto"><span class="text-accent">$</span> lince-dashboard-launch --preset minimal</p>
-        <p class="text-sm text-muted">Switch agents with Alt+1&ndash;9. Alt+d opens the full list, Alt+i information, Alt+h help, and Alt+n the wizard in bordered popups. Alt+s toggles the sidebar. Alt+q saves agents and bar visibility for the next launch, then quits; Alt+d then q leaves without saving. A compact overview shows every agent’s colored state; a separate count tracks input and permission requests. <a href="documentation/#/dashboard/views-and-themes" class="text-accent hover:underline">Choose a view, adjust density, or restore frames &rarr;</a></p>
+        <p class="text-sm text-muted">Switch agents with Alt+1&ndash;9. Alt+d opens the full list, Alt+i information, Alt+h help, Alt+n the wizard, and Alt+N creation with defaults. Alt+s toggles the sidebar. Alt+q saves agents and bar visibility for the next launch, then quits; Alt+Q quits without saving from any pane. A compact overview shows every agent’s colored state; a separate count tracks input and permission requests. <a href="documentation/#/dashboard/views-and-themes" class="text-accent hover:underline">Choose a view, adjust density, or restore frames &rarr;</a></p>
       </div>
       <h3 class="text-xl font-semibold mb-3">Your view, your colors</h3>
       <p class="text-muted text-sm mb-5">Inherit Zellij colors or choose minimal-mono, Dracula or Gruvbox independently of the layout. Previews below come from the full-table renderer with sample agents.</p>

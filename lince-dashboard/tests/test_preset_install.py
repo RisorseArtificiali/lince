@@ -35,14 +35,14 @@ class PresetInstallTests(unittest.TestCase):
         for answer in ("\n", ""):
             result, preset, layout = self.select(answer)
             self.assertEqual(preset, "minimal")
-            self.assertIn('sidebar_visible "true"', layout)
+            self.assertIn('sidebar_visible "false"', layout)
             self.assertIn("https://lince.sh/documentation/#/dashboard/views-and-themes", result.stdout)
 
     def test_choices_are_saved_and_used_by_launcher(self):
-        for answer, expected in (("2\n", "statusline"), ("classic\n", "classic")):
+        for answer, expected in (("2\n", "side-pane"), ("classic\n", "classic")):
             _, preset, layout = self.select(answer)
             self.assertEqual(preset, expected)
-            self.assertIn('sidebar_visible "false"' if expected == "statusline"
+            self.assertIn('sidebar_visible "true"' if expected == "side-pane"
                           else 'presentation "classic"', layout)
 
     def test_invalid_answer_reprompts(self):
@@ -51,10 +51,11 @@ class PresetInstallTests(unittest.TestCase):
         self.assertIn("Choose 1, 2 or 3", result.stdout)
 
     def test_forwarded_choice_skips_prompt_and_rejects_invalid_value(self):
-        for expected in ("minimal", "statusline", "classic"):
+        for expected in ("minimal", "side-pane", "classic"):
             result, preset, _ = self.select(preset=expected)
             self.assertEqual(preset, expected)
             self.assertNotIn("Choose your dashboard preset", result.stdout)
-        result, preset, _ = self.select(preset="wrong")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIsNone(preset)
+        for invalid in ("statusline", "wrong"):
+            result, preset, _ = self.select(preset=invalid)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIsNone(preset)

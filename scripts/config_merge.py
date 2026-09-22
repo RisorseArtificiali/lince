@@ -13,6 +13,7 @@ Merges newly shipped defaults into a user-owned TOML file:
 
 Usage:
     python3 scripts/config_merge.py <user_file> <defaults_file> [--dry-run]
+        [--migrate <dotted.path> <old-value> <new-value>]
 
 Exit codes:
     0  success (merged, or nothing to do)
@@ -79,6 +80,22 @@ def merge_defaults(user: Mapping, defaults: Mapping, prefix: str = "") -> tuple[
     return added, orphans
 
 
+def migrate_value(document: Mapping, dotted_path: str, old_value: str, new_value: str) -> bool:
+    """Replace one exact scalar value at ``dotted_path`` while preserving TOML trivia."""
+    parts = dotted_path.split(".")
+    current = document
+    for part in parts[:-1]:
+        value = current.get(part)
+        if not _is_table(value):
+            return False
+        current = value
+    key = parts[-1]
+    if current.get(key) != old_value:
+        return False
+    current[key] = new_value
+    return True
+
+
 def _unique_backup_path(path: Path) -> Path:
     """Return ``<name>.bak.<timestamp>`` that does not exist yet.
 
@@ -116,6 +133,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("user_file", help="user-owned TOML file (merge destination)")
     parser.add_argument("defaults_file", help="newly shipped defaults TOML file")
     parser.add_argument("--dry-run", action="store_true", help="report changes without writing")
+    parser.add_argument(
+        "--migrate",
+        nargs=3,
+        action="append",
+        default=[],
+        metavar=("DOTTED_PATH", "OLD_VALUE", "NEW_VALUE"),
+        help="replace an exact retired scalar value before merging defaults",
+    )
     args = parser.parse_args(argv)
 
     user_path = Path(args.user_file)
@@ -131,6 +156,10 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code or 2)
 
+    migrated = []
+    for dotted_path, old_value, new_value in args.migrate:
+        if migrate_value(user_doc, dotted_path, old_value, new_value):
+            migrated.append((dotted_path, old_value, new_value))
     added, orphans = merge_defaults(user_doc, defaults_doc)
     merged_text = tomlkit.dumps(user_doc)
 
@@ -145,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"added: {path}")
     for path in orphans:
         print(f"orphan (user-only, preserved): {path}")
+    for path, old_value, new_value in migrated:
+        print(f"migrated: {path}: {old_value} -> {new_value}")
 
     changed = (not user_exists) or merged_text != user_text
 

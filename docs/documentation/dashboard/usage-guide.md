@@ -10,13 +10,12 @@ Start the dashboard with the `lince` shell alias (installed by `install.sh`):
 lince
 ```
 
-When no preset is specified, LINCE uses minimal: a compact sidebar, no frames or
-standard Zellij bars, and a persistent two-row attention bar. Existing configurations
-without a preset also default to minimal on upgrade.
+When no preset is specified, LINCE uses minimal: no initial sidebar, no frames or
+standard Zellij bars, and a persistent two-row attention bar.
 
 ```bash
 lince-dashboard-launch --preset minimal
-lince-dashboard-launch --preset statusline  # controller opened with Alt+d
+lince-dashboard-launch --preset side-pane   # compact sidebar plus attention bar
 lince-dashboard-launch --preset classic
 lince-floating                            # floating agent window variant
 ```
@@ -33,15 +32,15 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 
 | Key | Action |
 |-----|--------|
-| `n` | Show inline name prompt, then spawn agent with that name |
-| `N` (Shift+N) | Open the agent creation wizard |
+| `n` | Open the agent creation wizard |
+| `N` (Shift+N) | Show the name prompt, then spawn with defaults |
 | `r` | Rename the selected agent |
 | `x` | Kill (stop) the selected agent and close its pane |
 | `f` | Focus: show the selected agent's pane |
 | `Enter` | Focus the selected agent |
 | `h` / `Esc` | Hide: return focus from agent pane to dashboard |
-| `Alt+q` / `Q` | Save agent state and quit (`Alt+q` works from any pane) |
-| `q` in the `Alt+d` list | Quit without saving |
+| `Alt+q` | Save agent state and quit from any pane |
+| `Alt+Q` | Quit without saving from any pane |
 | `j` / `Down` | Select next agent in list |
 | `k` / `Up` | Select previous agent in list |
 | `]` | Focus next agent directly (without returning to dashboard) |
@@ -50,8 +49,9 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 | `?` | Show help |
 | `Alt+d` | Open the detailed agent list from any pane |
 | `Alt+i` / `Alt+h` / `Alt+?` | Open information / help directly |
-| `Alt+s` | Toggle the sidebar (minimal/statusline) |
+| `Alt+s` | Toggle the sidebar (minimal/side-pane) |
 | `Alt+n` | Open the creation wizard from any pane |
+| `Alt+N` | Spawn with defaults from any pane (name prompt only) |
 | `Alt+1`–`Alt+9` | Focus an agent from any pane |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order, including locked mode |
 | `Alt+PageUp` / `Alt+PageDown` | Cycle agents from any pane |
@@ -61,7 +61,7 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 
 ### Inline Name Prompt
 
-Pressing `n` opens a name prompt (a popup in the minimal view):
+Pressing `N` opens a name prompt:
 
 ```
 Name: my-agent          (default: myproject-3)  [Enter] OK  [Esc] Cancel
@@ -69,13 +69,13 @@ Name: my-agent          (default: myproject-3)  [Enter] OK  [Esc] Cancel
 
 - Type a custom name or press `Enter` to accept the default (`project-N`).
 - `Esc` cancels without spawning.
-- Provider and project directory use config defaults. Use `N` (wizard) for full control.
+- Provider and project directory use config defaults. Use `n` (wizard) for full control.
 
 ### Wizard Mode
 
-Pressing `Alt+n` anywhere or `N` (Shift+N) in the list opens a multi-step wizard.
-Press `n` immediately on opening or in a selection/review step to use the defaults and enter only a name;
-name and path text fields continue accepting `n` as text. Navigation keys:
+Pressing `Alt+n` anywhere or `n` in the list opens a multi-step wizard.
+Press `N` immediately on opening or in a selection/review step to use the defaults and enter only a name;
+name and path text fields continue accepting `N` as text. Navigation keys:
 
 | Key | Action |
 |-----|--------|
@@ -90,7 +90,7 @@ Keys `1` through `9` focus the corresponding agent by its row number in the tabl
 
 ## Agent Creation Wizard
 
-The wizard (`N`) walks through up to seven steps to create a new agent
+The wizard (`n`) walks through up to seven steps to create a new agent
 (steps that are not applicable are auto-skipped — e.g. `Sandbox Backend`
 when only one is installed, `Sandbox Level` for unsandboxed agents,
 `Provider` for agent types with no providers configured).
@@ -101,17 +101,17 @@ when only one is installed, `Sandbox Level` for unsandboxed agents,
 
 **Step 3: Sandbox Level (Profile)** -- Pick the isolation posture: `paranoid`, `normal`, `permissive`, or any custom level discovered on disk. This is the **sandbox profile** axis (gh#81) — the wizard label is "Sandbox Level" but the value also appears as `Profile:` in the detail pane. Skipped for unsandboxed runs.
 
-**Step 4: Agent Name** -- Text input for a custom name. Leave empty and press `Enter` to accept the auto-generated default (e.g. `myproject-3`).
+**Step 4: Project Directory** -- One screen combines an editable working-directory field with filtered recent directories below it. Type a path and press `Tab` for filesystem completion, or press `Down` to move into the recent list and use `Up`/`Down` plus `Enter`. Typing while a recent is selected returns to the field and filters the list. The selected agent's directory is suggested when available.
 
-**Step 5: Provider** -- Conditional step, shown only when the selected agent type has providers configured (`providers = ["__discover__"]` or an explicit list in `agents-defaults.toml`). Pick a provider name (env-var bundle: `vertex`, `anthropic`, `zai`, …) discovered from `~/.agent-sandbox/config.toml`. The Provider axis is **independent** of Sandbox Level — combine freely. Was named "Profile" pre-#81.
+**Step 5: Agent Name** -- Text input for a custom name. Leave empty and press `Enter` to accept the directory-derived default (e.g. `myproject-3`).
 
-**Step 6: Project Directory** -- Text input for the working directory path. Tab-completion is available. Defaults to the directory where `lince` was launched.
+**Step 6: Provider** -- Conditional step, shown only when the selected agent type has providers configured (`providers = ["__discover__"]` or an explicit list in `agents-defaults.toml`). Pick a provider name (env-var bundle: `vertex`, `anthropic`, `zai`, …) discovered from `~/.agent-sandbox/config.toml`. The Provider axis is **independent** of Sandbox Level — combine freely. Was named "Profile" pre-#81.
 
 **Step 7: Confirm** -- Review all settings (Type / Backend / Profile / Name / Provider / Dir). Press `Enter` to create the agent, or `Backspace` to go back and change a setting.
 
 ## Agent Lifecycle
 
-1. Press `n` (name prompt) or `N` (wizard) to spawn an agent.
+1. Press `n` (wizard) or `N` (defaults/name prompt) to spawn an agent.
 2. The dashboard creates panes using the configured command for the selected agent type. Panes are hidden by default.
 3. The agent appears in the table as `-` (Unknown, dim gray) until a hook reports otherwise.
 4. Status hooks report via Zellij pipe. The status updates to **Running** (green) when the agent starts working.
@@ -170,7 +170,7 @@ When agents span multiple project directories, the dashboard automatically group
 
 ## Session Save and Restore
 
-Press `Alt+q` from any pane (or `Q` in the list) to save the current agent configuration and quit after the write succeeds. To quit without saving, press `Alt+d`, then lowercase `q`; previous saved state remains intact. On next launch from the same directory, agents are automatically re-spawned with their saved names, providers, and project directories. (Pre-#81 saved-state files use `profile` as the field name; they continue to load thanks to a serde alias on `provider`. Pre-m-15 state files may also include legacy fields like `tokens_in` / `tokens_out` — they are now ignored.)
+Press `Alt+q` from any pane to save the current agent configuration and quit after the write succeeds. To quit without saving, press `Alt+Q` from any pane; previous saved state remains intact. On next launch from the same directory, agents are automatically re-spawned with their saved names, providers, and project directories. (Pre-#81 saved-state files use `profile` as the field name; they continue to load thanks to a serde alias on `provider`. Pre-m-15 state files may also include legacy fields like `tokens_in` / `tokens_out` — they are now ignored.)
 
 - State is saved to `.lince-dashboard` in the directory where `lince` was launched.
 - Different directories maintain independent state. Launch from `~/project-a` and `~/project-b` for separate sessions.

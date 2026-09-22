@@ -7,8 +7,8 @@ The quickstart and standalone dashboard installer ask which preset to use, with 
 short description and a link to this guide. Press Enter for `minimal`. The choice
 is saved as `[dashboard] preset` in `~/.config/lince-dashboard/config.toml`.
 Quickstart asks only once; `quickstart.sh --defaults` uses `minimal`.
-For automation, set `LINCE_DASHBOARD_PRESET=minimal|statusline|classic` before
-running either installer. Updates preserve the chosen preset.
+For automation, set `LINCE_DASHBOARD_PRESET=minimal|side-pane|classic` before
+running either installer. The former `statusline` preset name is no longer accepted.
 
 ## Choose a view
 
@@ -16,21 +16,21 @@ Start a new session with the installed launcher:
 
 ```bash
 lince-dashboard-launch --preset minimal
-lince-dashboard-launch --preset statusline
+lince-dashboard-launch --preset side-pane
 lince-dashboard-launch --preset classic
 ```
 
 | Preset | Presentation | Default sidebar width | Frames |
 |--------|--------------|-----------------------|--------|
-| `minimal` | Compact sidebar and a two-row attention bar; no standard Zellij bars | 15% | Off |
-| `statusline` | Same managed view, with the sidebar hidden initially | 15% when shown | Off |
+| `minimal` | Two-row attention bar; sidebar hidden initially; no standard Zellij bars | 15% when shown | Off |
+| `side-pane` | Same managed view, with the compact sidebar visible initially | 15% | Off |
 | `classic` | Full agent table and standard Zellij tab/keybinding bars | 40% | On |
 
-Minimal also removes the floating agent's entire frame and title. The bottom
+Side-pane also removes the floating agent's entire frame and title. The bottom
 attention bar remains separate; there is no individual bottom-edge frame setting.
 Explicit `--frames` or `pane_frames = true` restores the agent frame.
 
-When no preset is specified, `minimal` is used, including for existing configurations. Minimal and statusline also differ in initial sidebar
+When no preset is specified, `minimal` is used. Minimal and side-pane differ in initial sidebar
 visibility; `Alt+s` toggles it at runtime, restoring the same column arrangement
 on every second press. With the sidebar hidden, agent panes fill the window
 above the status line. An open agent stays visible and keeps focus when the
@@ -56,10 +56,10 @@ theme = "dracula"
 are available for a single launch:
 
 ```bash
-lince-dashboard-launch --preset minimal --sidebar-width 25 --frames
+lince-dashboard-launch --preset side-pane --sidebar-width 25 --frames
 lince-dashboard-launch --preset classic --no-frames
-lince-dashboard-launch --preset minimal --layout dashboard
-lince-dashboard-launch --preset minimal --layout dashboard-tiled-vox
+lince-dashboard-launch --preset side-pane --layout dashboard
+lince-dashboard-launch --preset side-pane --layout dashboard-tiled-vox
 ```
 
 The last command requires VoxCode. `dashboard` selects floating agent windows;
@@ -88,16 +88,16 @@ In the agent list, `r` renames the selected agent; `K` (Shift+k) moves it up
 and `J` (Shift+j) moves it down, including across project directories.
 The default order is alphabetical by directory, then name. After a move,
 renaming keeps the custom order and new agents are appended. Number shortcuts
-and agent cycling follow the displayed order. Save and quit (`Alt+q` or `Q`)
+and agent cycling follow the displayed order. Save and quit (`Alt+q`)
 preserves it for the next session. Press `a` to restore the default order.
-`PageUp`/`PageDown` scroll long details. In the minimal view, details, help and
+`PageUp`/`PageDown` scroll long details. In managed views, details, help and
 creation dialogs open in a larger bordered popup without resizing the sidebar or viewport.
 `Alt+i` opens the focused agent’s information directly; `Alt+h` opens help.
 `Esc` dismisses a dialog; local `i` and `?` remain available in the list.
 
 ## Attention and navigation
 
-Minimal and statusline views reserve two LINCE rows at the bottom. Its leading `!N`
+Minimal and side-pane views reserve two LINCE rows at the bottom. Its leading `!N`
 counts only agents waiting for input or permission. The compact overview that follows
 shows **all** agent slots in navigation order: `!2 1R2I3P4S5-`, for example.
 The left-hand numbers and letters use state colors: green for running, yellow for
@@ -138,13 +138,14 @@ These shortcuts work with either preset, including while the sidebar is visible:
 | `Alt+s` | Hide/show the sidebar and its shell/voice pane |
 | `Alt+b` | Cycle status bar: hidden → left summary → full → agents only |
 | `Alt+n` | Agent creation wizard (replaces Zellij’s new-pane shortcut) |
+| `Alt+N` | Create with configured/session defaults; ask only for a name |
 | `Alt+q` | Save the session and quit from any pane |
-| `q` in the `Alt+d` list | Quit without saving |
+| `Alt+Q` | Quit without saving from any pane |
 
-Immediately after opening the wizard, or in its selection/review steps, `n` skips to a name-only prompt
-using the configured defaults. In name/path text fields, `n` remains ordinary text.
-There is no separate `Alt+N` binding. The list’s local `n` (default creation), `N`
-(wizard), `r` (rename), `i` (details), and `s`/`S` (relay) also remain available.
+Immediately after opening the wizard, or in its selection/review steps, `N` skips to a name-only prompt
+using the configured defaults. In name/path text fields, `N` remains ordinary text.
+The list’s local `n` (wizard), `N` (default creation), `r` (rename), `i` (details),
+and `s`/`S` (relay) also remain available.
 Selecting an agent returns to its terminal. `Esc` dismisses the current dialog,
 then the underlying menu if one was open. Popup borders remain visible even with
 `pane_frames = false`.
@@ -157,9 +158,9 @@ leave fullscreen to return to the managed view.
 
 `Alt+q` saves the current agent configuration to `.lince-dashboard` in the launch
 directory, then quits only after the write succeeds. It also works in locked mode.
-To leave without saving, open the list with `Alt+d` and press lowercase `q`.
-Any previously saved state remains intact. Uppercase `Q` in the list remains a
-save-and-quit alias.
+To leave without saving, press `Alt+Q` from any pane, including locked mode.
+Any previously saved state remains intact. Bare `q` and `Q` are not exit aliases
+in the detailed list.
 
 ## Color palettes
 
@@ -194,7 +195,8 @@ they illustrate the palettes in the full table, not the geometry of each preset.
 
 The launcher uses `~/.config/lince-dashboard/zellij.kdl`. Installation and updates
 preserve custom settings and refresh `zellij.kdl.dist` with shipped defaults.
-Updates migrate only the previously shipped Alt+h/i/l/n bindings and add Alt+q alongside LINCE’s wizard bindings, saving the old
+Updates migrate the previously shipped shortcuts and add `Alt+q` / `Alt+Q`
+alongside LINCE’s wizard bindings, saving the old
 file as `zellij.kdl.bak-shortcuts`. Custom bindings remain yours; compare with
 `.dist` if they conflict with LINCE shortcuts.
 Your global `~/.config/zellij/config.kdl` is separate. To use another session config:
@@ -203,7 +205,8 @@ Your global `~/.config/zellij/config.kdl` is separate. To use another session co
 lince-dashboard-launch --config /path/to/zellij.kdl --preset minimal
 ```
 
-Keep LINCE's `lince-ui-open`, `lince-sidebar-toggle`, `lince-save-quit`, `focus-agent` and `cycle-agent` bindings when copying
+Keep LINCE's `lince-ui-open`, `lince-sidebar-toggle`, `lince-save-quit`,
+`lince-quit`, `focus-agent` and `cycle-agent` bindings when copying
 or customizing the session configuration. See the [configuration reference](dashboard/config-reference.md)
 for all keys and the [usage guide](dashboard/usage-guide.md) for agent workflows.
 
@@ -226,9 +229,9 @@ Existing configurations that explicitly set `true` retain that preference;
 set it to `false` to disable the animation. Numbers and names stay stationary.
 The reserved left column keeps names and wrapping stationary, even with nine agents.
 
-`Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/statusline, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/statusline preset. Older saved sessions keep the preset defaults. `Alt+d`, then `q`, leaves the previous saved view unchanged.
+`Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/side-pane, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/side-pane preset. Older saved sessions keep the preset defaults. `Alt+Q` leaves the previous saved view unchanged.
 
-In the minimal sidebar, slot numbers and agent types use the sandbox profile’s
+In the side-pane sidebar, slot numbers and agent types use the sandbox profile’s
 foreground color, independently of the status letter. Right-hand status-bar
 names continue to use white text with colored underlines.
 

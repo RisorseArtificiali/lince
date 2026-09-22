@@ -153,8 +153,8 @@ struct State {
     cwd_retries: u8,
     /// Stop retrying CWD after max attempts.
     cwd_retry_exhausted: bool,
-    /// Per-project `n` quick-spawn defaults captured via wizard `!` (gh#62).
-    /// When `Some`, the `n` shortcut spawns with these values instead of
+    /// Per-project `N` quick-spawn defaults captured via wizard `!` (gh#62).
+    /// When `Some`, the `N` shortcut spawns with these values instead of
     /// resolving from `[dashboard].default_*` config fields.
     session_defaults: Option<SessionDefaults>,
     /// Global most-recently-used project dirs, loaded from
@@ -1050,6 +1050,10 @@ impl ZellijPlugin for State {
                 self.save_and_quit();
                 true
             }
+            "lince-quit" => {
+                self.voice_quit();
+                true
+            }
             "lince-voice-wake" => {
                 if pipe_message.payload.as_deref() == Some(&self.own_id.to_string()) && !self.voice.pending {
                     self.voice_request(serde_json::json!({"action": "status"}));
@@ -1246,7 +1250,7 @@ impl State {
                 self.info_scroll = self.info_scroll.saturating_sub(8);
                 true
             }
-            BareKey::Char('n') => {
+            BareKey::Char('N') => {
                 // gh#62: when session_defaults is set, use the session's agent_type
                 // to seed the default name; otherwise fall back to the static default.
                 let effective_type: String = match self.session_defaults.as_ref() {
@@ -1302,7 +1306,7 @@ impl State {
                 self.start_relay_with_prompt();
                 true
             }
-            BareKey::Char('N') => {
+            BareKey::Char('n') => {
                 // #168: pre-fill the project dir from the selected agent when
                 // there is one; otherwise fall back to the config default.
                 let mut default_dir = self.config.default_project_dir.clone()
@@ -1385,13 +1389,9 @@ impl State {
                 {
                     recents::push_recent(&mut seed_project_dirs, &dir);
                 }
-                // Show the recents list when we have any; otherwise drop straight
-                // to the legacy free-text input (no empty list to navigate).
-                let project_dir_mode = if seed_project_dirs.is_empty() {
-                    ProjectDirMode::Input
-                } else {
-                    ProjectDirMode::List
-                };
+                // The editable field owns focus initially; recents remain visible
+                // below it and Down moves into that list.
+                let project_dir_mode = ProjectDirMode::Input;
                 // Build state, then derive the first step from active_steps() so the
                 // skip rules don't drift between init and key handlers.
                 let mut state = WizardState {
@@ -1460,14 +1460,6 @@ impl State {
             }
             BareKey::Char('?') => {
                 self.show_help = !self.show_help;
-                true
-            }
-            BareKey::Char('q') if self.menu_open && !self.show_detail && !self.show_help => {
-                self.voice_quit();
-                false
-            }
-            BareKey::Char('Q') => {
-                self.save_and_quit();
                 true
             }
             // Number keys 1-9: quick select + focus agent
@@ -1594,10 +1586,10 @@ impl State {
         }
 
         let quick_start = std::mem::take(&mut self.wizard_quick_start);
-        if bare == BareKey::Char('n') && (quick_start || self.wizard.as_ref().is_some_and(|w|
+        if bare == BareKey::Char('N') && (quick_start || self.wizard.as_ref().is_some_and(|w|
             !matches!(w.step, WizardStep::Name | WizardStep::ProjectDir))) {
             self.wizard = None;
-            return self.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+            return self.handle_key(KeyWithModifier::new(BareKey::Char('N')));
         }
         let wizard = match self.wizard.as_mut() {
             Some(w) => w,
@@ -1822,9 +1814,10 @@ impl State {
                         }
                     }
                     BareKey::Up => {
-                        let len = wizard.filtered_project_dirs().len();
-                        if len > 0 {
-                            wizard.project_dir_index = (wizard.project_dir_index + len - 1) % len;
+                        if wizard.project_dir_index == 0 {
+                            wizard.project_dir_mode = ProjectDirMode::Input;
+                        } else {
+                            wizard.project_dir_index -= 1;
                         }
                     }
                     BareKey::Enter => {
@@ -1861,31 +1854,35 @@ impl State {
                             wizard.project_dir_mode = ProjectDirMode::Input;
                         }
                     }
-                    // `i` switches to free-text ONLY as the first keystroke (filter
-                    // still empty). Once filtering has begun, `i` is a normal filter
-                    // character — otherwise paths containing "i" (most of them)
-                    // couldn't be filtered.
-                    BareKey::Char('i') if wizard.project_dir_filter.is_empty() => {
+                    BareKey::Tab => {
                         wizard.project_dir_mode = ProjectDirMode::Input;
+                        wizard.project_dir_suggested = false;
+                        config::complete_path_async(
+                            &wizard.project_dir,
+                            &self.config.project_search_roots,
+                            self.config.project_search_max_depth,
+                        );
                     }
                     BareKey::Char(c) => {
-                        wizard.project_dir_filter.push(c);
+                        wizard.project_dir_mode = ProjectDirMode::Input;
+                        wizard.project_dir_suggested = false;
+                        wizard.project_dir.push(c);
+                        wizard.project_dir_filter = wizard.project_dir.clone();
+                        wizard.clear_completions();
+                        wizard.project_dir_error = None;
                         wizard.project_dir_index = 0;
                     }
                     BareKey::Backspace => {
-                        if wizard.project_dir_filter.is_empty() {
-                            if let Some(prev) = wizard.prev_step() {
-                                wizard.step = prev;
-                            }
-                        } else {
-                            wizard.project_dir_filter.pop();
-                            wizard.project_dir_index = 0;
-                        }
+                        wizard.project_dir_mode = ProjectDirMode::Input;
                     }
                     _ => {}
                 },
                 // ── Free-text input (legacy escape hatch) ──────────────
                 ProjectDirMode::Input => match bare {
+                    BareKey::Down if !wizard.filtered_project_dirs().is_empty() => {
+                        wizard.project_dir_mode = ProjectDirMode::List;
+                        wizard.project_dir_index = 0;
+                    }
                     BareKey::Enter => {
                         // If completions are showing and one is highlighted, accept it first.
                         if let Some(idx) = wizard.completion_index {
@@ -1986,6 +1983,7 @@ impl State {
                             }
                         } else {
                             wizard.project_dir.pop();
+                            wizard.project_dir_filter = wizard.project_dir.clone();
                             wizard.clear_completions();
                             wizard.project_dir_error = None;
                         }
@@ -1993,6 +1991,7 @@ impl State {
                     BareKey::Char(c) => {
                         wizard.project_dir_suggested = false;
                         wizard.project_dir.push(c);
+                        wizard.project_dir_filter = wizard.project_dir.clone();
                         wizard.clear_completions();
                         wizard.project_dir_error = None;
                     }
@@ -2022,7 +2021,7 @@ impl State {
                         wizard.selected_sandbox_level().map(|s| s.to_string())
                     };
                     let sandbox_backend = backend_choice;
-                    // gh#62: `!` makes these choices the active `n` quick-spawn
+                    // gh#62: `!` makes these choices the active `N` quick-spawn
                     // defaults for the rest of the session and persists them in
                     // `.lince-dashboard` on the next `Q`.
                     let save_defaults = matches!(bare, BareKey::Char('!'));
@@ -2894,10 +2893,10 @@ impl State {
             self.info_scroll = 0;
         } else if matches!(action, "help" | "?") {
             self.show_help = true;
-        } else if matches!(action, "wizard" | "N") {
-            self.handle_key(KeyWithModifier::new(BareKey::Char('N')));
-        } else if action == "n" {
+        } else if matches!(action, "wizard" | "n") {
             self.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+        } else if matches!(action, "defaults" | "N") {
+            self.handle_key(KeyWithModifier::new(BareKey::Char('N')));
         } else {
             self.menu_open = true;
         }
@@ -3151,18 +3150,56 @@ mod managed_ui_tests {
         assert!(state.show_help && !state.show_detail);
     }
     #[test]
-    fn wizard_defaults_shortcut_does_not_consume_name_input() {
+    fn wizard_and_defaults_shortcuts_follow_the_documented_case() {
         let mut state = controller();
         state.open_ui("wizard");
         assert!(state.wizard.is_some());
-        state.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+        state.handle_key(KeyWithModifier::new(BareKey::Char('N')));
         assert!(state.wizard.is_none() && state.name_prompt.is_some());
         state.open_ui("wizard");
         state.wizard.as_mut().unwrap().step = WizardStep::Name;
         state.wizard_quick_start = false;
-        state.handle_key(KeyWithModifier::new(BareKey::Char('n')));
-        assert_eq!(state.wizard.as_ref().unwrap().name, "n");
+        state.handle_key(KeyWithModifier::new(BareKey::Char('N')));
+        assert_eq!(state.wizard.as_ref().unwrap().name, "N");
         assert!(state.name_prompt.is_none());
+
+        let mut direct_wizard = controller();
+        direct_wizard.handle_key(KeyWithModifier::new(BareKey::Char('n')));
+        assert!(direct_wizard.wizard.is_some() && direct_wizard.name_prompt.is_none());
+        let mut direct_defaults = controller();
+        direct_defaults.handle_key(KeyWithModifier::new(BareKey::Char('N')));
+        assert!(direct_defaults.wizard.is_none() && direct_defaults.name_prompt.is_some());
+        let mut global_defaults = controller();
+        global_defaults.open_ui("defaults");
+        assert!(global_defaults.wizard.is_none() && global_defaults.name_prompt.is_some());
+    }
+
+    #[test]
+    fn quit_without_saving_is_global_only() {
+        let mut state = controller();
+        state.launch_dir = Some("/tmp/project".into());
+        assert!(!state.handle_key(KeyWithModifier::new(BareKey::Char('Q'))));
+        assert!(state.status_message.is_none());
+        assert!(state.pipe(PipeMessage::new(PipeSource::Keybind, "lince-quit", &None, &None, false)));
+    }
+
+    #[test]
+    fn project_directory_input_and_recents_share_keyboard_focus() {
+        let mut state = controller();
+        state.recent_project_dirs = vec!["/work/alpha".into(), "/work/beta".into()];
+        state.open_ui("wizard");
+        let wizard = state.wizard.as_mut().unwrap();
+        wizard.step = WizardStep::ProjectDir;
+        wizard.project_dir = "/work".into();
+        assert_eq!(wizard.project_dir_mode, ProjectDirMode::Input);
+
+        state.handle_key(KeyWithModifier::new(BareKey::Down));
+        assert_eq!(state.wizard.as_ref().unwrap().project_dir_mode, ProjectDirMode::List);
+        state.handle_key(KeyWithModifier::new(BareKey::Char('x')));
+        let wizard = state.wizard.as_ref().unwrap();
+        assert_eq!(wizard.project_dir_mode, ProjectDirMode::Input);
+        assert_eq!(wizard.project_dir, "/workx");
+        assert_eq!(wizard.project_dir_filter, "/workx");
     }
 }
 

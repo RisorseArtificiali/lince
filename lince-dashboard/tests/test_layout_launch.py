@@ -24,21 +24,26 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 launcher["sidebar_layout"]("layout {}", width)
 
-    def test_minimal_replaces_both_standard_bars(self):
+    def test_managed_presets_replace_both_standard_bars(self):
         for name in ("dashboard", "dashboard-vox", "dashboard-tiled", "dashboard-tiled-vox", "dashboard-statusline"):
             text = (ROOT / "layouts" / f"{name}.kdl").read_text()
-            result = launcher["presentation_layout"](text, "minimal", True, True)
-            self.assertIn('agent_borderless "true"', result)
-            self.assertNotIn('location="zellij:tab-bar"', result)
-            self.assertNotIn('location="zellij:status-bar"', result)
-            # The swap inherits the one status row through default_tab_template.
-            self.assertEqual(result.count('role "statusline"'), 1)
-            self.assertEqual(result.count('config_path "'), 2)
+            for preset, sidebar_visible in (
+                ("minimal", "false"),
+                ("side-pane", "true"),
+            ):
+                result = launcher["presentation_layout"](text, preset, True, True)
+                self.assertIn('agent_borderless "true"', result)
+                self.assertIn(f'sidebar_visible "{sidebar_visible}"', result)
+                self.assertNotIn('location="zellij:tab-bar"', result)
+                self.assertNotIn('location="zellij:status-bar"', result)
+                # The swap inherits the one status row through default_tab_template.
+                self.assertEqual(result.count('role "statusline"'), 1)
+                self.assertEqual(result.count('config_path "'), 2)
 
     def test_integrated_voice_reclaims_sidebar_including_swap_layout(self):
         for name in ('dashboard-tiled', 'dashboard-tiled-vox', 'dashboard-statusline'):
             text = (ROOT / 'layouts' / f'{name}.kdl').read_text()
-            for preset in ('minimal', 'statusline'):
+            for preset in ('minimal', 'side-pane'):
                 result = launcher['presentation_layout'](text, preset, True, True)
                 self.assertNotIn('name="lince-sidebar-aux"', result)
                 self.assertNotIn('pane size="70%" focus=true', result)
@@ -70,6 +75,7 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(fresh.returncode, 0, fresh.stderr)
             self.assertIn("pane_frames false", fresh.stdout)
             self.assertIn('agent_borderless "true"', fresh.stdout)
+            self.assertIn('agent_borderless "true"', launch('--layout', 'dashboard-statusline').stdout)
             self.assertIn('agent_borderless "false"', launch('--frames').stdout)
             self.assertIn('pane size="15%" split_direction="horizontal"', fresh.stdout)
             self.assertIn('pane size="85%" name="lince-viewport"', fresh.stdout)
@@ -78,17 +84,17 @@ class LayoutTests(unittest.TestCase):
             config.write_text('[dashboard]\n')
             legacy = launch()
             self.assertIn('presentation "managed"', legacy.stdout)
-            self.assertIn('sidebar_visible "true"', legacy.stdout)
+            self.assertIn('sidebar_visible "false"', legacy.stdout)
             self.assertIn("pane_frames false", legacy.stdout)
             self.assertIn('presentation "classic"', launch('--preset', 'classic').stdout)
-            config.write_text('[dashboard]\npreset="statusline"\ncompact=false\n')
+            config.write_text('[dashboard]\npreset="side-pane"\ncompact=false\n')
             explicit = launch("--frames")
             self.assertIn('presentation "managed"', explicit.stdout)
-            self.assertIn('sidebar_visible "false"', explicit.stdout)
+            self.assertIn('sidebar_visible "true"', explicit.stdout)
             self.assertIn('compact "false"', explicit.stdout)
             self.assertIn('pane_frames true', explicit.stdout)
             self.assertIn('role "dialog"', explicit.stdout)
-            for value in ('preset="typo"', 'pane_frames="false"', 'sidebar_width=9'):
+            for value in ('preset="statusline"', 'preset="typo"', 'pane_frames="false"', 'sidebar_width=9'):
                 config.write_text('[dashboard]\n' + value + '\n')
                 invalid = launch()
                 self.assertNotEqual(invalid.returncode, 0)
@@ -113,6 +119,8 @@ class LayoutTests(unittest.TestCase):
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
             migrated = active.read_text()
             self.assertIn('payload "wizard"', migrated)
+            self.assertEqual(migrated.count('bind "Alt Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt Shift q" { MessagePlugin { name "lince-quit"; }; }'), 2)
             self.assertIn('bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }', migrated)
             self.assertNotIn('bind "Alt l"', migrated)
             self.assertEqual(migrated.count('bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }'), 2)

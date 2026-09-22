@@ -23,7 +23,9 @@ keybinds clear-defaults=true {
         bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
         bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
         bind "Alt n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Alt Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }
         bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
+        bind "Alt Shift q" { MessagePlugin { name "lince-quit"; }; }
         bind "Ctrl l" { SwitchToMode "normal"; }
     }
     pane {
@@ -255,7 +257,9 @@ keybinds clear-defaults=true {
         bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
         bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
         bind "Alt n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Alt Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }
         bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
+        bind "Alt Shift q" { MessagePlugin { name "lince-quit"; }; }
         bind "Alt o" { MoveTab "right"; }
         bind "Alt p" { TogglePaneInGroup; }
         bind "Alt Shift p" { ToggleGroupMarking; }

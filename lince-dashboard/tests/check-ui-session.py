@@ -34,7 +34,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
         raise SystemExit(f'Zellij >= 0.45.1 required; found {version} at {zellij}')
     with tempfile.TemporaryDirectory(prefix="lince-ui-test-") as directory:
         work = Path(directory)
-        layout_name = "dashboard-statusline" if preset == "statusline" else "dashboard-tiled"
+        layout_name = "dashboard-statusline" if preset == "minimal" else "dashboard-tiled"
         text = LAUNCHER["presentation_layout"](
             LAUNCHER["sidebar_layout"]((ROOT / "layouts" / f"{layout_name}.kdl").read_text(), 15), preset, True, True)
         text = text.replace("file:~/.config/zellij/plugins/lince-dashboard.wasm", f"file:{wasm}")
@@ -200,7 +200,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
             while time.monotonic() < attach_deadline and process.poll() is None:
                 pump()
             initial = wait_for(lambda ps: visible("lince-dialog", False)(ps)
-                and visible("lince-controller", preset != "statusline")(ps)
+                and visible("lince-controller", preset == "side-pane")(ps)
                 and "lince-viewport" in ps and sum("fixture" in name for name in ps) == 3
                 and sum("fixture" in name and ps[name]["is_suppressed"] for name in ps) >= 2)
             if preset == "classic":
@@ -219,7 +219,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                 if conversations_only:
                     return
             viewport = initial["lince-viewport"]
-            if preset == "statusline":
+            if preset == "minimal":
                 assert viewport["pane_columns"] == 100, viewport
             # Global list/info/help/wizard all open one bordered passive popup.
             for shortcut in (b"\x1bd", b"\x1bi", b"\x1bh", b"\x1bn", b"\x1bv"):
@@ -328,7 +328,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
             wait_for(visible("lince-dialog", False))
             wait_for(agent_fills_viewport)
             # Toggle both ways; the controller and auxiliary pane must disappear.
-            for turn, expected in enumerate((preset != "minimal", preset == "minimal") * 3):
+            for turn, expected in enumerate((preset != "side-pane", preset == "side-pane") * 3):
                 number = (1, 2, 3)[turn // 2]
                 active_fixture = f"fixture{number}"
                 key(b"\x1b" + str(number).encode())
@@ -355,7 +355,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                 wait_for(visible("lince-dialog", True))
                 key(b"\x1b")
                 wait_for(visible("lince-dialog", False))
-            sidebar_shown = preset == "minimal"
+            sidebar_shown = preset == "side-pane"
             bar_mode = 2
             bar_shown = True
             for shortcut in (b"\x1bb", b"\x1bs", b"\x1bb", b"\x1bs", b"\x1bb", b"\x1bb") * 2:
@@ -385,7 +385,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
             key(b"\x0c")
             state_path = work / ".lince-dashboard"
             original = '{"version":3,"agents":[],"next_agent_id":73,"session_defaults":null}'
-            if preset == "statusline":
+            if preset == "minimal":
                 # Save a view different from the CLI defaults.
                 key(b"\x1bs")
                 wait_for(visible("lince-controller", True))
@@ -409,11 +409,11 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
             while process.poll() is None and time.monotonic() < deadline:
                 pump()
             assert process.poll() is not None, "Quit shortcut did not close the session"
-            if preset == "statusline":
+            if preset == "minimal":
                 saved = json.loads(state_path.read_text())
                 assert len(saved["agents"]) == 3 and saved["version"] == 3
                 assert saved["view"] == {"sidebar_visible": True, "statusbar_mode": "summary"}
-                # Start again from the same project, with the statusline preset.
+                # Start again from the same project, with the minimal preset.
                 # Repeat with both bars hidden to cover suppressed initialization.
                 for expected_sidebar, expected_mode in ((True, "summary"), (False, "agents"), (False, "hidden")):
                     os.close(master)
@@ -456,7 +456,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                         "sidebar_visible": False, "statusbar_mode": "agents" if expected_sidebar else "hidden"}
             else:
                 assert state_path.read_text() == original, "Quit without save modified previous state"
-            print(f"{preset}: voice controls and shell delivery, global popups, sidebar/status-bar combinations, agent geometry and {'save/quit' if preset == 'statusline' else 'quit without save'} OK")
+            print(f"{preset}: voice controls and shell delivery, global popups, sidebar/status-bar combinations, agent geometry and {'save/quit' if preset == 'minimal' else 'quit without save'} OK")
         finally:
             try:
                 cli(["kill-session", session])
@@ -483,5 +483,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if not args.zellij or not args.wasm.exists():
         parser.error("Zellij and a built WASM are required")
-    for preset in (("statusline", "minimal", "classic") if args.messaging or args.conversations_only else ("statusline", "minimal")):
+    for preset in (("minimal", "side-pane", "classic") if args.messaging or args.conversations_only else ("minimal", "side-pane")):
         check(str(Path(args.zellij).resolve()), args.wasm.resolve(), preset, args.messaging or args.conversations_only, args.conversations_only)

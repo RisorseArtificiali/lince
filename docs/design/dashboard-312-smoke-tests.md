@@ -54,7 +54,7 @@ precedenti. Per la vista classica specificare `--preset classic`.
   e altezza disponibile, escludendo solo la status line. Riprovare `Alt+d/i/h`
   con sidebar sia visibile sia nascosta.
 - `Alt+n` apre il wizard da qualunque pane, senza creare un pane Zellij.
-  Dal primo passo di selezione, premere `n`: deve chiedere solo il nome e usare
+  Dal primo passo di selezione, premere `N`: deve chiedere solo il nome e usare
   i default configurati. Digitare una `n` nel campo nome e nel percorso: deve
   restare testo. Annullare con Esc; completare poi una creazione normale.
 - Provare le scorciatoie anche in modalità locked (`Ctrl+l` per entrarvi/uscirne).
@@ -80,7 +80,7 @@ lince-dashboard-launch --preset minimal --sidebar-width 25
 ## Status line (#295)
 
 ```bash
-lince-dashboard-launch --preset statusline
+lince-dashboard-launch --preset minimal
 ```
 
 - Il terminale occupa la vista, con due righe in basso e sidebar inizialmente
@@ -200,7 +200,7 @@ azione eseguita, tipo di agente e comportamento atteso/osservato.
   Alt+q continua a ripristinare la visibilità scelta.
 
 - Nell'installer e nel quickstart verificare le tre descrizioni e il link alla guida.
-  Invio seleziona minimal; scegliere statusline o classic salva il valore in config.
+  Invio seleziona minimal; scegliere side-pane o classic salva il valore in config.
   Il quickstart non ripete la domanda durante l'installazione del dashboard.
   Con `--defaults` non deve chiedere il preset e deve scegliere minimal.
 

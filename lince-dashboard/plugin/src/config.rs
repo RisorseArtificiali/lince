@@ -296,7 +296,7 @@ pub struct DashboardConfig {
     pub sandbox_config_path: Option<String>,
     #[serde(default)]
     pub default_project_dir: Option<String>,
-    /// Default agent type for the `n` shortcut and the `N` wizard's initial
+    /// Default agent type for the `N` shortcut and the `n` wizard's initial
     /// selection. Must match a key in `agent_types` (loaded from
     /// `agents-defaults.toml` + user overrides). Unknown values silently fall
     /// back to `DEFAULT_AGENT_TYPE` then to the first registered type.
@@ -1447,8 +1447,8 @@ mod tests {
         assert!(!types.get("claude").unwrap().event_map.is_empty());
     }
 
-    /// `default_agent_type` (gh#62) round-trips through TOML so the `n`
-    /// shortcut + `N` wizard can pick it up from the user's config.
+    /// `default_agent_type` (gh#62) round-trips through TOML so the `N`
+    /// shortcut + `n` wizard can pick it up from the user's config.
     #[test]
     fn unknown_theme_falls_back_with_visible_warning() {
         let (cfg, warning) = DashboardConfig::parse_toml("[dashboard]\ntheme = \"typo\"\n");

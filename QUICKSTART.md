@@ -115,15 +115,16 @@ lince
 
 | Key | Action |
 |-----|--------|
-| `n` | Spawn new agent (quick name prompt) |
-| `N` | Spawn new agent (wizard with full options) |
+| `n` | Spawn new agent with the full wizard |
+| `N` | Spawn new agent with defaults (name prompt only) |
 | `r` | Rename selected agent |
 | `x` | Kill selected agent |
 | `f` | Focus (show) agent pane |
 | `h` | Hide focused agent pane |
 | `j` / `Down` | Select next agent |
 | `k` / `Up` | Select previous agent |
-| `Q` | Save state and quit |
+| `Alt+q` | Save state and quit from any pane |
+| `Alt+Q` | Quit without saving from any pane |
 | `?` | Show help overlay |
 
 ---
