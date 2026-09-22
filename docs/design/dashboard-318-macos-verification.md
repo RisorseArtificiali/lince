@@ -20,7 +20,7 @@ marked PASS below was reproduced with the commands shown.
 | Audio/ASR stack | sounddevice 0.5.6 with bundled PortAudio 19.7.0 (CoreAudio), faster-whisper 1.2.1, ctranslate2 4.8.2 |
 | Whisper | `tiny`, CPU, `int8`. Metal/MPS not covered |
 | Rust | rustup `stable-aarch64-apple-darwin`; `wasm32-wasip1` added by `plugin/build.sh` |
-| LINCE | branch of this PR, on top of `main` at `5eeca4d` |
+| LINCE | branch of this PR, on top of `main` at `5eeca4d`; re-run after merging `main` at `b4b7b30` (mute/`Alt+m`, PTT `Alt+t`) |
 
 `XDG_RUNTIME_DIR` is unset on macOS, so the voice worker socket lives in
 `/tmp/lince-voice-<uid>/`. The macOS input-source shortcuts (Ctrl+Space) were
@@ -106,15 +106,25 @@ statusline: voice controls and shell delivery, global popups, sidebar/status-bar
 minimal: voice controls and shell delivery, global popups, sidebar/status-bar combinations, agent geometry and quit without save OK
 ```
 
-This covers, with scripted key events and no audio: `Alt+v` popup, `s`/`a`/`p`/`x`,
+This covers, with scripted key events and no audio: `Alt+v` popup, `s`/`a`/`m`/`x`,
 `Ctrl+Space` (both the legacy NUL byte and the CSI-u encoding) starting a PTT
-recording and `Alt+x` stopping it, insertion into the visible shell and into the
+recording and `Alt+t` stopping it, insertion into the visible shell and into the
 visible agent, locked mode (`Ctrl+l`), sidebar hidden, all `Alt+b` states,
 save/quit with restart, and quit without saving agent state.
 
-`test_layout_launch.py`, `test_preset_install.py`, `test_clipboard_setup.py`
-and `test_codex_hooks.py` pass. The Rust plugin tests
-(`tests/run-plugin-tests.sh`) were not run: `wasmtime` is not installed here.
+After merging `main` (`b4b7b30`, 2026-09-22) the same run first failed on
+both platforms' code path, not on macOS: since #343 every agent pane is wrapped
+by `lince-msg-host`, which the harness only installs with `--messaging`, so the
+fixture panes died with `env: lince-msg-host: No such file or directory` and the
+PTT insertion into the agent had no target. The harness now writes a
+pass-through `lince-msg-host` stub for ordinary smoke runs. With the rebuilt
+plugin both presets pass again on macOS (one run hit a 10 s `list-panes`
+timeout right after the save/quit restart and passed on the next run).
+
+`test_layout_launch.py`, `test_preset_install.py`, `test_clipboard_setup.py`,
+`test_codex_hooks.py` and `test_plugin_install.py` pass. The Rust plugin tests
+(`tests/run-plugin-tests.sh`) were not run: `wasmtime` is not installed here;
+they run in the `plugin-ci.yml` workflow on the pull request.
 
 ### 4. Adapter with the real microphone, outside Zellij — PASS
 
@@ -130,8 +140,8 @@ scratch `HOME`, using the built-in microphone and macOS text-to-speech
 | `start`: `loading` for ~9 s (first run includes the model download), then `listening` | PASS |
 | Level meter: values 0–2 while speech played, 0 in silence | PASS |
 | VAD transcription: "Ciao, questo è un test del riconoscimento vocale su macOS" → `Ciao, questo è un test del riconosimento vocale su mecoe.` (`tiny` quality) | PASS |
-| Pause: microphone closed, a sentence spoken while paused never appeared, also after resume | PASS |
-| Resume, `send`, event acknowledgement, `stop` | PASS |
+| Mute (`pause` at the time, now `mute`): microphone closed, a sentence spoken while muted never appeared, also after unmute | PASS |
+| Unmute, `send`, event acknowledgement, `stop` | PASS |
 | PTT: first `ptt` from stopped starts and arms, second `ptt` stops and transcribes | PASS |
 | Raw capture sanity (`sounddevice.rec`, 3 s): non-zero samples on the default and the named device | PASS |
 
@@ -166,7 +176,7 @@ The problem did not occur once any popup had been opened and closed first.
 ## Not verified (needs a person at the keyboard)
 
 - Terminal-specific Option-as-Meta handling: the scripted runs inject the
-  `Esc`-prefixed / CSI-u sequences directly, so `Alt+v`, `Alt+x` and the other
+  `Esc`-prefixed / CSI-u sequences directly, so `Alt+v`, `Alt+t`, `Alt+m` and the other
   `Alt` shortcuts were not exercised through a physical Option key in Orca,
   Terminal.app, iTerm2, Ghostty, kitty or WezTerm.
 - `Ctrl+Space` conflict with the macOS *Select the previous input source*
