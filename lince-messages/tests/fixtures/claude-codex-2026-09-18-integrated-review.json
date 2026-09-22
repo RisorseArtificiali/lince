@@ -1,0 +1,110 @@
+{
+  "versions": {
+    "claude": "2.1.272",
+    "codex": "0.154.0"
+  },
+  "platform": "Linux",
+  "original_tuis": true,
+  "automatic_wakeup": false,
+  "request": {
+    "id": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+    "conversation": "d2035490-249b-4e5d-bb75-1779f6223277",
+    "parent": null,
+    "group_id": "ee0d2a8b-33dc-44ca-ab66-b62d35368349",
+    "sender": "5decde29-bbca-4a87-9530-a212d32d8334",
+    "recipient": "18721c38-a1eb-4040-a594-04f0ca3894dd",
+    "kind": "question",
+    "text": "NATIVE_REVIEW: please review /tmp/lince-ui-test-49lkj3sh/review.py for correctness.",
+    "delivery": "read",
+    "work": "completed",
+    "cancel_ack": 0,
+    "created": 1789759503.9307203,
+    "updated": 1789759598.8396149,
+    "events": [
+      {
+        "seq": 1,
+        "id": "c21c1706-4233-45e2-a0f4-aa734c1d2578",
+        "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+        "actor": "5decde29-bbca-4a87-9530-a212d32d8334",
+        "type": "created",
+        "text": "",
+        "created": 1789759503.930816
+      }
+    ],
+    "cursor": 1,
+    "more": true
+  },
+  "events": [
+    {
+      "seq": 1,
+      "id": "c21c1706-4233-45e2-a0f4-aa734c1d2578",
+      "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+      "actor": "5decde29-bbca-4a87-9530-a212d32d8334",
+      "type": "created",
+      "text": "",
+      "created": 1789759503.930816
+    },
+    {
+      "seq": 2,
+      "id": "5c77f08c-921c-4ceb-8a00-58b4476427cd",
+      "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+      "actor": "18721c38-a1eb-4040-a594-04f0ca3894dd",
+      "type": "delivery",
+      "text": "read",
+      "created": 1789759537.5916455
+    },
+    {
+      "seq": 3,
+      "id": "b42d8d0d-bbed-4f37-8719-faa2b36f1f45",
+      "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+      "actor": "18721c38-a1eb-4040-a594-04f0ca3894dd",
+      "type": "delivery",
+      "text": "read",
+      "created": 1789759539.810884
+    },
+    {
+      "seq": 4,
+      "id": "65c4c385-8190-4c5d-bf84-95e668d1d2fe",
+      "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+      "actor": "18721c38-a1eb-4040-a594-04f0ca3894dd",
+      "type": "work",
+      "text": "active",
+      "created": 1789759539.8109007
+    },
+    {
+      "seq": 5,
+      "id": "176d04aa-fa01-4e73-baaa-3e0a95ddd504",
+      "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+      "actor": "18721c38-a1eb-4040-a594-04f0ca3894dd",
+      "type": "accepted",
+      "text": "",
+      "created": 1789759539.8109102
+    },
+    {
+      "seq": 6,
+      "id": "5efd6bab-effe-4ca3-a282-5f84681afbd8",
+      "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+      "actor": "18721c38-a1eb-4040-a594-04f0ca3894dd",
+      "type": "reply",
+      "text": "Finding: /tmp/lince-ui-test-49lkj3sh/review.py:2 excludes the upper endpoint because range(start, end) stops before end, so inclusive_sum is not inclusive. Verified failing example: assert inclusive_sum(1, 3) == 6 fails because the actual result is 3. Use range(start, end + 1) to include the endpoint. Reviewed only the requested Python file; no edits made. Completed sleep 20 after explicit acceptance.",
+      "created": 1789759598.8394363
+    },
+    {
+      "seq": 7,
+      "id": "149aa746-8f9f-4584-b427-48c2dbbdb626",
+      "request": "d7d3ca60-bc60-45d5-a2c0-2164867532ef",
+      "actor": "18721c38-a1eb-4040-a594-04f0ca3894dd",
+      "type": "work",
+      "text": "completed",
+      "created": 1789759598.8396819
+    }
+  ],
+  "independent_result": "42\n",
+  "sender_receipt": "Correlated request ID: d7d3ca60-bc60-45d5-a2c0-2164867532ef\nConversation: d2035490-249b-4e5d-bb75-1779f6223277\nPeer (reviewer): 18721c38-a1eb-4040-a594-04f0ca3894dd\nGroup: ee0d2a8b-33dc-44ca-ab66-b62d35368349\nWork status: completed\n\nPeer's concrete finding:\n/tmp/lince-ui-test-49lkj3sh/review.py:2 excludes the upper endpoint because\nrange(start, end) stops before end, so inclusive_sum is not inclusive.\n\nFaulty expression: range(start, end)\nSuggested fix:    range(start, end + 1)\n\nFailing example (verified by peer):\nassert inclusive_sum(1, 3) == 6  # fails: actual result is 3\n",
+  "status_line": "V-??????                | 1 fixture1 \u25cf-|*2 fixture2 \u2190-| 3 fixture3 -    Alt+d details               \nMail 0  Work 1  !0                                                      \u2190 fixture1 \u00b7 ask #d7d3ca60  ",
+  "thread_header": " LINCE \u2014 Messages and tasks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \n\u2502fixture1 -> fixture2 | question                                               \u2502\n\u2502Request d7d3ca60-bc60-45d5-a2c0-2164867532ef | conversation d2035490-249b-4e5d\u2502\n\u2502-bb75-1779f6223277                                                            \u2502\n\u2502Parent: none | delivery read | work completed                                 \u2502\n\u2502Created 1789759503.931 | updated 1789759598.840 (Unix seconds)                \u2502\n\u2502Cancellation: not requested                                                   \u2502\n\u2502                                                                              \u2502\n\u2502NATIVE_REVIEW: please review /tmp/lince-ui-test-49lkj3sh/review.py for correct\u2502\n\u2502ness.                                                                         \u2502\n\u2502                                                                              \u2502\n\u25021789759503.931 fixture1 [created]                                             \u2502\n\u2502                                                                              \u2502\n\u2502                                                                              \u2502\n\u25021789759537.592 fixture2 [delivery]                                            \u2502\n\u2502read                                                                          \u2502\n\u2502                                                                              \u2502\n\u25021789759539.811 fixture2 [delivery]                                            \u2502\n\u2502read                                                                          \u2502\n\u2502                                                                              \u2502\n\u25021789759539.811 fixture2 [work]                                                \u2502\n\u2502active                                                                        \u2502\n\u2502                                                                              \u2502\n\u2502Cancel does not undo edits. D: delete terminal history older than 30 days.    \u2502\n\u2502Enter thread | c cancel | p pause | u resume | t retry uncertain | d mark deli\u2502\n\u2502s sender pane | f recipient pane | PgUp/PgDn scroll | g groups | Esc back     \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+  "thread_screen": " LINCE \u2014 Messages and tasks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \n\u2502ness.                                                                         \u2502\n\u2502                                                                              \u2502\n\u25021789759503.931 fixture1 [created]                                             \u2502\n\u2502                                                                              \u2502\n\u2502                                                                              \u2502\n\u25021789759537.592 fixture2 [delivery]                                            \u2502\n\u2502read                                                                          \u2502\n\u2502                                                                              \u2502\n\u25021789759539.811 fixture2 [delivery]                                            \u2502\n\u2502read                                                                          \u2502\n\u2502                                                                              \u2502\n\u25021789759539.811 fixture2 [work]                                                \u2502\n\u2502active                                                                        \u2502\n\u2502                                                                              \u2502\n\u25021789759539.811 fixture2 [accepted]                                            \u2502\n\u2502                                                                              \u2502\n\u2502                                                                              \u2502\n\u25021789759598.839 fixture2 [reply]                                               \u2502\n\u2502Finding: /tmp/lince-ui-test-49lkj3sh/review.py:2 excludes the upper endpoint b\u2502\n\u2502ecause range(start, end) stops before end, so inclusive_sum is not inclusive. \u2502\n\u2502Verified failing example: assert inclusive_sum(1, 3) == 6 fails because the ac\u2502\n\u2502tual result is 3. Use range(start, end + 1) to include the endpoint. Reviewed \u2502\n\u2502Cancel does not undo edits. D: delete terminal history older than 30 days.    \u2502\n\u2502Enter thread | c cancel | p pause | u resume | t retry uncertain | d mark deli\u2502\n\u2502s sender pane | f recipient pane | PgUp/PgDn scroll | g groups | Esc back     \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+  "sender_continued_while_pending": true,
+  "hidden_peer_did_not_steal_focus": true,
+  "sender_received_correlated_review": true
+}

@@ -1,5 +1,8 @@
 """Layout generation must agree with the actual viewport on nondefault widths."""
 import runpy
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -25,6 +28,7 @@ class LayoutTests(unittest.TestCase):
         for name in ("dashboard", "dashboard-vox", "dashboard-tiled", "dashboard-tiled-vox", "dashboard-statusline"):
             text = (ROOT / "layouts" / f"{name}.kdl").read_text()
             result = launcher["presentation_layout"](text, "minimal", True, True)
+            self.assertIn('agent_borderless "true"', result)
             self.assertNotIn('location="zellij:tab-bar"', result)
             self.assertNotIn('location="zellij:status-bar"', result)
             # The swap inherits the one status row through default_tab_template.
@@ -65,6 +69,8 @@ class LayoutTests(unittest.TestCase):
             fresh = launch()
             self.assertEqual(fresh.returncode, 0, fresh.stderr)
             self.assertIn("pane_frames false", fresh.stdout)
+            self.assertIn('agent_borderless "true"', fresh.stdout)
+            self.assertIn('agent_borderless "false"', launch('--frames').stdout)
             self.assertIn('pane size="15%" split_direction="horizontal"', fresh.stdout)
             self.assertIn('pane size="85%" name="lince-viewport"', fresh.stdout)
             self.assertIn('role "dialog"', fresh.stdout)
@@ -98,6 +104,8 @@ class LayoutTests(unittest.TestCase):
             old = ('keybinds {\n    locked {\n        bind "Ctrl l" { SwitchToMode "normal"; }\n    }\n'
                    '    shared_except "locked" {\n'
                    '        bind "Alt n" { NewPane; }\n'
+                   '        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
+                   '        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
                    '        bind "Alt l" { MessagePlugin { name "lince-sidebar-toggle"; }; }\n'
                    '        bind "Alt i" { Write 42; }\n    }\n}\n')
             active.write_text(old)
@@ -109,8 +117,12 @@ class LayoutTests(unittest.TestCase):
             self.assertNotIn('bind "Alt l"', migrated)
             self.assertEqual(migrated.count('bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }'), 2)
-            self.assertEqual(migrated.count('bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
-            self.assertEqual(migrated.count('bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'), 2)
             self.assertTrue((Path(directory) / ".local/bin/lince-voice").is_file())
             self.assertIn('bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }', migrated)
             self.assertIn('bind "Alt i" { Write 42; }', migrated)
@@ -189,22 +201,131 @@ class LayoutTests(unittest.TestCase):
         import subprocess
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = Path(directory) / "Home With Space"
+            home.mkdir()
             global_config = home / ".config/zellij/config.kdl"
             global_config.parent.mkdir(parents=True)
             global_config.write_text('// personal global config\n')
             rc = home / ".bashrc"
             rc.write_text('# LINCE aliases\nalias lince="zellij --layout dashboard-tiled"\nalias custom="echo mine"\n')
-            env = {**os.environ, "HOME": directory}
+            env = {**os.environ, "HOME": str(home)}
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
             active = home / ".config/lince-dashboard/zellij.kdl"
             active.write_text('// personal LINCE config\ncopy_command "custom-copy"\ncopy_on_select false\n')
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
-            self.assertIn('alias lince="lince-dashboard-launch"', rc.read_text())
+            self.assertIn("alias lince='\"$HOME/.local/bin/lince\"'", rc.read_text())
             self.assertIn('alias custom="echo mine"', rc.read_text())
             self.assertEqual(active.read_text(), '// personal LINCE config\ncopy_command "custom-copy"\ncopy_on_select false\n')
             self.assertEqual(global_config.read_text(), '// personal global config\n')
             self.assertTrue(active.with_suffix('.kdl.dist').exists())
             self.assertTrue((home / ".local/bin/lince-dashboard-launch").stat().st_mode & 0o111)
+            self.assertTrue((home / ".local/bin/lince").stat().st_mode & 0o111)
+            update_log = home / "update.log"
+            updater = home / ".local/bin/lince-update"
+            updater.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" > "{update_log}"\n')
+            updater.chmod(0o755)
+            invoked = subprocess.run(
+                ["bash", "-c", 'shopt -s expand_aliases; source "$HOME/.bashrc"; eval "lince update --check"'],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(invoked.returncode, 0, invoked.stdout + invoked.stderr)
+            self.assertEqual(update_log.read_text(), "--check\n")
             self.assertEqual({p.name for p in (home / ".config/zellij/layouts").glob('*.kdl')},
                              {p.name for p in (ROOT / 'layouts').glob('*.kdl')})
+
+    def test_installed_launcher_uses_managed_python_when_present(self):
+        import os
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            managed_python = home / ".local/share/lince/python/bin/python3"
+            managed_python.parent.mkdir(parents=True)
+            managed_python.write_text(
+                '#!/bin/sh\nprintf "%s\\n" "$*" > "$HOME/python-invocation"\n'
+                'printf "%s\\n" "$PATH" > "$HOME/python-path"\n'
+            )
+            managed_python.chmod(0o755)
+
+            subprocess.run(
+                ["bash", str(ROOT / "install-ui.sh")],
+                env={**os.environ, "HOME": directory},
+                check=True,
+            )
+
+            installed = home / ".local/bin/lince-dashboard-launch"
+            self.assertEqual(installed.read_text().splitlines()[0], "#!/usr/bin/env lince-python")
+            runtime_shim = home / ".local/bin/lince-python"
+            self.assertTrue(runtime_shim.stat().st_mode & 0o111)
+            self.assertIn(".local/share/lince/python/bin/python3", runtime_shim.read_text())
+            subprocess.run(
+                [str(installed), "--help"],
+                env={**os.environ, "HOME": directory, "PATH": f"{home / '.local/bin'}:/usr/bin:/bin"},
+                check=True,
+            )
+            self.assertEqual((home / "python-invocation").read_text().strip(), f"{installed} --help")
+            self.assertEqual(
+                (home / "python-path").read_text().strip().split(":")[0],
+                str(managed_python.parent),
+            )
+
+    def test_uninstall_keeps_runtime_shim_when_launcher_is_kept(self):
+        import os
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            local_bin = home / ".local/bin"
+            local_bin.mkdir(parents=True)
+            launcher = local_bin / "lince-dashboard-launch"
+            launcher.write_text("#!/usr/bin/env lince-python\n")
+            shim = local_bin / "lince-python"
+            shim.write_text(
+                "#!/bin/sh\n# Managed by LINCE for the standalone bootstrap interpreter.\n"
+            )
+
+            result = subprocess.run(
+                ["bash", str(ROOT / "uninstall.sh")],
+                env={**os.environ, "HOME": directory},
+                input="n\nn\n",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(launcher.is_file())
+            self.assertTrue(shim.is_file())
+
+    def test_lince_shim_forwards_arguments_from_common_shells(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory)
+            shutil.copy2(ROOT / "lince", bin_dir / "lince")
+            (bin_dir / "lince").chmod(0o755)
+            invocation = bin_dir / "invocation"
+            dashboard = bin_dir / "lince-dashboard-launch"
+            dashboard.write_text(
+                f'#!/bin/sh\nprintf "%s\\n" "$*" > "{invocation}"\n'
+            )
+            dashboard.chmod(0o755)
+
+            shell_commands = [
+                ("/bin/sh", '"$1" --preset minimal "two words"'),
+                (shutil.which("bash"), '"$1" --preset minimal "two words"'),
+                (shutil.which("zsh"), '"$1" --preset minimal "two words"'),
+            ]
+            for shell, command in shell_commands:
+                if shell is None:
+                    continue
+                with self.subTest(shell=shell):
+                    result = subprocess.run(
+                        [shell, "-c", command, shell, str(bin_dir / "lince")],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(invocation.read_text(), "--preset minimal two words\n")

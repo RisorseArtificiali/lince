@@ -13,9 +13,13 @@ keybinds clear-defaults=true {
         bind "Alt d" { MessagePlugin { name "lince-ui-open"; }; }
         bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
         bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
-        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }
-        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }
+        bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }
+        bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }
         bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
         bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
         bind "Alt n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
@@ -155,8 +159,8 @@ keybinds clear-defaults=true {
     }
     shared_except "locked" {
         bind "Alt left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
-        bind "Alt down" { MoveFocus "down"; }
-        bind "Alt up" { MoveFocus "up"; }
+        // Leave Alt+Up/Down unbound so the focused agent receives them
+        // (eg. queued follow-up editing). Horizontal arrows cycle agents.
         bind "Alt right" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
         bind "Alt +" { Resize "Increase"; }
         bind "Alt -" { Resize "Decrease"; }
@@ -238,9 +242,13 @@ keybinds clear-defaults=true {
         }
         bind "Ctrl l" { SwitchToMode "locked"; }
         bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
-        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }
-        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }
+        bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }
+        bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }
+        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }
         bind "Alt h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
         bind "Alt i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
         bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
         bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }

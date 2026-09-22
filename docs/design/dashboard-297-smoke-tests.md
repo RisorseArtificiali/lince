@@ -10,7 +10,7 @@ modifica al repository VoxCode è necessaria. I test automatici non usano audio 
 2. `Alt+v`: scegliere microfono, lingua, modello e CPU/CUDA; `s` salva. `a` avvia:
    attendere LOAD, parlare e verificare il livello. Chiudere con Esc, riaprire
    con Alt+v: nessuna seconda istanza, stesso stato e impostazioni.
-3. In PTT, usare Alt+x oppure Ctrl+Space due volte. Provare anche una
+3. In PTT, usare Alt+t oppure Ctrl+Space due volte. Provare anche una
    scorciatoia per iniziare e l’altra per terminare. Il testo resta nel buffer se auto-insert è
    disattivato; `i` dal popup o «comando: invia» lo inseriscono nel terminale.
    Riprovare con auto-insert attivo. Non deve essere premuto Enter nell'agente.
@@ -18,16 +18,16 @@ modifica al repository VoxCode è necessaria. I test automatici non usano audio 
    non deve cambiare la destinazione. Nascondere/chiudere il destinatario durante
    la trascrizione: il messaggio resta in attesa, errore nel popup, nessun agente
    nascosto viene riaperto. Selezionare un terminale valido: consegna una sola volta.
-5. In VA parlare, verificare il livello e le trascrizioni; `p` mette in pausa:
-   niente acquisizione, livello fermo, indicatore PAUSA. Parlare durante la pausa
+5. In VA parlare, verificare il livello e le trascrizioni; `m` mette in mute:
+   niente acquisizione, livello fermo, indicatore MUTE. Parlare durante il mute
    non deve produrre testo neppure dopo la ripresa. `p` riprende rapidamente.
 6. `x` ferma, rilascia microfono e modello. Uscire con Alt+q e rilanciare:
    configurazione conservata ma VoxCode fermo. Anche uscita senza salvataggio
    degli agenti conserva le impostazioni voce già salvate.
-7. Ripetere Alt+v/Alt+x/Ctrl+Space in modalità locked (Ctrl+l), con sidebar nascosta e
+7. Ripetere Alt+v/Alt+m/Alt+t/Ctrl+Space in modalità locked (Ctrl+l), con sidebar nascosta e
    tutti gli stati di Alt+b. Voice meter solo nella sezione sinistra visibile;
    R verde e / bianco si alternano sulla seconda riga, senza sovrapposizioni.
 8. Selezionare un microfono inesistente: errore leggibile nel popup, nessun crash.
-   Impostare `[dashboard] voxcode_enabled=false`: nessun avvio tramite Alt+x o Ctrl+Space.
+   Impostare `[dashboard] voxcode_enabled=false`: nessun avvio tramite Alt+t o Ctrl+Space.
 9. Installer/quickstart: con VoxCode presente compare una domanda di abilitazione;
    --defaults non si ferma sulla domanda. Nessun layout vox viene imposto.

@@ -22,9 +22,18 @@ allowed_levels = []
 home_subdir = ".amplication"
 bwrap_conflict = false
 disable_inner_sandbox_args = []
-home_ro_dirs = [".amplication"]
+home_ro_dirs = [".amplication", ".config/amp/skills", ".config/amp/plugins"]
 home_rw_dirs = []
 
 [dashboard]
-has_native_hooks = false
+has_native_hooks = true
 providers = ["__discover__"]
+
+# Once per agent; all variants inherit (design §3.5).
+[event_map]
+"amp.idle" = "input"
+"amp.running" = "running"
+"amp.awaiting-approval" = "permission"
+"amp.error" = "unknown"
+"amp.unknown" = "unknown"
+"amp.stopped" = "stopped"

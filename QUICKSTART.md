@@ -20,20 +20,46 @@ Optional, advanced: **lince-lab** — disposable Linux lab VMs an agent can crea
 ## Quick Install (Interactive)
 
 ```bash
-cd /path/to/lince
+curl -sSL https://lince.sh/install | bash
+```
+
+The bootstrap checks the platform, installs a pinned Zellij when needed, uses a
+system Python 3.11+ with pip when available (or provisions a pinned standalone
+Python), then installs the sandbox, dashboard, updater, and configuration tools.
+The released dashboard plugin is downloaded and checksum-verified; no compiler
+is needed.
+
+For a non-interactive install with sane defaults:
+
+```bash
+curl -sSL https://lince.sh/install | bash -s -- --defaults
+```
+
+On Linux, install `bubblewrap` through the system package manager first. On
+macOS, LINCE uses the built-in Seatbelt backend (`sandbox-exec`); Homebrew is
+not required. WSL is not supported yet and the bootstrap exits with a link to
+[#356](https://github.com/RisorseArtificiali/lince/issues/356).
+
+See the [installation guide](docs/documentation/install.md) for provisioning,
+checksum verification, manual/offline installation, and updates.
+
+## Install from an existing checkout
+
+If you already cloned a release of the repository, run:
+
+```bash
 ./quickstart.sh
 ```
 
-The installer will check prerequisites, install sandbox + dashboard, and show usage instructions.
-
-For non-interactive install:
-```bash
-./quickstart.sh --mini --yes
-```
-
----
+This entry point expects compatible Zellij and Python to be available already;
+the hosted bootstrap above is the recommended path because it provisions them.
+Use `./quickstart.sh --defaults` for a non-interactive run.
 
 ## Manual Install (Step by Step)
+
+Direct module installation is intended for contributors and advanced users.
+Start from a tagged release and ensure Zellij 0.45.1+, Python 3.11+ with pip,
+and the platform sandbox backend are already available.
 
 ### Step 1: Install agent-sandbox
 
@@ -61,7 +87,7 @@ cd lince-dashboard
 ```
 
 What it does:
-- Builds the WASM plugin (~900 KB)
+- Downloads and verifies the released WASM plugin (~900 KB)
 - Installs plugin to `~/.config/zellij/plugins/`
 - Installs layouts to `~/.config/zellij/layouts/`
 - Installs Claude Code status hooks
@@ -198,14 +224,13 @@ Option 2 — Via GUI: open **Terminator → Preferences → Keybindings**, find 
 
 | Component | Required For | Notes |
 |-----------|--------------|-------|
-| Linux | All | Tested on Fedora 43, Ubuntu |
-| macOS | Experimental | Via native Seatbelt sandbox backend (`sandbox-exec`) |
-| Zellij >= 0.40 | Dashboard | Terminal multiplexer |
-| Rust + wasm32-wasip1 | Dashboard | For building plugin |
-| Claude Code | Sandbox | AI coding agent |
-| bubblewrap | Sandbox (Linux) | Isolation technology |
+| Linux | All | `curl`, `git`, and bubblewrap; tested on Fedora 43 and Ubuntu |
+| macOS | Experimental | `curl`, `git`, and built-in Seatbelt (`sandbox-exec`); no Homebrew required |
+| Zellij >= 0.45.1 | Dashboard | Reused when compatible; otherwise provisioned in `~/.local/bin` |
+| Coding agent | Agent panes | Install only the agents you intend to use |
+| bubblewrap | Sandbox (Linux) | Install through the system package manager |
 | sandbox-exec (Seatbelt) | Sandbox (macOS) | Built into macOS; legacy nono backend is [deprecated](docs/documentation/sandbox/migration-nono-to-seatbelt.md) |
-| Python 3.11+ | Sandbox | Runtime |
+| Python 3.11+ with pip | Sandbox/config | Reused when compatible; otherwise provisioned in `~/.local/share/lince/python` |
 | Lima + qemu-img + KVM | lince-lab (optional) | Disposable lab VMs; broker runs on host; Linux-only in v1 |
 
 > **Ubuntu 24.04+ note**: unprivileged user namespaces are AppArmor-restricted
@@ -215,17 +240,31 @@ Option 2 — Via GUI: open **Terminator → Preferences → Keybindings**, find 
 > installed bwrap another way, either add a profile or set
 > `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0`.
 
+## Build from source
+
+The normal installer uses the released plugin. To compile the dashboard plugin
+locally, install `rustup`, a C compiler/linker, and the `wasm32-wasip1` target,
+then explicitly opt in:
+
+```bash
+rustup target add wasm32-wasip1
+curl -sSL https://lince.sh/install | bash -s -- --build-from-source
+```
+
+From an existing checkout, use `./quickstart.sh --build-from-source` instead.
+This is a contributor path, not a prerequisite for normal installation.
+
 ---
 
 ## Quick Reference
 
 ```bash
-# Install
-./quickstart.sh --mini --yes
+# Install with defaults
+curl -sSL https://lince.sh/install | bash -s -- --defaults
 
 # Update
-cd sandbox && ./update.sh
-cd lince-dashboard && ./update.sh
+lince update
+lince update --check
 
 # Launch
 lince

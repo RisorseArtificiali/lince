@@ -70,12 +70,8 @@ export default async ({ directory }) => {
                     break;
 
                 case "session.status": {
-                    let sub = "idle";
-                    try {
-                        sub = event.properties?.status?.type === "busy" ? "busy" : "idle";
-                    } catch {
-                        sub = "idle";
-                    }
+                    const type = event.properties?.status?.type;
+                    const sub = type === "busy" || type === "idle" ? type : "unknown";
                     reportEvent(`session.status.${sub}`);
                     break;
                 }

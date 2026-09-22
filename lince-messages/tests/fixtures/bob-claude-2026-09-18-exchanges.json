@@ -1,0 +1,492 @@
+{
+  "versions": {
+    "bob": "2.0.4",
+    "claude": "2.1.272"
+  },
+  "platform": "Linux",
+  "bob_original_tui": true,
+  "automatic_intake": false,
+  "session_start_context_verified": true,
+  "requests": [
+    {
+      "id": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "sender": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "recipient": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "kind": "question",
+      "delivery": "read",
+      "work": "completed"
+    },
+    {
+      "id": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "sender": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "recipient": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "kind": "task",
+      "delivery": "read",
+      "work": "completed"
+    },
+    {
+      "id": "8ba2f349-382a-4bcd-b4a3-5d33091d54fb",
+      "sender": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "recipient": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "kind": "question",
+      "delivery": "read",
+      "work": "completed"
+    },
+    {
+      "id": "bcabf330-14ca-4251-8414-92c82127b497",
+      "sender": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "recipient": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "kind": "task",
+      "delivery": "read",
+      "work": "completed"
+    }
+  ],
+  "events": [
+    {
+      "request": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "8ba2f349-382a-4bcd-b4a3-5d33091d54fb",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "bcabf330-14ca-4251-8414-92c82127b497",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "8ba2f349-382a-4bcd-b4a3-5d33091d54fb",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "8ba2f349-382a-4bcd-b4a3-5d33091d54fb",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "8ba2f349-382a-4bcd-b4a3-5d33091d54fb",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "8ba2f349-382a-4bcd-b4a3-5d33091d54fb",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "reply",
+      "text": "17 plus 25 equals 42."
+    },
+    {
+      "request": "8ba2f349-382a-4bcd-b4a3-5d33091d54fb",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "work",
+      "text": "completed"
+    },
+    {
+      "request": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "reply",
+      "text": "17 plus 25 equals 42."
+    },
+    {
+      "request": "e0cbf936-521c-47bd-8c6d-13c14d59962d",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "work",
+      "text": "completed"
+    },
+    {
+      "request": "bcabf330-14ca-4251-8414-92c82127b497",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "bcabf330-14ca-4251-8414-92c82127b497",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "bcabf330-14ca-4251-8414-92c82127b497",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "complete",
+      "text": "Result: 3 words. The phrase \"red green blue\" contains the words red, green, blue - counted by splitting on whitespace, giving 3 tokens."
+    },
+    {
+      "request": "04afd66d-43e4-4935-8f5a-19324472727c",
+      "actor": "dde17734-153b-4a84-aad5-d87f4307d5dd",
+      "type": "work",
+      "text": "completed"
+    },
+    {
+      "request": "bcabf330-14ca-4251-8414-92c82127b497",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "complete",
+      "text": "The phrase \"red green blue\" contains 3 words."
+    },
+    {
+      "request": "bcabf330-14ca-4251-8414-92c82127b497",
+      "actor": "43bcc967-6a48-492a-8511-9ee776289d89",
+      "type": "work",
+      "text": "completed"
+    }
+  ],
+  "native_events": [
+    {
+      "hook_event_name": "SessionStart",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "source": "startup"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "6e22e7719539e82bb01b55004575a748"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "6e22e7719539e82bb01b55004575a748"
+    },
+    {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "6e22e7719539e82bb01b55004575a748"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PreToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "PostToolUse",
+      "session_id": "6e22e7719539e82bb01b55004575a748",
+      "tool_name": "execute_command"
+    },
+    {
+      "hook_event_name": "Stop",
+      "session_id": "6e22e7719539e82bb01b55004575a748"
+    }
+  ],
+  "claude_exit": 0,
+  "source": "Real Bob 2.0.4 original interactive TUI using SSO and Claude 2.1.272 headless peer, Linux 2026-09-18. Reproduced with probe-bob-pair.py. Explicit inbox, no automatic intake. Only the disposable pair probe uses Bob --auto-approve for authorized messaging commands; the separate native permission probe does not.",
+  "actors": {
+    "43bcc967-6a48-492a-8511-9ee776289d89": "bob",
+    "dde17734-153b-4a84-aad5-d87f4307d5dd": "claude"
+  },
+  "bob_final_screen": "\u2022 The peer's completion result is \"3 words\". Paginate to end:\n Execute Command (completed)\n {\"v\": 1, \"ok\": true, \"result\": {\"id\": \"04afd66d-43e4-4935-8f5a-19324472727c\", \"conversation\": 472727c --after 23\n \"e803b506-6de2-41e7-8817-ad1e24d795d3\", \"parent\": null, \"group_id\": \"7ca9141d-b78d-4a12-9f84-f2b297cf25a5\", \"sender\":\n \"43bcc967-6a48-492a-8511-9ee776289d89\", \"recipient\": \"dde17734-153b-4a84-aad5-d87f4307d5dd\", \"kind\": \"task\", \"text\":\n\n\u2022 Delegate thread fully paginated (more: false). All four requests are fully resolved.\n  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  ## Final Report\n  ### Outgoing requests (sent by me, answered by peer)\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  \u2502 ID                                   \u2502 Kind            \u2502 Question                        \u2502 Peer's answer\n  \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  \u2502 e0cbf936-521c-47bd-8c6d-13c14d59962d \u2502 ask (question)  \u2502 \"What is 17 plus 25?\"           \u2502 \"17 plus 25 equals 42.\"\n  \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  \u2502 04afd66d-43e4-4935-8f5a-19324472727c \u2502 delegate (task) \u2502 \"Count words in red green blue\" \u2502 \"3 words\" (red, green,\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  [table cropped to terminal width 116]\n  ### Inbound requests (sent by peer, answered by me)\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  \u2502 ID                                   \u2502 Kind     \u2502 Question received               \u2502 My answer\n  \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  \u2502 8ba2f349-382a-4bcd-b4a3-5d33091d54fb \u2502 question \u2502 \"What is 17 plus 25?\"           \u2502 \"17 plus 25 equals 42.\" (repli\n  \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  \u2502 bcabf330-14ca-4251-8414-92c82127b497 \u2502 task     \u2502 \"Count words in red green blue\" \u2502 \"The phrase 'red green blue' c\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  [table cropped to terminal width 116]\n  Both agents exchanged symmetric question/task pairs. All four requests reached work: completed with full event threa\n  ds paginated to more: false.\n\n\n \u2834 Processing\u2026 (Enter to steer, Tab to queue)\n\n \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  \u276f   Build Anything, @ for context, / for commands, $ for skills\n \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  Agent Mode (auto-approve) \u00b7 30.3k / 270.0k (11%) \u00b7 1.30 \ud83c\udd5e\n\n\n"
+}

@@ -22,18 +22,21 @@ in the same project; `Alt+d`, then `q`, leaves the previous saved state unchange
 See [Views and Themes](https://lince.sh/documentation/#/dashboard/views-and-themes)
 for palettes, width, frame overrides and session configuration.
 
-Sandboxed agents run inside [agent-sandbox](../sandbox/) (bubblewrap, Linux) or [nono](https://github.com/always-further/nono) (Landlock/Seatbelt, Linux + macOS) — the dashboard manages pane lifecycle and status, not isolation. The sandbox backend is auto-detected or configurable per-agent.
+Sandboxed agents run inside [agent-sandbox](../sandbox/) (bubblewrap on Linux,
+native Seatbelt on macOS) or the deprecated [nono](https://github.com/always-further/nono)
+backend — the dashboard manages pane lifecycle and status, not isolation. The
+sandbox backend is auto-detected or configurable per-agent.
 
 **Message relay**: Send conversation messages between agents (`s` to relay last message, `S` for N messages).
 
 ## Prerequisites
 
 - **Zellij** >= 0.45.1
-- **Rust** with `wasm32-wasip1` target (`rustup target add wasm32-wasip1`)
+- **curl** (for the released plugin and checksum)
 - **At least one supported AI coding agent** (Claude Code, Codex, Gemini, OpenCode, Aider, Amp)
 - **A sandbox backend** (at least one):
   - **Linux**: [agent-sandbox](../sandbox/) (recommended) or [nono](https://github.com/always-further/nono)
-  - **macOS**: [nono](https://github.com/always-further/nono) (required — agent-sandbox is Linux-only)
+  - **macOS**: [agent-sandbox](../sandbox/) with built-in Seatbelt (recommended; no Homebrew required) or deprecated [nono](https://github.com/always-further/nono)
 - **[VoxCode](https://github.com/RisorseArtificiali/voxcode)** (optional, for voice relay)
 
 ## Installation
@@ -45,8 +48,8 @@ chmod +x install.sh
 ```
 
 The installer:
-1. Checks prerequisites (Zellij, Rust, WASM target)
-2. Builds the plugin (Rust → WASM, ~900 KB)
+1. Checks prerequisites (Zellij and curl)
+2. Downloads the released WASM plugin and verifies it against `SHA256SUMS`
 3. Copies plugin to `~/.config/zellij/plugins/`
 4. Installs layouts to `~/.config/zellij/layouts/`
 5. Creates config at `~/.config/lince-dashboard/config.toml`
@@ -63,6 +66,16 @@ lince-floating     # launch the floating overlay layout
 zd                 # legacy alias for lince
 ```
 
+### Build from source
+
+The default path uses the prebuilt release artifact. Contributors can instead
+install `rustup`, a C compiler/linker, and the `wasm32-wasip1` target, then run:
+
+```bash
+rustup target add wasm32-wasip1
+./install.sh --build-from-source
+```
+
 ## Quick Start
 
 Press `n` to spawn an agent (quick name prompt), or `N` for the full wizard (type, name, profile, directory).
@@ -75,10 +88,12 @@ Press `n` to spawn an agent (quick name prompt), or `N` for the full wizard (typ
 | `h` / `Esc` | Hide agent pane |
 | `j` / `k` | Navigate agent list |
 | `i` | Toggle details; PageUp/PageDown scroll |
-| `Alt+d` | Expanded list popup from any pane |
+| `Alt+d` | Detailed agent list popup from any pane |
 | `Alt+i` / `Alt+h` | Information / help popup |
 | `Alt+s` | Toggle sidebar (minimal/statusline) |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order (also in locked mode) |
+| `Alt+x` | Kill focused agent and focus the next agent, if any |
+| `Alt+r` | Rename focused agent from any pane |
 | `Alt+b` | Cycle status bar: hidden → left summary → full → agents only (minimal/statusline) |
 | `Alt+n` | Creation wizard |
 | `Alt+1`–`Alt+9` | Focus agent from any pane |
@@ -162,6 +177,7 @@ lince-dashboard/
 - Test hook manually: `echo '{"hook_event_name":"Stop"}' | LINCE_AGENT_ID=test-1 bash ~/.local/bin/claude-status-hook.sh`
 - Check file fallback: `cat /tmp/lince-dashboard/claude-test-1.state`
 - For Codex, run `bash hooks/install-codex-hooks.sh`, then open `/hooks` in Codex and review/trust the `codex-status-hook.sh` handlers. Restart the Codex session. The installer merges lifecycle events into `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and preserves other hooks. Legacy `notify` alone can only report turn completion, so it cannot switch the dashboard to `RUNNING`.
+- Codex startup readiness is observed once by `lince-codex-startup`, as for Bob. The dashboard shows `I` when the empty Codex 0.155.1 composer is visible after loading; native hooks take precedence and own subsequent transitions. Unknown or changed TUI layouts remain `-` until a native hook arrives. Updating this integration requires both the dashboard plugin and the hook installer.
 - Verify Bob hooks are installed: check `~/.bob/settings/settings.json` for `bob-status-hook.sh` entries under `hooks`
 - Ensure sandbox passes env vars (see [Sandbox Integration](https://lince.sh/documentation/#/dashboard/usage-guide?id=sandbox-integration))
 
@@ -196,4 +212,4 @@ A trailing backslash is not a portable multiline shortcut for Codex.
 
 The installer asks for a preset with descriptions and a documentation link; Enter selects `minimal`. Quickstart asks only once, and `--defaults` uses `minimal`. For unattended preset selection, set `LINCE_DASHBOARD_PRESET=minimal`, `statusline`, or `classic`. The selected preset is saved in the dashboard config.
 
-Voice input is available on demand with `Alt+v` and PTT with `Alt+x` / `Ctrl+Space`, without a permanent pane. Settings persist; the microphone starts only on request. See [Voice input](https://lince.sh/documentation/#/dashboard/voice-input).
+Voice input is available on demand with `Alt+v`, mute/unmute with `Alt+m`, and PTT with `Alt+t` / `Ctrl+Space`, without a permanent pane. Settings persist; the microphone starts only on request. See [Voice input](https://lince.sh/documentation/#/dashboard/voice-input).

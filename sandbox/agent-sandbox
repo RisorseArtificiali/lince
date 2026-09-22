@@ -182,6 +182,7 @@ passthrough = [
     "ZELLIJ",
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
+    "LINCE_STATUS_DIR",
     # Lets Chromium-based browsers use their native Wayland backend (#284).
     # Also works when X11 exposure is disabled or no X11 display is available.
     "XDG_SESSION_TYPE",
@@ -224,6 +225,19 @@ unshare_pid = true
 # New terminal session: prevents terminal escape attacks.
 # May interfere with Ctrl+C propagation. Disable if you have issues.
 new_session = false
+
+# Graceful Ctrl+C: when true (default), the first Ctrl+C while the agent
+# is working does NOT terminate the sandbox. agent-sandbox forwards
+# SIGINT into it (the sandbox runs in its own session and never sees the
+# terminal's signal) and the agent is expected to handle it — e.g. cancel
+# the current LLM request and return to the prompt; every press is
+# acknowledged with a hint. A second Ctrl+C within 3 seconds forces
+# termination (SIGTERM → SIGKILL). Requires /proc (Linux); elsewhere this
+# falls back to terminating the sandbox on the first press.
+# Set to false to terminate the sandbox on the first Ctrl+C (SIGINT →
+# SIGTERM → SIGKILL escalation; an agent that catches SIGINT can take a
+# few seconds to die).
+graceful_interrupt = true
 
 # Block git push via a wrapper script
 block_git_push = true
@@ -2235,6 +2249,13 @@ def build_env_clear_command(
         for var, val in proxy_env.items():
             all_env[var] = val
 
+    # Messaging credentials come only from the supervisor's launch environment,
+    # never project/provider env tables. Keep administrative credentials private.
+    for name in list(all_env):
+        if name.startswith("LINCE_MSG_"):
+            del all_env[name]
+    all_env.update(messaging_environment())
+
     # Git wrapper PATH injection: if __LINCE_WRAPPER_PATH is present
     # (set by prepare_seatbelt_git_blocking), prepend it to PATH so the
     # git-push-blocking wrapper is found before the real git binary.
@@ -2370,6 +2391,19 @@ def generate_seatbelt_profile(
     lines.append("; Deny SSH keys unless explicitly added to home_ro_dirs")
     lines.append(f'(deny file-read* (subpath "{home}/.ssh"))')
     lines.append("")
+
+    # Messaging state is private even for agents not enrolled in a group.
+    message_private = Path.home() / ".local/state/lince-messages"
+    message_env = messaging_environment()
+    credential = message_env.get("LINCE_MSG_CREDENTIAL")
+    for protected in {str(message_private), str(message_private.resolve())}:
+        quoted = json.dumps(protected)
+        restriction = f'(subpath {quoted})'
+        if credential:
+            restriction = f'(require-all {restriction} (require-not (literal {json.dumps(credential)})))'
+        lines.append(f'(deny file-read* file-write* {restriction})')
+    if credential:
+        lines.append(f'(deny file-write* (literal {json.dumps(credential)}))')
 
     # --- Process permissions ---
     lines.append("; Process permissions")
@@ -2575,6 +2609,11 @@ def build_seatbelt_cmd(
         '; (allow file-write* (subpath "<PROJECT_DIR>"))\n',
         project_rule,
     )
+
+    message_env = messaging_environment()
+    if message_env:
+        endpoint = json.dumps(message_env["LINCE_MSG_ENDPOINT"])
+        runtime_profile += f'\n(allow network-outbound (remote unix-socket (literal {endpoint})))\n'
 
     # Write the profile to a temp file
     tmp_dir = SEATBELT_PROFILE_DIR
@@ -2995,6 +3034,50 @@ def prepare_seatbelt_git_blocking(config: dict) -> dict[str, str]:
 # bwrap command builder
 # ---------------------------------------------------------------------------
 
+def messaging_environment() -> dict[str, str]:
+    """Validate the host-provisioned, per-process messaging endpoint/credential.
+
+    Environment configuration inside repository TOML cannot select these paths.
+    The supervisor passes the two variables directly to agent-sandbox. Only one
+    credential file is exposed, never its directory or the authoritative store.
+    """
+    endpoint = os.environ.get("LINCE_MSG_ENDPOINT")
+    credential = os.environ.get("LINCE_MSG_CREDENTIAL")
+    if not endpoint and not credential:
+        return {}
+    if not endpoint or not credential:
+        raise ValueError("Incomplete supervisor messaging configuration")
+    public_root = Path(f"/tmp/lince-msg-{os.getuid()}").resolve()
+    private_root = (Path.home() / ".local/state/lince-messages").resolve()
+    ep, cred = Path(endpoint), Path(credential)
+    if (not ep.is_absolute() or not cred.is_absolute()
+            or not ep.resolve().is_relative_to(public_root)
+            or not cred.resolve().is_relative_to(private_root / "credentials")
+            or not ep.is_socket() or not cred.is_file()
+            or cred.is_symlink() or cred.stat().st_uid != os.getuid()
+            or cred.stat().st_mode & 0o077):
+        raise ValueError("Invalid supervisor messaging endpoint or credential")
+    return {"LINCE_MSG_ENDPOINT": str(ep.resolve()), "LINCE_MSG_CREDENTIAL": str(cred.resolve())}
+
+
+def messaging_bwrap_args() -> list[str]:
+    """Applied after configurable mounts so messaging state remains host-only."""
+    args: list[str] = []
+    private = Path.home() / ".local/state/lince-messages"
+    if private.exists():
+        args += ["--tmpfs", str(private.resolve())]
+    env = messaging_environment()
+    # Do not permit project env tables to impersonate supervisor provisioning.
+    for key in ("LINCE_MSG_ENDPOINT", "LINCE_MSG_CREDENTIAL", "LINCE_MSG_TOKEN", "LINCE_MSG_ADMIN"):
+        args += ["--unsetenv", key]
+    if env:
+        args += ["--dir", "/tmp/.lince-msg",
+                 "--ro-bind", env["LINCE_MSG_ENDPOINT"], "/tmp/.lince-msg/mailbox.sock",
+                 "--ro-bind", env["LINCE_MSG_CREDENTIAL"], "/tmp/.lince-msg/credential",
+                 "--setenv", "LINCE_MSG_ENDPOINT", "/tmp/.lince-msg/mailbox.sock",
+                 "--setenv", "LINCE_MSG_CREDENTIAL", "/tmp/.lince-msg/credential"]
+    return args
+
 def x11_bwrap_args(config: dict) -> list[str]:
     """Expose only the active local X11 socket and its authentication file.
 
@@ -3075,7 +3158,7 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     # --- 2b. Re-expose Zellij socket dir so hooks can use `zellij pipe` ------
     # Zellij 0.40+ stores sockets in $XDG_RUNTIME_DIR/zellij/ (not /tmp).
     zellij_socket_dir = os.path.join(runtime_dir, "zellij")
-    if os.path.isdir(zellij_socket_dir):
+    if os.path.isdir(zellij_socket_dir) and not messaging_environment():
         dest = f"/run/user/{uid}/zellij"
         cmd += ["--bind", zellij_socket_dir, dest]
 
@@ -3409,6 +3492,9 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
             cmd[-1:-1] = list(raw_bwrap_args)
         else:
             cmd += list(raw_bwrap_args)
+
+    # Messaging denies/mounts must follow configurable mounts and env overrides.
+    cmd[-1:-1] = messaging_bwrap_args()
 
     # --- Landlock hardening shim (#222) ---------------------------------------
     # Injected as the LAST bwrap argv element so its rule FDs open in the
@@ -4229,6 +4315,344 @@ def landlock_plan(config: dict, sandbox_level: str | None,
     }
 
 
+# Sentinel returned by _sandbox_wait when the sandbox is terminated by a
+# user interrupt in legacy (non-graceful) mode.
+_SANDBOX_INTERRUPTED = object()
+
+
+# Host-side helper processes that must survive a graceful interrupt. The
+# paranoid egress bridge (`socat TCP-LISTEN:8118 ...`) is forked by the very
+# PID that then execs bwrap (see the paranoid wrap in cmd_run), so it is a
+# direct descendant of the sandbox root: signaling "every descendant" on the
+# first graceful Ctrl+C would kill the sandbox's only network path — every
+# later API call would fail with ECONNREFUSED while the sandbox stays alive.
+# Kill paths still reach these helpers via os.killpg: they stay in the
+# sandbox root's process group (see _signal_tree).
+_BRIDGE_COMMS = {"socat"}
+
+
+def _forward_signal_to_descendants(root_pid: int, sig: int) -> bool:
+    """Send *sig* to all descendant processes of *root_pid*.
+
+    With ``start_new_session=True`` the sandbox root (root_pid) is in its
+    own session and does not receive terminal signals.  We need to forward
+    the signal to the agent (e.g. goose) so it can cancel the current
+    operation.  Host-side bridge helpers (``_BRIDGE_COMMS``) are skipped.
+
+    The process tree is::
+
+        sandbox root (root_pid) → bwrap-clone (PID 1 in namespace) → goose
+
+    bwrap-clone has ``SIGNAL_UNKILLABLE`` and ignores SIGINT/SIGTERM.
+    goose catches SIGINT and handles it (cancel request, return to prompt).
+    root_pid itself is **not** signaled, so it survives.
+
+    Returns True if at least one descendant was signaled.  Always False on
+    systems without /proc (macOS) — see _signal_tree for the killpg path
+    that covers those backends.
+    """
+    import glob
+
+    # Build parent → children map from /proc
+    children_of: dict[int, list[int]] = {}
+    comm_of: dict[int, str] = {}
+    for stat_path in glob.glob("/proc/[0-9]*/stat"):
+        try:
+            with open(stat_path) as fh:
+                data = fh.read()
+            # Format: "pid (comm) state ppid ..."
+            # comm can contain spaces and parens.
+            lparen = data.find("(")
+            rparen = data.rfind(")")
+            pid = int(data[:lparen].strip())
+            fields = data[rparen + 2:].split()
+            ppid = int(fields[1])
+            children_of.setdefault(ppid, []).append(pid)
+            comm_of[pid] = data[lparen + 1:rparen]
+        except (OSError, ValueError, IndexError):
+            continue
+
+    # BFS to collect all descendant PIDs (not root_pid itself), skipping
+    # host-side bridge helpers and their subtrees (see _BRIDGE_COMMS).
+    to_signal: list[int] = []
+    queue = list(children_of.get(root_pid, []))
+    while queue:
+        pid = queue.pop(0)
+        if comm_of.get(pid, "") in _BRIDGE_COMMS:
+            continue
+        to_signal.append(pid)
+        queue.extend(children_of.get(pid, []))
+
+    if not to_signal:
+        return False
+
+    for pid in to_signal:
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
+    return True
+
+
+def _can_forward_interrupts() -> bool:
+    """True when graceful interrupt mode can work on this platform.
+
+    Graceful mode forwards SIGINT to the sandbox's descendants via a
+    /proc walk — the sandbox itself is in its own session
+    (start_new_session=True) and never sees the terminal's signal.
+    Without /proc (macOS: seatbelt and nono backends) the walk finds
+    nothing and the first Ctrl+C would be a silent no-op; combined with
+    the 3 s counter reset in _sandbox_wait, spaced presses could never
+    reach force-termination.  cmd_run gates graceful mode on this check.
+    """
+    return os.path.isdir("/proc")
+
+
+def _signal_tree(proc: subprocess.Popen, sig: int) -> None:
+    """Send *sig* to the whole sandbox tree rooted at *proc*.
+
+    Two delivery paths, both needed:
+
+    * ``os.killpg`` on the child's own process group — the run backends
+      spawn the sandbox with ``start_new_session=True``, so its process
+      group covers the root and every descendant that stayed in it.  This
+      is the only path that works on macOS (seatbelt/nono), where /proc
+      does not exist.  If the child shares *our* process group (cmd_learn
+      spawns without a new session), killpg is skipped — it would signal
+      agent-sandbox itself, and the terminal has already delivered the
+      signal to that group anyway.
+    * a /proc walk for descendants that left the group (bwrap's inner
+      PID 1) — see _forward_signal_to_descendants.
+
+    The direct child is signaled separately as well, mirroring what
+    ``subprocess.run``'s KeyboardInterrupt path did via ``Popen.kill()``.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:
+        pgid = None  # root already gone; descendants are all we can hit
+    if pgid is not None and pgid != os.getpgid(0):
+        try:
+            os.killpg(pgid, sig)
+        except OSError:
+            pass
+    _forward_signal_to_descendants(proc.pid, sig)
+    try:
+        proc.send_signal(sig)
+    except OSError:  # already reaped — nothing left to signal
+        pass
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill the sandbox tree and reap the root (legacy Ctrl+C path).
+
+    The old implementation used ``subprocess.run``, which on
+    ``KeyboardInterrupt`` kills the child and reaps it before the
+    exception surfaces, while the terminal delivered SIGINT to the whole
+    foreground process group.  With ``start_new_session=True`` the sandbox
+    is in its own session: it never saw the terminal's SIGINT, and only
+    the bwrap backend has ``--die-with-parent`` — on seatbelt and nono an
+    unsignaled child survives agent-sandbox's exit as an orphan still
+    attached to the terminal.  So the kill must be done by hand.
+
+    Escalates SIGINT → SIGTERM → SIGKILL across the whole tree — the
+    SIGINT leg restores the signal delivery the foreground group used to
+    provide — with a short grace period per step.  Always ends with
+    ``wait()`` so the root is reaped before returning.
+    """
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+        if proc.poll() is not None:
+            return
+        _signal_tree(proc, sig)
+        try:
+            proc.wait(timeout=2)
+            return
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            # Timed out, or an impatient extra Ctrl+C while already
+            # tearing down: escalate to the next (stronger) signal.
+            continue
+    if proc.poll() is None:
+        try:
+            proc.wait(timeout=5)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            pass  # SIGKILLed but stuck in uninterruptible sleep; nothing more to do
+
+
+def _exit_code(rc: int) -> int:
+    """Map a wait() return to shell convention: death-by-signal → 128+n.
+
+    Popen.wait() returns the negated signal number (e.g. -15 for SIGTERM);
+    sys.exit(-15) surfaces as 241 (256-15), not the conventional 143.
+    """
+    return 128 - rc if rc < 0 else rc
+
+
+def _snapshot_terminal():
+    """Capture the terminal attributes so kill paths can restore them.
+
+    The agent TUI owns the shared terminal while it runs; if it is killed
+    mid-turn (force-kill, legacy interrupt, SIGHUP teardown) it dies in raw
+    mode and leaves the terminal unusable.  Returns None when stdin is not
+    a tty or termios is unavailable.
+    """
+    try:
+        import termios
+
+        return termios.tcgetattr(0)
+    except Exception:
+        return None
+
+
+def _restore_terminal(saved) -> None:
+    """Best-effort restore of the state captured by _snapshot_terminal."""
+    if saved is None:
+        return
+    try:
+        import termios
+
+        termios.tcsetattr(0, termios.TCSADRAIN, saved)
+    except Exception:
+        pass  # no tty anymore — nothing to restore
+
+
+def _install_terminal_signal_handling() -> dict:
+    """Handle the terminal signals the detached sandbox can no longer see.
+
+    ``start_new_session=True`` puts the sandbox in its own session, so
+    terminal-generated SIGHUP (pane/ssh close) and SIGWINCH (resize) stop
+    reaching it:
+
+    * SIGHUP: agent-sandbox itself still dies of it (default disposition —
+      no handler is installed anywhere), and seatbelt/nono have no
+      parent-death mechanism, so the sandboxed agent would be orphaned and
+      keep running unsupervised.  Catch it, tear the tree down, restore
+      the terminal, then re-raise so the exit status stays conventional.
+    * SIGWINCH: full-screen agent TUIs re-read the window size on SIGWINCH;
+      without forwarding they keep a stale layout after a resize.
+
+    Returns the shared state dict; cmd_run stores the spawned sandbox in
+    state["proc"] as soon as it exists.
+    """
+    state: dict = {"proc": None, "term": _snapshot_terminal()}
+
+    def _on_sighup(signum, frame):
+        proc = state["proc"]
+        if proc is not None and proc.poll() is None:
+            _kill_tree(proc)
+            _restore_terminal(state["term"])
+        signal.signal(signal.SIGHUP, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGHUP)  # re-raise: exit code 129
+
+    def _on_sigwinch(signum, frame):
+        proc = state["proc"]
+        if proc is not None and proc.poll() is None:
+            _forward_signal_to_descendants(proc.pid, signal.SIGWINCH)
+
+    signal.signal(signal.SIGHUP, _on_sighup)
+    signal.signal(signal.SIGWINCH, _on_sigwinch)
+    return state
+
+
+def _sandbox_wait(proc: subprocess.Popen, graceful_interrupt: bool,
+                  term=None):
+    """Wait for a sandboxed child process, handling Ctrl+C.
+
+    When *graceful_interrupt* is True, the first Ctrl+C does **not**
+    terminate the sandbox: SIGINT is forwarded to the sandbox's
+    descendants (the sandbox runs in its own session and never sees the
+    terminal's signal) so the agent can handle it — e.g. cancel an LLM
+    request and return to the prompt — and every press is acknowledged
+    with a hint.  A second Ctrl+C within three seconds forces
+    termination (``SIGTERM`` → ``SIGKILL``).
+
+    When *graceful_interrupt* is False, Ctrl+C terminates the sandbox
+    (legacy behaviour — SIGINT → SIGTERM → SIGKILL, so an agent that
+    catches SIGINT may take a few seconds to die): the sandbox tree is
+    killed and the root reaped before returning, restoring the old
+    ``subprocess.run`` contract (which killed and reaped the child on
+    KeyboardInterrupt while the terminal delivered SIGINT to the whole
+    foreground group).
+
+    Returns the child's exit code on normal or forced termination
+    (deaths by signal are mapped to the conventional 128+n).
+    Returns ``_SANDBOX_INTERRUPTED`` when the sandbox is terminated by a
+    user interrupt in legacy mode.
+    """
+    if not graceful_interrupt:
+        try:
+            return _exit_code(proc.wait())
+        except KeyboardInterrupt:
+            print("\nSandbox terminated.")
+            # The sandbox runs in its own session (start_new_session=True),
+            # so it never received the terminal's SIGINT — and only the
+            # bwrap backend has --die-with-parent to mask that.  Kill the
+            # tree and reap the root ourselves (what subprocess.run's
+            # KeyboardInterrupt path used to do), or seatbelt/nono leak
+            # the agent as an orphan still attached to the terminal.
+            _kill_tree(proc)
+            _restore_terminal(term)
+            return _SANDBOX_INTERRUPTED
+
+    _RESET_SECS = 3
+    interrupt_count = 0
+    last_interrupt = 0.0
+
+    while True:
+        try:
+            return _exit_code(proc.wait())
+        except KeyboardInterrupt:
+            now = time.monotonic()
+            if now - last_interrupt > _RESET_SECS:
+                interrupt_count = 0
+            interrupt_count += 1
+            last_interrupt = now
+
+            if interrupt_count >= 2:
+                print("\nForce terminating sandbox...")
+                # Signal the whole tree, not just the root: seatbelt and
+                # nono have no parent-death mechanism, so a root-only kill
+                # would orphan the agent exactly like the legacy branch
+                # did before _kill_tree.
+                try:
+                    _signal_tree(proc, signal.SIGTERM)
+                    rc = _exit_code(proc.wait(timeout=5))
+                    _restore_terminal(term)
+                    return rc
+                except subprocess.TimeoutExpired:
+                    pass  # SIGTERM grace expired — fall through to SIGKILL
+                except KeyboardInterrupt:
+                    # A third, impatient Ctrl+C during the SIGTERM grace:
+                    # escalate to SIGKILL now instead of letting the
+                    # interrupt escape _sandbox_wait as a traceback (and
+                    # skipping the fallback below).
+                    pass
+                _signal_tree(proc, signal.SIGKILL)
+                try:
+                    rc = _exit_code(proc.wait(timeout=5))
+                except KeyboardInterrupt:
+                    # SIGKILL is already delivered; reap even if the user
+                    # keeps pressing.
+                    rc = _exit_code(proc.wait())
+                _restore_terminal(term)
+                return rc
+            # First Ctrl+C: the child is in its own session (start_new_session)
+            # so it did NOT receive terminal SIGINT.  Forward SIGINT to the
+            # agent (goose) by signaling the sandbox's descendants —
+            # bwrap-clone (PID 1 in namespace) ignores it via
+            # SIGNAL_UNKILLABLE, while goose catches it and can cancel the
+            # current request.  Always acknowledge the press: a forward
+            # that signals nothing (no /proc, or the tree vanished in a
+            # race) must not be a silent no-op — with the counter reset
+            # above, silence would make force-exit unreachable.
+            if _forward_signal_to_descendants(proc.pid, signal.SIGINT):
+                print(f"\nInterrupt forwarded to the sandbox — press Ctrl+C "
+                      f"again within {_RESET_SECS}s to force exit.")
+            else:
+                print(f"\nCould not deliver the interrupt into the sandbox — "
+                      f"press Ctrl+C again within {_RESET_SECS}s to force exit.")
+            continue
+
+
 def cmd_run(args, agent_extra: list[str]) -> None:
     config, config_path = load_config()
 
@@ -4322,6 +4746,30 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     profile = provider
 
     sec = config.get("security", {})
+    graceful_interrupt = sec.get("graceful_interrupt", True)
+    # Graceful mode can only work where SIGINT can be forwarded into the
+    # sandbox (the /proc walk — Linux: bwrap and nono/Landlock).  On macOS
+    # there is no /proc: the first Ctrl+C would forward nothing (a silent
+    # no-op) and the 3 s counter reset in _sandbox_wait would keep spaced
+    # presses from ever force-terminating.  Fall back to the legacy
+    # immediate exit there — what seatbelt/nono did before graceful mode
+    # existed.  (Gated on /proc, not on the backend name: nono also runs
+    # on Linux via Landlock, where forwarding does work.)
+    if graceful_interrupt and not _can_forward_interrupts():
+        graceful_interrupt = False
+        if "graceful_interrupt" in sec:  # explicitly requested, not default
+            print(
+                "\033[33m⚠  graceful_interrupt=true is unsupported on this "
+                "platform (no /proc to forward SIGINT into the sandbox); "
+                "falling back to terminating the sandbox on Ctrl+C.\033[0m",
+                file=sys.stderr,
+            )
+
+    # SIGHUP/SIGWINCH handling for the detached sandbox (start_new_session
+    # hides it from the terminal — see _install_terminal_signal_handling).
+    # Each backend stores its Popen in sandbox_signals["proc"] right after
+    # spawning, so the handlers always act on the live sandbox, if any.
+    sandbox_signals = _install_terminal_signal_handling()
 
     # --- nono backend path (simpler — nono handles isolation itself) -------
     if backend == "nono":
@@ -4385,6 +4833,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         print(f"  isolation   Landlock LSM / Seatbelt")
         print(f"  network     enabled")
         print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+        print(f"  interrupt   {'graceful (2×Ctrl+C to force)' if graceful_interrupt else 'exit on first Ctrl+C'}")
         print(
             f"  permissions "
             f"{'ask (safe mode)' if args.safe else 'per agent defaults'}"
@@ -4420,10 +4869,14 @@ def cmd_run(args, agent_extra: list[str]) -> None:
             )
 
         try:
-            result = subprocess.run(cmd, cwd=str(project_dir))
-            sys.exit(result.returncode)
-        except KeyboardInterrupt:
-            print("\nSandbox terminated.")
+            proc = subprocess.Popen(cmd, cwd=str(project_dir),
+                                    start_new_session=True)
+            sandbox_signals["proc"] = proc
+            result = _sandbox_wait(proc, graceful_interrupt,
+                                   term=sandbox_signals["term"])
+            if result is _SANDBOX_INTERRUPTED:
+                sys.exit(130)
+            sys.exit(result)
         except FileNotFoundError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             sys.exit(1)
@@ -4664,6 +5117,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         if sb_proxy:
             print(f"  cred proxy  127.0.0.1:{sb_proxy_port} (direct TCP)")
         print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+        print(f"  interrupt   {'graceful (2×Ctrl+C to force)' if graceful_interrupt else 'exit on first Ctrl+C'}")
         print(
             f"  permissions "
             f"{'ask (safe mode)' if args.safe else 'per agent defaults'}"
@@ -4712,10 +5166,14 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         write_policy_record(args.id, sb_record)
 
         try:
-            result = subprocess.run(cmd, cwd=str(project_dir))
-            sys.exit(result.returncode)
-        except KeyboardInterrupt:
-            print("\nSandbox terminated.")
+            proc = subprocess.Popen(cmd, cwd=str(project_dir),
+                                    start_new_session=True)
+            sandbox_signals["proc"] = proc
+            result = _sandbox_wait(proc, graceful_interrupt,
+                                   term=sandbox_signals["term"])
+            if result is _SANDBOX_INTERRUPTED:
+                sys.exit(130)
+            sys.exit(result)
         except FileNotFoundError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             sys.exit(1)
@@ -5136,6 +5594,7 @@ def cmd_run(args, agent_extra: list[str]) -> None:
         print(f"  landlock    fs only (ABI {landlock_abi})")
     print(f"  pid isolat. {'on' if sec.get('unshare_pid', True) else 'off'}")
     print(f"  git push    {'blocked' if sec.get('block_git_push', True) else 'allowed'}")
+    print(f"  interrupt   {'graceful (2×Ctrl+C to force)' if graceful_interrupt else 'immediate exit'}")
     print(f"  env vars    clearenv + whitelist")
     if proxy:
         targets = [
@@ -5235,16 +5694,20 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     write_policy_record(args.id, bwrap_record)
 
     try:
-        result = subprocess.run(cmd, cwd=str(project_dir))
+        proc = subprocess.Popen(cmd, cwd=str(project_dir),
+                                start_new_session=True)
+        sandbox_signals["proc"] = proc
+        result = _sandbox_wait(proc, graceful_interrupt,
+                               term=sandbox_signals["term"])
+        if result is _SANDBOX_INTERRUPTED:
+            sys.exit(130)
         snap_conf = _get_snapshot_config(config)
         if snap_conf["auto_config"] or snap_conf["auto_project"]:
             print(
                 "\nTip: run 'agent-sandbox snapshot-diff' to see "
                 "what changed since the pre-run snapshot.",
             )
-        sys.exit(result.returncode)
-    except KeyboardInterrupt:
-        print("\nSandbox terminated.")
+        sys.exit(result)
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -7506,7 +7969,6 @@ def cmd_learn(args) -> None:
     # 1. Load config and check backend first
     config, config_path = load_config()
     project_dir = Path.cwd().resolve()
-
     # 1a. Gate: learn mode requires strace (Linux-only). Seatbelt and nono
     # backends cannot use strace-based learn mode.
     _learn_backend = resolve_backend(config)
@@ -7618,10 +8080,19 @@ def cmd_learn(args) -> None:
                     proc.kill()
                     proc.wait()
         else:
-            proc.wait()
+            # strace shares our process group (no start_new_session), so
+            # by the time our wait() raises KeyboardInterrupt the terminal
+            # has already SIGINTed the whole tree — strace itself exits on
+            # it — and graceful mode's premise (the sandbox never saw the
+            # signal) cannot hold here.  Always use legacy semantics: on
+            # interrupt, _kill_tree tears the tree down and reaps strace
+            # BEFORE _sandbox_wait returns, so the trace file is final by
+            # the time we parse it below — the discarded-looking result is
+            # safe to ignore for that reason.
+            _sandbox_wait(proc, graceful_interrupt=False)
+            proc.poll()  # ensure returncode is set
 
     except KeyboardInterrupt:
-        print("\n\nInterrupted, terminating agent...")
         if proc and proc.poll() is None:
             proc.send_signal(signal.SIGTERM)
             try:

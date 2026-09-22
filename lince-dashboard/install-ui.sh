@@ -2,6 +2,7 @@
 # Shared by install.sh and update.sh: presentation assets have identical coverage.
 set -euo pipefail
 UI_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$UI_SOURCE/../lince-messages/install.sh" --runtime-only
 mkdir -p "$HOME/.config/zellij/layouts" "$HOME/.config/lince-dashboard" "$HOME/.local/bin"
 for layout in "$UI_SOURCE"/layouts/*.kdl; do
     cp "$layout" "$HOME/.config/zellij/layouts/"
@@ -10,6 +11,38 @@ cp "$UI_SOURCE/lince-voice" "$HOME/.local/bin/lince-voice"
 chmod +x "$HOME/.local/bin/lince-voice"
 cp "$UI_SOURCE/lince-dashboard-launch" "$HOME/.local/bin/lince-dashboard-launch"
 chmod +x "$HOME/.local/bin/lince-dashboard-launch"
+
+# The curl bootstrap may provision Python outside the normal PATH. Keep the
+# installed launcher bound to that managed interpreter without shadowing the
+# user's generic `python3` command.
+MANAGED_PYTHON="$HOME/.local/share/lince/python/bin/python3"
+if [ -x "$MANAGED_PYTHON" ]; then
+    PYTHON_SHIM="$HOME/.local/bin/lince-python"
+    PYTHON_SHIM_NEW="${PYTHON_SHIM}.new.$$"
+    cat > "$PYTHON_SHIM_NEW" <<'SHIM'
+#!/bin/sh
+# Managed by LINCE for the standalone bootstrap interpreter.
+managed_python="$HOME/.local/share/lince/python/bin/python3"
+if [ ! -x "$managed_python" ]; then
+    echo "lince: managed Python is missing; re-run the LINCE installer" >&2
+    exit 1
+fi
+export PATH="$HOME/.local/share/lince/python/bin:$PATH"
+exec "$managed_python" "$@"
+SHIM
+    chmod 755 "$PYTHON_SHIM_NEW"
+    mv "$PYTHON_SHIM_NEW" "$PYTHON_SHIM"
+
+    LAUNCHER_NEW="$HOME/.local/bin/.lince-dashboard-launch.new.$$"
+    {
+        printf '%s\n' '#!/usr/bin/env lince-python'
+        tail -n +2 "$UI_SOURCE/lince-dashboard-launch"
+    } > "$LAUNCHER_NEW"
+    chmod 755 "$LAUNCHER_NEW"
+    mv "$LAUNCHER_NEW" "$HOME/.local/bin/lince-dashboard-launch"
+fi
+cp "$UI_SOURCE/lince" "$HOME/.local/bin/lince"
+chmod +x "$HOME/.local/bin/lince"
 # The active session config is user-owned; refreshed defaults remain reviewable.
 if [ ! -f "$HOME/.config/lince-dashboard/zellij.kdl" ]; then
     cp "$UI_SOURCE/zellij-config/config.kdl" "$HOME/.config/lince-dashboard/zellij.kdl"
@@ -20,7 +53,9 @@ python3 - "$HOME/.bashrc" "$HOME/.zshrc" <<'PY'
 from pathlib import Path
 import sys
 replacements = {
-    'alias lince="zellij --layout dashboard-tiled"': 'alias lince="lince-dashboard-launch"',
+    'alias lince="zellij --layout dashboard-tiled"': 'alias lince=\'"$HOME/.local/bin/lince"\'',
+    'alias lince="lince-dashboard-launch"': 'alias lince=\'"$HOME/.local/bin/lince"\'',
+    'alias lince="$HOME/.local/bin/lince"': 'alias lince=\'"$HOME/.local/bin/lince"\'',
     'alias lince-floating="zellij --layout dashboard"': 'alias lince-floating="lince-dashboard-launch --layout dashboard"',
     'alias zd="zellij --layout dashboard-tiled"': 'alias zd="lince-dashboard-launch"',
 }
@@ -42,6 +77,8 @@ import re
 path = Path(sys.argv[1])
 text = path.read_text()
 replacements = {
+    'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }': 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }',
+    'bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }': 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }',
     'bind "Alt j" { MoveFocus "down"; }': 'bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }',
     'bind "Alt k" { MoveFocus "up"; }': 'bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }',
     'bind "Alt left" { MoveFocusOrTab "left"; }': 'bind "Alt left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }',
@@ -56,10 +93,17 @@ old_locked = '    locked {\n        bind "Ctrl l" { SwitchToMode "normal"; }\n  
 new_locked = '    locked {\n' + '\n'.join('        ' + binding for binding in [
     'bind "Alt d" { MessagePlugin { name "lince-ui-open"; }; }',
     *dict.fromkeys(replacements.values()),
+    'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }',
+    'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }',
+    'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }',
+    'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }',
 ]) + '\n        bind "Ctrl l" { SwitchToMode "normal"; }\n    }'
 updated = text.replace(old_locked, new_locked)
 for old, new in replacements.items():
     updated = updated.replace(old, new)
+# Release only the old shipped vertical focus shortcuts. Custom actions stay
+# user-owned; clear-defaults=true lets unbound keys reach the focused terminal.
+updated = re.sub(r'(?m)^[ \t]*bind "Alt (up|down)" \{ MoveFocus "\1"; \}[ \t]*\n', '', updated)
 # Add Alt+q alongside known LINCE wizard bindings in each mode. Preserve an
 # existing custom Alt+q binding instead of silently replacing it.
 if 'bind "Alt q"' not in updated:
@@ -70,20 +114,53 @@ if 'bind "Alt b"' not in updated:
         lambda m: m.group(0) + '\n' + m.group(1) + 'bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }', updated)
 for key, binding in [
     ('Alt v', 'bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }'),
-    ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }'),
-    ('Alt x', 'bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+    ('Alt m', 'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'),
+    ('Alt t', 'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+    ('Alt x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
+    ('Alt r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
+    ('Alt ?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
+    ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'),
 ]:
     if f'bind "{key}"' not in updated:
         updated = re.sub(r'(?m)^([ \t]*)(bind "Alt n" \{ MessagePlugin \{ name "lince-ui-open"; payload "wizard"; \}; \})$',
             lambda m: m.group(0) + '\n' + m.group(1) + binding, updated)
-# Add cycling in existing locked blocks without overriding custom bindings.
-def add_locked_cycle(match):
+# Add global LINCE shortcuts in existing normal/locked blocks without overriding custom bindings.
+def add_shared_shortcuts(match):
     body = match.group(0)
-    for key, direction in [('left', 'prev'), ('right', 'next'), ('j', 'next'), ('k', 'prev')]:
-        if f'bind "Alt {key}"' not in body:
-            body += f'        bind "Alt {key}" {{ MessagePlugin {{ name "cycle-agent"; payload "{direction}"; }}; }}\n'
+    for key, binding in [
+        ('Alt v', 'bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }'),
+        ('Alt m', 'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'),
+        ('Alt t', 'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+        ('Alt x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
+        ('Alt r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
+        ('Alt ?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
+        ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'),
+    ]:
+        if f'bind "{key}"' not in body:
+            body += f'        {binding}\n'
     return body
-updated = re.sub(r'(?m)^    locked \{\n(?:(?!^    \}).*\n)*', add_locked_cycle, updated)
+updated = re.sub(r'(?m)^    shared_except "locked" \{\n(?:(?!^    \}).*\n)*', add_shared_shortcuts, updated)
+
+def add_locked_shortcuts(match):
+    body = match.group(0)
+    for key, binding in [
+        ('v', 'bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }'),
+        ('left', 'bind "Alt left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }'),
+        ('right', 'bind "Alt right" { MessagePlugin { name "cycle-agent"; payload "next"; }; }'),
+        ('j', 'bind "Alt j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }'),
+        ('k', 'bind "Alt k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }'),
+        ('m', 'bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'),
+        ('t', 'bind "Alt t" { MessagePlugin { name "lince-voice-ptt"; }; }'),
+        ('x', 'bind "Alt x" { MessagePlugin { name "kill-focused-agent"; }; }'),
+        ('r', 'bind "Alt r" { MessagePlugin { name "rename-focused-agent"; }; }'),
+        ('?', 'bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'),
+        ('Ctrl Space', 'bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'),
+    ]:
+        binding_key = key if key == 'Ctrl Space' else f'Alt {key}'
+        if f'bind "{binding_key}"' not in body:
+            body += f'        {binding}\n'
+    return body
+updated = re.sub(r'(?m)^    locked \{\n(?:(?!^    \}).*\n)*', add_locked_shortcuts, updated)
 if updated != text:
     path.with_suffix('.kdl.bak-shortcuts').write_text(text)
     path.write_text(updated)

@@ -10,6 +10,41 @@ mod theme;
 mod attention;
 mod voice;
 mod render_output;
+mod messaging;
+
+#[cfg(test)]
+mod messaging_ui_tests {
+    use super::*;
+
+    #[test]
+    fn mailbox_open_and_back_preserve_agent_focus() {
+        let mut state = State::default();
+        state.menu_open = true;
+        state.focused_agent = Some("original".into());
+        state.handle_key(KeyWithModifier::new(BareKey::Char('m')));
+        assert!(state.messages_browser.open);
+        assert_eq!(state.focused_agent.as_deref(), Some("original"));
+        state.handle_key(KeyWithModifier::new(BareKey::Esc));
+        assert!(!state.messages_browser.open);
+        assert!(state.menu_open);
+        assert_eq!(state.focused_agent.as_deref(), Some("original"));
+    }
+
+    #[test]
+    fn closed_instance_navigation_does_not_target_a_replacement() {
+        let mut state = State::default();
+        state.focused_agent = Some("original".into());
+        let mut data = messaging::Snapshot::default();
+        data.instances.push(messaging::Instance { id: "old".into(), pane_ref: "42".into(), live: 0,
+            ..messaging::Instance::default() });
+        data.instances.push(messaging::Instance { id: "new".into(), pane_ref: "42".into(), live: 1,
+            ..messaging::Instance::default() });
+        state.messages = Some(data);
+        state.apply_message_action(messaging::Action::Navigate("old".into()));
+        assert_eq!(state.focused_agent.as_deref(), Some("original"));
+        assert!(state.messages_browser.error.as_ref().is_some_and(|e| e.contains("closed")));
+    }
+}
 
 use crate::types::{SavedView, StatusBarMode};
 use std::collections::BTreeMap;
@@ -35,6 +70,8 @@ const PIPE_LINCE_STATUS: &str = "lince-status";
 const PIPE_VOXCODE_TEXT: &str = "voxcode-text";
 const PIPE_FOCUS_AGENT: &str = "focus-agent";
 const PIPE_CYCLE_AGENT: &str = "cycle-agent";
+const PIPE_KILL_FOCUSED_AGENT: &str = "kill-focused-agent";
+const PIPE_RENAME_FOCUSED_AGENT: &str = "rename-focused-agent";
 const CMD_GET_CWD: &str = "get_cwd";
 const CMD_LOAD_CONFIG: &str = "load_config";
 
@@ -44,6 +81,10 @@ use crate::types::{
 };
 
 struct State {
+    messages: Option<messaging::Snapshot>,
+    messages_pending: bool,
+    messages_error: Option<String>,
+    messages_browser: messaging::Browser,
     voice: voice::Voice,
     own_id: u32,
     passive_bar: bool,
@@ -54,6 +95,7 @@ struct State {
     dialog_frame: Option<String>,
     dialog_dirty: bool,
     dialog_open: bool,
+    dialog_compact: bool,
     managed_ui: bool,
     sidebar_visible: bool,
     statusbar_mode: StatusBarMode,
@@ -124,6 +166,10 @@ struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            messages: None,
+            messages_pending: false,
+            messages_error: None,
+            messages_browser: messaging::Browser::default(),
             voice: voice::Voice::default(),
             own_id: 0,
             passive_bar: false,
@@ -134,6 +180,7 @@ impl Default for State {
             dialog_frame: None,
             dialog_dirty: true,
             dialog_open: false,
+            dialog_compact: false,
             managed_ui: false,
             sidebar_visible: true,
             statusbar_mode: StatusBarMode::Full,
@@ -242,6 +289,7 @@ impl ZellijPlugin for State {
             _ => None,
         };
         if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
+        self.config.agent_borderless = configuration.get("agent_borderless").map(String::as_str) == Some("true");
         self.managed_ui = configuration.get("presentation").map(String::as_str) == Some("managed");
         self.sidebar_visible = configuration.get("sidebar_visible").map(String::as_str) != Some("false");
         self.passive_dialog = configuration.get("role").map(String::as_str) == Some("dialog");
@@ -401,6 +449,11 @@ impl ZellijPlugin for State {
                 false
             }
             Event::Timer(_elapsed) => {
+                self.apply_message_action(self.messages_browser.refresh_visible());
+                if !self.messages_pending {
+                    self.messages_pending = true;
+                    messaging::poll(&self.agents);
+                }
                 if self.voice.snapshot.installed && self.config.voxcode_enabled && !self.voice.pending {
                     self.voice_request(serde_json::json!({"action": "status"}));
                 }
@@ -462,6 +515,24 @@ impl ZellijPlugin for State {
             Event::RunCommandResult(exit_code, stdout, stderr, context) => {
                 let cmd_type = context.get(config::CMD_TYPE_KEY).map(|s| s.as_str());
                 match cmd_type {
+                    Some(messaging::BROWSER_COMMAND) => {
+                        let revision = context.get("revision").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+                        let operation = context.get("operation").map(String::as_str).unwrap_or("");
+                        let action = self.messages_browser.response(revision, operation, exit_code == Some(0), &stdout);
+                        self.apply_message_action(action);
+                        return true;
+                    }
+                    Some(messaging::SNAPSHOT_COMMAND) => {
+                        self.messages_pending = false;
+                        match serde_json::from_slice::<messaging::Snapshot>(&stdout) {
+                            Ok(snapshot) if exit_code == Some(0) => {
+                                self.messages = Some(snapshot);
+                                self.messages_error = None;
+                            }
+                            _ => { self.messages_error = Some("Communication unavailable".into()); }
+                        }
+                        return true;
+                    }
                     Some("voice") => {
                         return self.voice_response(exit_code, &stdout, &stderr);
                     }
@@ -499,11 +570,13 @@ impl ZellijPlugin for State {
                             let prev_providers = std::mem::take(&mut self.config.providers_by_agent);
                             let prev_details = std::mem::take(&mut self.config.provider_details_by_agent);
                             let viewport = self.config.viewport;
+                            let agent_borderless = self.config.agent_borderless;
                             self.config = cfg;
                             if !self.config.voxcode_enabled && self.voice.snapshot.active() {
                                 self.voice_request(serde_json::json!({"action": "stop"}));
                             }
                             self.config.viewport = viewport;
+                            self.config.agent_borderless = agent_borderless;
                             if let Some(layout) = &self.layout_override { self.config.agent_layout = layout.clone(); }
                             self.config_error = err;
                             if self.config.agent_types.is_empty() {
@@ -870,10 +943,16 @@ impl ZellijPlugin for State {
                 if let (PipeSource::Plugin(id), Some(payload)) = (&pipe_message.source, &pipe_message.payload) {
                     if Some(*id) == self.controller_id {
                         if let Ok((frame, return_to)) = serde_json::from_str::<(Option<String>, Option<u32>)>(payload) {
-                            if frame.is_some() && !self.dialog_open {
+                            let compact = frame.as_ref().map_or(false, |value| value.contains("LINCE — Rename agent"));
+                            if frame.is_some() && (!self.dialog_open || compact != self.dialog_compact) {
                                 show_self(true);
-                                let mut coords = FloatingPaneCoordinates::default().with_x_percent(10)
-                                    .with_y_percent(3).with_width_percent(80).with_height_percent(90);
+                                let mut coords = if compact {
+                                    FloatingPaneCoordinates::default().with_x_percent(25)
+                                        .with_y_percent(32).with_width_percent(50).with_height_percent(30)
+                                } else {
+                                    FloatingPaneCoordinates::default().with_x_percent(10)
+                                        .with_y_percent(3).with_width_percent(80).with_height_percent(90)
+                                };
                                 coords.borderless = Some(true);
                                 change_floating_panes_coordinates(vec![(PaneId::Plugin(self.own_id), coords)]);
                             }
@@ -887,6 +966,7 @@ impl ZellijPlugin for State {
                                 }
                             }
                             self.dialog_open = frame.is_some();
+                            self.dialog_compact = compact;
                             self.dialog_frame = frame;
                             return true;
                         }
@@ -944,7 +1024,19 @@ impl ZellijPlugin for State {
                 if !self.config.voxcode_enabled { self.status_message = Some("VoxCode disabled: set dashboard.voxcode_enabled=true".into()); return true; }
                 self.remember_voice_target();
                 if !self.voice.snapshot.settings.configured { self.open_ui("voice"); }
-                else { self.voice_request(serde_json::json!({"action": "ptt"})); }
+                else { self.voice_request(serde_json::json!({"action": "ptt",
+                    "target": self.voice.target,
+                    "submit": pipe_message.payload.as_deref() == Some("submit")})); }
+                true
+            }
+            "lince-voice-mute" => {
+                if !self.voice_current_tab() { return false; }
+                if !self.config.voxcode_enabled {
+                    self.status_message = Some("VoxCode disabled: set dashboard.voxcode_enabled=true".into());
+                    return true;
+                }
+                if !self.voice.snapshot.settings.configured { self.open_ui("voice"); }
+                else { self.voice_request(serde_json::json!({"action": "mute"})); }
                 true
             }
             attention::OPEN => {
@@ -1014,6 +1106,26 @@ impl ZellijPlugin for State {
                         }
                     };
                     self.focus_agent_by_index(new_idx);
+                    return true;
+                }
+                false
+            }
+            PIPE_KILL_FOCUSED_AGENT => {
+                if let Some(index) = self.agents.iter().position(|agent| {
+                    Some(&agent.id) == self.focused_agent.as_ref()
+                }) {
+                    self.selected_index = index;
+                    self.kill_selected_agent(true);
+                    return true;
+                }
+                false
+            }
+            PIPE_RENAME_FOCUSED_AGENT => {
+                if let Some(index) = self.agents.iter().position(|agent| {
+                    Some(&agent.id) == self.focused_agent.as_ref()
+                }) {
+                    self.selected_index = index;
+                    self.open_rename_selected();
                     return true;
                 }
                 false
@@ -1090,6 +1202,12 @@ impl State {
 
     fn handle_key(&mut self, key: KeyWithModifier) -> bool {
         if self.voice.open { return self.handle_voice_key(key); }
+        if self.messages_browser.open {
+            if !key.key_modifiers.is_empty() { return false; }
+            let action = self.messages_browser.key(&key.bare_key, self.messages.as_ref());
+            self.apply_message_action(action);
+            return true;
+        }
         // If wizard is active, route all keys there
         if self.wizard.is_some() {
             return self.handle_wizard_key(key);
@@ -1113,6 +1231,13 @@ impl State {
         }
 
         match bare {
+            BareKey::Char('m') if self.menu_open && !self.show_detail => {
+                self.messages_browser.open = true;
+                self.messages_browser.detail = false;
+                self.messages_browser.scroll = 0;
+                self.apply_message_action(self.messages_browser.refresh());
+                true
+            }
             BareKey::PageDown if self.show_detail => {
                 self.info_scroll = self.info_scroll.saturating_add(8);
                 true
@@ -1166,14 +1291,7 @@ impl State {
                 true
             }
             BareKey::Char('r') => {
-                if let Some(agent) = self.agents.get(self.selected_index) {
-                    self.rename_target = Some(agent.id.clone());
-                    self.name_prompt = Some(NamePromptState {
-                        input: String::new(),
-                        default_name: agent.name.clone(),
-                        label: "Rename",
-                    });
-                }
+                self.open_rename_selected();
                 true
             }
             BareKey::Char('s') => {
@@ -1304,16 +1422,7 @@ impl State {
                 true
             }
             BareKey::Char('x') => {
-                if let Some(agent) = self.agents.get(self.selected_index) {
-                    let name = agent.name.clone();
-                    agent::stop_agent(agent);
-                    self.agents.remove(self.selected_index);
-                    if self.selected_index > 0 && self.selected_index >= self.agents.len() {
-                        self.selected_index = self.agents.len().saturating_sub(1);
-                    }
-                    self.sort_agents_by_dir();
-                    self.status_message = Some(format!("Killed {}", name));
-                }
+                self.kill_selected_agent(false);
                 true
             }
             BareKey::Char('j') | BareKey::Down => {
@@ -1413,6 +1522,7 @@ impl State {
                         }
                         self.status_message = Some(format!("Renamed to {}", name));
                     }
+                    messaging::poll(&self.agents);
                     self.sort_agents_by_dir();
                 } else {
                     // New agent mode (gh#62): session_defaults wins over static config.
@@ -1452,8 +1562,9 @@ impl State {
                             self.status_message = Some(format!("Spawned {}", info.name));
                             self.record_recent_project_dir(&info.project_dir);
                             self.agents.push(info);
-                            self.sort_agents_by_dir();
                             self.hide_all_agent_panes();
+                            self.focus_agent_by_index(self.agents.len() - 1);
+                            self.sort_agents_by_dir();
                         }
                         Err(e) => {
                             self.status_message = Some(e);
@@ -1982,8 +2093,10 @@ impl State {
                 self.status_message = Some(format!("Spawned {}", info.name));
                 self.record_recent_project_dir(&info.project_dir);
                 self.agents.push(info);
-                self.sort_agents_by_dir();
                 self.hide_all_agent_panes();
+                // Queue focus until reconciliation discovers the new terminal pane.
+                self.focus_agent_by_index(self.agents.len() - 1);
+                self.sort_agents_by_dir();
             }
             Err(e) => {
                 self.status_message = Some(e);
@@ -1999,7 +2112,7 @@ impl State {
         self.ui_generation = self.ui_generation.wrapping_add(1);
         if let Some(agent) = self.agents.get(self.selected_index) {
             if pane_manager::focus_agent(
-                agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
+                agent, &self.agents, &self.config.focus_mode, &self.config.agent_layout, self.config.viewport, self.config.agent_borderless,
             ) {
                 self.menu_open = false;
                 self.show_detail = false;
@@ -2027,6 +2140,63 @@ impl State {
             self.pending_focus_agent = Some(self.agents[idx].id.clone());
         } else {
             self.focus_selected();
+        }
+    }
+
+    fn start_rename_selected(&mut self) {
+        if let Some(agent) = self.agents.get(self.selected_index) {
+            self.rename_target = Some(agent.id.clone());
+            self.name_prompt = Some(NamePromptState {
+                input: String::new(),
+                default_name: agent.name.clone(),
+                label: "Rename",
+            });
+        }
+    }
+
+    /// Open a focused, compact name editor for the selected agent.
+    fn open_rename_selected(&mut self) {
+        self.voice.open = false;
+        if self.dialog_frame.is_some() {
+            if let Some(id) = self.dialog_id { focus_plugin_pane(id, true, false); }
+        }
+        self.menu_open = false;
+        self.show_help = false;
+        self.show_detail = false;
+        self.wizard = None;
+        self.name_prompt = None;
+        self.rename_target = None;
+        self.relay_state = None;
+        self.start_rename_selected();
+        // Direct KDL users may not have a passive popup installed.
+        if self.dialog_id.is_none() { show_self(false); }
+    }
+
+    /// Stop and remove the selected agent. A global kill keeps work flowing by
+    /// focusing the next entry when one exists; list-local removal stays in the
+    /// dashboard so the user can continue managing the list.
+    fn kill_selected_agent(&mut self, focus_successor: bool) {
+        if self.selected_index >= self.agents.len() { return; }
+
+        let agent = self.agents.remove(self.selected_index);
+        let name = agent.name.clone();
+        let was_focused = self.focused_agent.as_deref() == Some(agent.id.as_str());
+        agent::stop_agent(&agent);
+
+        if was_focused {
+            self.focused_agent = None;
+            self.pending_focus_agent = None;
+            self.pending_agent_geometry = None;
+        }
+
+        let has_successor = self.selected_index < self.agents.len();
+        if !has_successor {
+            self.selected_index = self.agents.len().saturating_sub(1);
+        }
+        self.status_message = Some(format!("Killed {name}"));
+
+        if focus_successor && has_successor {
+            self.focus_agent_by_index(self.selected_index);
         }
     }
 
@@ -2111,12 +2281,19 @@ impl State {
             return;
         };
 
-        write_chars_to_pane_id(text, PaneId::Terminal(pid));
+        // A voxcode "send" means the user wants it gone: same paste-safe
+        // delivery as the managed voice path, always with a final Enter (#379).
+        if let Some((payload, enter)) = voice::voice_delivery(text, true) {
+            write_chars_to_pane_id(&payload, PaneId::Terminal(pid));
+            if let Some(bytes) = enter {
+                write_to_pane_id(bytes, PaneId::Terminal(pid));
+            }
+        }
 
         // Show the agent pane after delivering text
         if pane_manager::focus_agent(
             &self.agents[idx], &self.agents,
-            &self.config.focus_mode, &self.config.agent_layout, self.config.viewport,
+            &self.config.focus_mode, &self.config.agent_layout, self.config.viewport, self.config.agent_borderless,
         ) {
             self.focused_agent = Some(self.agents[idx].id.clone());
             self.selected_index = idx;
@@ -2395,6 +2572,7 @@ impl State {
                 &self.config.focus_mode,
                 &self.config.agent_layout,
                 self.config.viewport,
+                self.config.agent_borderless,
             ) {
                 self.focused_agent = Some(target_id);
                 self.selected_index = target_idx;
@@ -2477,9 +2655,9 @@ impl State {
         if spawned > 0 {
             self.sort_agents_by_dir();
             self.hide_all_agent_panes();
-            // Auto-focus the first restored agent
-            self.selected_index = 0;
-            self.focus_selected();
+            // Auto-focus the first restored agent. Newly spawned panes may not
+            // be present in this manifest yet, so queue the focus when needed.
+            self.focus_agent_by_index(0);
             self.status_message = Some(format!("Restored {} agents", spawned));
             set_timeout(3.0);
         }
@@ -2491,6 +2669,11 @@ impl State {
         if self.bar_ids.is_empty() { return; }
         let mut snapshot = attention::Snapshot::from_agents(&self.agents,
             self.focused_agent.as_deref(), &self.config, self.config_error.as_deref());
+        if self.messages_error.is_some() {
+            snapshot.mailbox = "Communication unavailable".into();
+        } else if let Some(messages) = &self.messages {
+            messages.decorate(&mut snapshot, &self.agents, self.config.messaging_ascii);
+        }
         if self.config.voxcode_enabled && self.voice.snapshot.installed {
             snapshot.voice = Some(self.voice.snapshot.indicator());
         }
@@ -2580,6 +2763,7 @@ impl State {
     fn render_controller(&mut self, rows: usize, cols: usize) {
         theme::set(&self.config.theme, self.inherited_style);
         if self.voice.open { self.voice.render(rows, cols, self.config.voxcode_enabled); return; }
+        if self.messages_browser.open { self.messages_browser.render(self.messages.as_ref(), rows, cols); return; }
         // If help overlay is active, render it and return
         if self.show_help {
             dashboard::render_help_overlay(rows, cols);
@@ -2599,8 +2783,18 @@ impl State {
             return;
         }
 
+        // Renaming an existing agent is intentionally a small, dedicated form.
+        // The regular name prompt is still embedded in the new-agent flow.
+        if self.rename_target.is_some() {
+            if let Some(prompt) = self.name_prompt.as_ref() {
+                dashboard::render_rename_prompt(prompt, rows, cols);
+                return;
+            }
+        }
+
         let config_warning = self.config_error.as_deref();
-        let effective_status = self.status_message.as_deref().or(config_warning);
+        let effective_status = self.status_message.as_deref().or(config_warning)
+            .or(if self.menu_open { Some("m: Conversations") } else { None });
 
         let detail_id = if self.show_detail {
             self.agents.get(self.selected_index).map(|a| a.id.as_str())
@@ -2627,14 +2821,36 @@ impl State {
 }
 
 impl State {
+    fn apply_message_action(&mut self, action: messaging::Action) {
+        match action {
+            messaging::Action::None => {},
+            messaging::Action::Close => { self.menu_open = true; },
+            messaging::Action::Rpc(operation, args) => self.messages_browser.command(operation, args),
+            messaging::Action::Navigate(instance_id) => {
+                let pane = self.messages.as_ref().and_then(|snapshot| snapshot.instances.iter()
+                    .find(|instance| instance.id == instance_id && instance.live == 1))
+                    .and_then(|instance| instance.pane_ref.parse::<u32>().ok());
+                let index = pane.and_then(|pane| self.agents.iter().position(|agent| agent.pane_id == Some(pane)));
+                if let Some(index) = index {
+                    self.messages_browser.open = false;
+                    self.menu_open = false;
+                    self.focus_agent_by_index(index);
+                } else {
+                    self.messages_browser.error = Some("The original instance has closed; no replacement pane was selected".into());
+                }
+            }
+        }
+    }
+
     fn has_dialog(&self) -> bool {
-        self.voice.open || self.menu_open || self.show_detail || self.show_help || self.wizard.is_some()
+        self.messages_browser.open || self.voice.open || self.menu_open || self.show_detail || self.show_help || self.wizard.is_some()
             || self.name_prompt.is_some() || self.relay_state.is_some()
     }
     fn sync_dialog(&mut self) {
         let Some(id) = self.dialog_id else { return; };
         let frame = if self.has_dialog() {
-            let title = if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
+            let title = if self.messages_browser.open { "LINCE — Conversations" } else if self.voice.open { "LINCE — VoxCode" } else if self.show_help { "LINCE — Help" } else if self.show_detail { "LINCE — Agent info" }
+                else if self.rename_target.is_some() && self.name_prompt.is_some() { "LINCE — Rename agent" }
                 else if self.wizard.is_some() || self.name_prompt.is_some() { "LINCE — New agent" } else { "LINCE — Agents" };
             Some(render_output::bordered(self.dialog_size.0, self.dialog_size.1, title,
                 |rows, cols| self.render_controller(rows, cols)))
@@ -2652,6 +2868,7 @@ impl State {
 
 impl State {
     fn open_ui(&mut self, action: &str) {
+        self.messages_browser.open = false;
         self.voice.open = false;
         if self.dialog_frame.is_some() {
             if let Some(id) = self.dialog_id { focus_plugin_pane(id, true, false); }
@@ -2719,7 +2936,7 @@ impl State {
             // Suppressing fixed chrome leaves Zellij's floating viewport stale.
             // Recompute bounds after the layout has settled, before resizing.
             set_selectable(true);
-            change_floating_panes_coordinates(vec![(PaneId::Terminal(pid), rect.coordinates())]);
+            change_floating_panes_coordinates(vec![(PaneId::Terminal(pid), pane_manager::agent_coordinates(Some(rect), self.config.agent_borderless))]);
         }
     }
 
@@ -2855,6 +3072,51 @@ mod managed_ui_tests {
     }
 
     #[test]
+    fn global_kill_removes_the_focused_agent_and_selects_its_successor() {
+        let mut state = controller();
+        state.agents.push(dashboard::preview_agent("third-agent", AgentStatus::Running));
+        state.focused_agent = Some("first-agent".into());
+        state.selected_index = 0;
+
+        state.kill_selected_agent(true);
+
+        assert_eq!(state.agents.iter().map(|agent| agent.id.as_str()).collect::<Vec<_>>(),
+            vec!["second-agent", "third-agent"]);
+        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.pending_focus_agent.as_deref(), Some("second-agent"));
+        assert!(state.focused_agent.is_none());
+    }
+
+    #[test]
+    fn startup_focus_queues_the_first_agent_until_its_pane_is_available() {
+        let mut state = controller();
+        state.selected_index = 1;
+
+        state.focus_agent_by_index(0);
+
+        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.pending_focus_agent.as_deref(), Some("first-agent"));
+    }
+
+    #[test]
+    fn global_rename_targets_the_focused_agent() {
+        let mut state = controller();
+        state.focused_agent = Some("second-agent".into());
+        let selected = state.agents.iter().position(|agent| agent.id == "second-agent").unwrap();
+        state.selected_index = selected;
+        state.open_rename_selected();
+
+        assert_eq!(state.rename_target.as_deref(), Some("second-agent"));
+        assert_eq!(state.name_prompt.as_ref().map(|prompt| prompt.default_name.as_str()), Some("second-agent"));
+        assert_eq!(state.name_prompt.as_ref().map(|prompt| prompt.label), Some("Rename"));
+        assert!(!state.menu_open);
+        let frame = render_output::capture(|| state.render_controller(12, 60));
+        assert!(frame.contains("Rename agent"));
+        assert!(frame.contains("Name:"));
+        assert!(!frame.contains("first-agent"));
+    }
+
+    #[test]
     fn saved_manual_order_survives_reload_and_sort() {
         let mut state = controller();
         state.move_selected_agent(true);
@@ -2917,16 +3179,25 @@ impl State {
             }
         }
     }
-    fn deliver_voice_text(&mut self, text: &str) -> bool {
-        let Some(id) = self.voice.target else {
+    fn deliver_voice_text(&mut self, event: &voice::TextEvent) -> bool {
+        let Some(id) = (if event.pinned { event.target } else { self.voice.target }) else {
             self.voice.snapshot.error = "Focus a visible agent or shell before inserting text".into();
             return false;
         };
-        if get_pane_info(PaneId::Terminal(id)).map_or(true, |p| p.is_suppressed || p.exited) {
-            self.voice.snapshot.error = "Voice target was closed or hidden; focus a terminal and try again".into();
+        if get_pane_info(PaneId::Terminal(id)).map_or(true, |p| (!event.pinned && p.is_suppressed) || p.exited) {
+            self.voice.snapshot.error = if event.pinned {
+                "PTT target was closed; transcription retained and not redirected".into()
+            } else {
+                "Voice target was closed or hidden; focus a terminal and try again".into()
+            };
             return false;
         }
-        write_chars_to_pane_id(text, PaneId::Terminal(id));
+        if let Some((payload, enter)) = voice::voice_delivery(&event.text, event.submit) {
+            write_chars_to_pane_id(&payload, PaneId::Terminal(id));
+            if let Some(bytes) = enter {
+                write_to_pane_id(bytes, PaneId::Terminal(id));
+            }
+        }
         true
     }
     fn voice_request(&mut self, request: serde_json::Value) {
@@ -2951,7 +3222,7 @@ impl State {
                     if !self.voice.snapshot.events.is_empty() { self.remember_voice_target(); }
                     for event in std::mem::take(&mut self.voice.snapshot.events) {
                         if event.sequence > self.voice.ack {
-                            if !self.deliver_voice_text(&event.text) { break; }
+                            if !self.deliver_voice_text(&event) { break; }
                             self.voice.ack = event.sequence;
                         }
                     }
@@ -2995,7 +3266,7 @@ impl State {
                 }
                 self.voice_request(serde_json::json!({"action": "start"}));
             }
-            BareKey::Char('p') => self.voice_request(serde_json::json!({"action": "pause"})),
+            BareKey::Char('m') => self.voice_request(serde_json::json!({"action": "mute"})),
             BareKey::Char('x') => self.voice_request(serde_json::json!({"action": "stop"})),
             BareKey::Char('i') => self.voice_request(serde_json::json!({"action": "send"})),
             BareKey::Char('c') => self.voice_request(serde_json::json!({"action": "clear"})),

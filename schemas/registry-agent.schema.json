@@ -209,6 +209,7 @@
       "additionalProperties": {
         "type": "string",
         "enum": [
+          "unknown",
           "running",
           "input",
           "permission",

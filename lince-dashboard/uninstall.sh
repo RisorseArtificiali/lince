@@ -24,6 +24,7 @@ PLUGIN="$HOME/.config/zellij/plugins/lince-dashboard.wasm"
 if [ -f "$PLUGIN" ]; then
     echo -e "${YELLOW}Found: $PLUGIN${NC}"
     if confirm "  Remove plugin?"; then
+        bash "$SCRIPT_DIR/../lince-messages/uninstall.sh"
         rm -f "$PLUGIN" "${PLUGIN}.bak."* 2>/dev/null
         echo -e "${GREEN}  ✓ Removed${NC}"
     fi
@@ -71,6 +72,8 @@ HOOKS=(
     "$HOME/.local/bin/claude-status-hook.sh"
     "$HOME/.local/bin/codex-status-hook.sh"
     "$HOME/.local/bin/bob-status-hook.sh"
+    "$HOME/.local/bin/lince-bob-startup"
+    "$HOME/.local/bin/lince-codex-startup"
 )
 FOUND_HOOKS=()
 for hook in "${HOOKS[@]}"; do
@@ -95,7 +98,15 @@ echo ""
 if [ -f "$HOME/.local/bin/lince-dashboard-launch" ]; then
     if confirm "  Remove LINCE presentation launcher?"; then
         rm -f "$HOME/.local/bin/lince-dashboard-launch"
+        rm -f "$HOME/.local/bin/lince"
     fi
+fi
+if [ ! -f "$HOME/.local/bin/lince-dashboard-launch" ] &&
+   { [ ! -f "$HOME/.local/bin/lince-config" ] ||
+     ! head -n 1 "$HOME/.local/bin/lince-config" | grep -q 'lince-python'; } &&
+   [ -f "$HOME/.local/bin/lince-python" ] &&
+   grep -q "Managed by LINCE for the standalone bootstrap interpreter" "$HOME/.local/bin/lince-python"; then
+    rm -f "$HOME/.local/bin/lince-python"
 fi
 WRAPPER="$HOME/.local/bin/lince-agent-wrapper"
 if [ -f "$WRAPPER" ]; then
@@ -211,6 +222,9 @@ fi
 echo ""
 
 # ── Pi extension ───────────────────────────────────────────────────────
+if confirm "  Remove Gemini, Amp and Goose dashboard integrations?"; then
+    python3 "$SCRIPT_DIR/hooks/native-hooks-config.py" --remove
+fi
 PI_EXTENSION="$HOME/.pi/agent/extensions/lince-pi-hook.ts"
 if [ -f "$PI_EXTENSION" ]; then
     echo -e "${YELLOW}Found: $PI_EXTENSION${NC}"

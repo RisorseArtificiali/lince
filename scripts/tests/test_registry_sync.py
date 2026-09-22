@@ -131,6 +131,12 @@ class TestSandboxViewParity(unittest.TestCase):
         view = mod.load_registry_defaults(REPO_ROOT / "registry.d")
         self.assert_sandbox_parity(view)
 
+    def test_codex_user_skills_are_visible_in_the_sandbox(self):
+        """Codex discovers user-installed skills under ~/.agents/skills."""
+        mod = load_agent_sandbox_module()
+        view = mod.load_registry_defaults(REPO_ROOT / "registry.d")
+        self.assertIn(".agents", view["codex"]["home_ro_dirs"])
+
 
 class TestDashboardViewParity(unittest.TestCase):
     """Registry → legacy dashboard projection (incl. §3.5 variant derivation)

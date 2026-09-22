@@ -30,56 +30,56 @@ What the dashboard gives you:
 
 ## Quick Start
 
-For a detailed step-by-step guide with scenarios (Mini/Full/Custom), troubleshooting, and quick reference, see [QUICKSTART.md](QUICKSTART.md).
+For a detailed step-by-step guide, troubleshooting, and quick reference, see [QUICKSTART.md](QUICKSTART.md).
 
 ### Prerequisites
 
-- **Linux** (tested on Fedora 43, works on Ubuntu/Debian/Arch)
-- **Zellij** >= 0.45.1
-- **Claude Code** (`npm install -g @anthropic-ai/claude-code`)
-- **bubblewrap** (`sudo dnf install bubblewrap` / `sudo apt install bubblewrap`)
-- **Rust** with `wasm32-wasip1` target (for building the dashboard plugin)
-- **macOS** (experimental): native **Seatbelt** sandbox backend (`sandbox-exec`, built into macOS — no extra install), Python 3.11+, Zellij. The legacy `nono` backend is deprecated — see the [migration guide](docs/documentation/sandbox/migration-nono-to-seatbelt.md)
+- **Linux**: `curl`, `git`, and `bubblewrap` (tested on Fedora 43; Ubuntu/Debian/Arch are supported)
+- **macOS** (experimental): `curl` and `git`; the built-in Seatbelt backend (`sandbox-exec`) is used, so Homebrew is not required
+- At least one supported coding agent, installed separately
 
-### Step 1: Install the sandbox
+Zellij and a compatible Python are handled by the installer. If Zellij 0.45.1+
+is missing, LINCE installs a static binary in `~/.local/bin`. If the system has
+no Python 3.11+ with pip, LINCE installs a pinned standalone Python under
+`~/.local/share/lince/python`.
 
-```bash
-cd sandbox
-./install.sh
-```
+### Install
 
-This creates an isolated environment where Claude has full write access to your project but physically cannot reach your SSH keys, cloud credentials, or anything outside the project directory. See [sandbox/README.md](sandbox/README.md) for the full configuration reference.
-
-### Step 2: Install the dashboard
+Interactive installer:
 
 ```bash
-cd lince-dashboard
-./install.sh
+curl -sSL https://lince.sh/install | bash
 ```
 
-The installer builds the WASM plugin, copies it to `~/.config/zellij/plugins/`, installs Zellij layouts, sets up Claude Code status hooks, and creates the `lince` shell alias. After sourcing your shell config:
+Non-interactive install with sane defaults:
 
 ```bash
-source ~/.bashrc
-lince    # launch the dashboard
+curl -sSL https://lince.sh/install | bash -s -- --defaults
 ```
 
-### Step 3: Launch
+The installer downloads the released dashboard plugin, verifies its checksum,
+and configures the sandbox, dashboard, updater, and shell command. Open a new
+terminal (or source the profile for your current shell), then launch:
 
 ```bash
 lince
 ```
 
-Press `n` to spawn an agent (quick), or `N` for the full wizard (name, sandbox profile, project directory). Press `?` for the full keybindings overlay.
+Press `n` to spawn an agent (quick), or `N` for the full wizard. See the
+[installation guide](docs/documentation/install.md) for manual and offline
+installation, updates, provisioned tools, platform status, and checksum details.
+The [Quickstart guide](QUICKSTART.md) covers the interactive scenarios.
 
-### Alternative: Use the Quickstart Installer
+## Build from source
 
-For an interactive installer that handles all modules with dependency resolution:
+The normal install uses the prebuilt, checksum-verified dashboard plugin and
+does not need a compiler. Contributors who want to compile the plugin locally
+need `rustup`, a C compiler/linker, and the `wasm32-wasip1` target:
+
 ```bash
-./quickstart.sh
+rustup target add wasm32-wasip1
+curl -sSL https://lince.sh/install | bash -s -- --build-from-source
 ```
-
-See [QUICKSTART.md](QUICKSTART.md) for more options (--mini, --full, --yes flags).
 
 ### The Workflow in Practice
 
@@ -108,6 +108,15 @@ Dashboard:       Status updates in real-time (Running → INPUT → Stopped)
 The multi-agent TUI dashboard — a Zellij WASM plugin (Rust, ~900 KB) that manages multiple AI coding agents (Claude Code, Codex, Bob, Gemini, OpenCode, and any custom agent). Spawn agents, monitor status, show/hide panes, relay voice input, persist sessions. Agent types are fully config-driven — add new agents via TOML or use the `/lince-add-supported-agent` skill. See [lince-dashboard/README.md](lince-dashboard/README.md).
 
 Documentation: [Usage Guide](https://lince.sh/documentation/#/dashboard/usage-guide) | [Configuration](https://lince.sh/documentation/#/dashboard/config-reference) | [Agent Examples](https://lince.sh/documentation/#/dashboard/agent-examples)
+
+### [lince-messages/](lince-messages/)
+
+Optional skill-based conversations for Claude, Codex, Bob, Pi and OpenCode in their original
+terminal panes. Agents use `lince-msg peers` and `lince-msg send` for questions
+and replies, with a conversation reference and a lightweight delivery log in
+Alt+d. No groups or task lifecycle. Enable the skill separately for each agent;
+see the [operator guide](docs/agent-messaging.md) and
+[validation limits](docs/agent-messaging-validation.md).
 
 ### [lince-config/](lince-config/)
 

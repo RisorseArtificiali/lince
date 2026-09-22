@@ -503,6 +503,17 @@ fn spawn_inner(
         }
 
         expanded.push(format!("LINCE_AGENT_ID={}", id));
+        expanded.push(format!("LINCE_STATUS_DIR={}", config.status_file_dir));
+        // Host wrapper owns credentials/lifetime; the original agent TUI remains
+        // the child process. The wrapper starts without communication unless its skill was enabled.
+        if !type_config.sandboxed
+            || backend_rides_agent_sandbox(sandbox_backend_override.as_ref().unwrap_or(&type_config.sandbox_backend)) {
+            expanded.extend(["lince-msg-host".into(), "run".into(), "--alias".into(), name.clone(),
+                "--agent".into(), base.into(), "--".into()]);
+        }
+        if matches!(base, "bob" | "codex") {
+            expanded.extend([format!("lince-{base}-startup"), "--".into()]);
+        }
         // If agent doesn't have native hooks, wrap with lince-agent-wrapper
         if !type_config.has_native_hooks {
             expanded.push(AGENT_WRAPPER.to_string());
@@ -593,12 +604,12 @@ fn spawn_inner(
 
     match config.agent_layout {
         AgentLayout::Floating => {
-            open_command_pane_floating(command, Some(default_agent_pane_coords()), BTreeMap::new());
+            open_command_pane_floating(command, Some(crate::pane_manager::agent_coordinates(None, config.agent_borderless)), BTreeMap::new());
         }
         AgentLayout::Tiled => {
             // Tiled layout: agents are still floating panes, but hidden at spawn.
             // When focused, they overlay the viewport pane (B) in the 3-pane layout.
-            open_command_pane_floating(command, Some(config.viewport.map(crate::pane_manager::Viewport::coordinates).unwrap_or_else(default_agent_pane_coords)), BTreeMap::new());
+            open_command_pane_floating(command, Some(crate::pane_manager::agent_coordinates(config.viewport, config.agent_borderless)), BTreeMap::new());
         }
     }
 

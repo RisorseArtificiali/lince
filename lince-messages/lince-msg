@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Converse with enabled agents in this LINCE session through their terminal panes."""
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+
+from protocol import ProtocolError, call, text
+
+
+def run(argv=None):
+    cli = argparse.ArgumentParser(description=__doc__)
+    commands = cli.add_subparsers(dest="op", required=True)
+    commands.add_parser("peers", help="List enabled live peers and your own identity")
+    send = commands.add_parser("send", help="Send text; returns without waiting for an answer")
+    send.add_argument("recipient", help="Exact ID or unique name from peers")
+    send.add_argument("--conversation", help="Keep the eight-character conversation ID when replying")
+    body = send.add_mutually_exclusive_group(required=True)
+    body.add_argument("--text")
+    body.add_argument("--file", type=Path)
+    body.add_argument("--stdin", action="store_true")
+    args = vars(cli.parse_args(argv))
+    op = args.pop("op")
+    if op == "send":
+        source, stdin = args.pop("file"), args.pop("stdin")
+        if source:
+            with source.open(encoding="utf-8") as stream:
+                args["text"] = stream.read(16385)
+        elif stdin:
+            args["text"] = sys.stdin.read(16385)
+        text(args["text"])
+    endpoint, credential = os.environ.get("LINCE_MSG_ENDPOINT"), os.environ.get("LINCE_MSG_CREDENTIAL")
+    if not endpoint or not credential:
+        raise ProtocolError("unavailable", "Communication is not enabled for this agent; enable its lince-converse skill")
+    result = call(endpoint, Path(credential).read_text().strip(), op,
+                  {k: v for k, v in args.items() if v is not None})
+    print(json.dumps({"ok": True, "result": result}))
+    return 0
+
+
+def main():
+    try:
+        return run()
+    except ProtocolError as exc:
+        print(json.dumps({"ok": False, "error": {"code": exc.code, "message": str(exc)}}))
+        return 3 if exc.code == "access_denied" else 2
+    except (OSError, UnicodeError):
+        print(json.dumps({"ok": False, "error": {"code": "unavailable", "message":
+              "Connection or local input unavailable. Delivery may be pending; inspect Alt+d > m before retrying."}}))
+        return 5
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

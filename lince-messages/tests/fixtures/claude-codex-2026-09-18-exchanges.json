@@ -1,0 +1,207 @@
+{
+  "source": "Real concurrent Claude 2.1.272 --print and Codex 0.154.0 exec sessions on Linux, 2026-09-18. Explicit inbox workflow; no replacement TUI or ACP. This is not a native interactive-TUI/bwrap check.",
+  "agents": {
+    "8829378b-d1dc-4486-bd98-633a1c7317b8": "claude",
+    "f7af2f01-1584-431d-ace3-cbdb44154c18": "codex"
+  },
+  "versions": {
+    "claude": "2.1.272",
+    "codex": "0.154.0"
+  },
+  "exit_codes": {
+    "claude": 0,
+    "codex": 0
+  },
+  "requests": [
+    {
+      "id": "c4e2a9c9-921a-4279-b924-e6c546ec2b16",
+      "sender": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "recipient": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "kind": "question",
+      "delivery": "read",
+      "work": "completed"
+    },
+    {
+      "id": "db658c6b-ea70-468b-a743-668882dbdfff",
+      "sender": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "recipient": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "kind": "task",
+      "delivery": "read",
+      "work": "completed"
+    },
+    {
+      "id": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "sender": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "recipient": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "kind": "question",
+      "delivery": "read",
+      "work": "completed"
+    },
+    {
+      "id": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "sender": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "recipient": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "kind": "task",
+      "delivery": "read",
+      "work": "completed"
+    }
+  ],
+  "events": [
+    {
+      "request": "c4e2a9c9-921a-4279-b924-e6c546ec2b16",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "db658c6b-ea70-468b-a743-668882dbdfff",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "created",
+      "text": ""
+    },
+    {
+      "request": "c4e2a9c9-921a-4279-b924-e6c546ec2b16",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "c4e2a9c9-921a-4279-b924-e6c546ec2b16",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "c4e2a9c9-921a-4279-b924-e6c546ec2b16",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "c4e2a9c9-921a-4279-b924-e6c546ec2b16",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "reply",
+      "text": "42"
+    },
+    {
+      "request": "c4e2a9c9-921a-4279-b924-e6c546ec2b16",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "work",
+      "text": "completed"
+    },
+    {
+      "request": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "reply",
+      "text": "17 plus 25 equals 42."
+    },
+    {
+      "request": "81588aff-d3aa-4127-bb54-25128669ae95",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "work",
+      "text": "completed"
+    },
+    {
+      "request": "db658c6b-ea70-468b-a743-668882dbdfff",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "db658c6b-ea70-468b-a743-668882dbdfff",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "db658c6b-ea70-468b-a743-668882dbdfff",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "db658c6b-ea70-468b-a743-668882dbdfff",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "complete",
+      "text": "3"
+    },
+    {
+      "request": "db658c6b-ea70-468b-a743-668882dbdfff",
+      "actor": "f7af2f01-1584-431d-ace3-cbdb44154c18",
+      "type": "work",
+      "text": "completed"
+    },
+    {
+      "request": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "delivery",
+      "text": "read"
+    },
+    {
+      "request": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "work",
+      "text": "active"
+    },
+    {
+      "request": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "accepted",
+      "text": ""
+    },
+    {
+      "request": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "complete",
+      "text": "Word count is 3. Evidence: the string 'red green blue' splits on whitespace into red, green, blue."
+    },
+    {
+      "request": "d8e1955b-1457-4bff-8ce7-be8238241849",
+      "actor": "8829378b-d1dc-4486-bd98-633a1c7317b8",
+      "type": "work",
+      "text": "completed"
+    }
+  ]
+}

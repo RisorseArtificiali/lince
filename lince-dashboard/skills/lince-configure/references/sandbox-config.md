@@ -39,6 +39,7 @@ Isolation knobs (levels paranoid/normal/permissive preset these via the shipped 
 |-----|------|---------|-------------|
 | `unshare_pid` | bool | `true` | PID namespace: hide host processes |
 | `new_session` | bool | `false` | New terminal session (anti terminal-escape; may interfere with Ctrl+C) |
+| `graceful_interrupt` | bool | `true` | Graceful Ctrl+C: forward SIGINT into the sandbox so the agent can cancel and return to the prompt; a second press within 3s force-exits (Linux only — needs /proc; elsewhere the first press terminates the sandbox) |
 | `block_git_push` | bool | `true` | Block git push via a PATH wrapper |
 | `credential_proxy` | bool | `false` | Inject API keys on the host side — keys never enter the sandbox env |
 | `unshare_net` | bool | `false` | Kernel network-namespace isolation (paranoid); egress only via the proxy bridge |

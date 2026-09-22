@@ -75,15 +75,15 @@ class VoiceTests(unittest.TestCase):
         self.assertIn("PTT mode", session.request(dict(action="ptt"))["error"])
         self.assertIsNone(session.thread)
 
-    def test_pause_cancels_inflight_speech_and_stop_terminates_worker(self):
+    def test_mute_cancels_inflight_speech_and_stop_terminates_worker(self):
         session = self.session()
         session.active = True
         session.recording = True
         epoch = session.epoch
-        self.assertEqual(session.request(dict(action="pause"))["status"], "paused")
+        self.assertEqual(session.request(dict(action="mute"))["status"], "muted")
         self.assertFalse(session.recording)
         self.assertGreater(session.epoch, epoch)
-        self.assertEqual(session.request(dict(action="pause"))["status"], "listening")
+        self.assertEqual(session.request(dict(action="mute"))["status"], "listening")
         self.assertEqual(session.request(dict(action="stop"))["status"], "stopped")
         self.assertFalse(session.active)
         self.assertTrue(session.shutdown)
@@ -150,7 +150,16 @@ class VoiceTests(unittest.TestCase):
         finally:
             request("shutdown")
 
-    def test_audio_ptt_pause_resume_and_late_result(self):
+    def test_audio_ptt_mute_resume_and_late_result(self):
+        self._audio_ptt(cancel=True)
+
+    def test_ptt_delivery_keeps_stop_target_and_submit_through_late_result(self):
+        self._audio_ptt(cancel=False, submit=True)
+
+    def test_ptt_alt_t_inserts_without_enter_even_without_auto_insert(self):
+        self._audio_ptt(cancel=False, submit=False)
+
+    def _audio_ptt(self, cancel, submit=False):
         import numpy as np
 
         opened = threading.Event()
@@ -208,24 +217,42 @@ class VoiceTests(unittest.TestCase):
             ),
         }
         session = self.session()
-        session.settings.update(configured=True, auto_send=True)
+        session.settings.update(configured=True, auto_send=False)
         with patch.dict(sys.modules, modules):
             try:
                 session.request(dict(action="ptt"))
                 self.assertTrue(opened.wait(2))
                 audio_queue.put(np.ones(480, dtype=np.float32))
                 time.sleep(0.05)
-                session.request(dict(action="ptt"))
+                session.request(dict(action="ptt", target=17, submit=submit))
                 audio_queue.put(np.ones(480, dtype=np.float32))
                 self.assertTrue(transcribing.wait(2))
-                session.request(dict(action="pause"))
-                self.assertTrue(closed.wait(2))
-                release.set()
-                session.request(dict(action="pause"))
-                self.assertTrue(opened.wait(2))
-                audio_queue.put(np.ones(480, dtype=np.float32))
-                time.sleep(0.1)
-                self.assertEqual(session.events, [])
+                if cancel:
+                    session.request(dict(action="mute"))
+                    self.assertTrue(closed.wait(2))
+                    release.set()
+                    session.request(dict(action="mute"))
+                    self.assertTrue(opened.wait(2))
+                    audio_queue.put(np.ones(480, dtype=np.float32))
+                    time.sleep(0.1)
+                    self.assertEqual(session.events, [])
+                else:
+                    # A later PTT toggle must not change a job already transcribing.
+                    session.request(dict(action="ptt", target=99))
+                    session.request(dict(action="ptt", target=99, submit=not submit))
+                    release.set()
+                    deadline = time.monotonic() + 2
+                    while not session.events and time.monotonic() < deadline:
+                        audio_queue.put(np.ones(480, dtype=np.float32))
+                        time.sleep(0.02)
+                    self.assertEqual(len(session.events), 1)
+                    event = session.events[0]
+                    self.assertEqual(event["text"], "delayed speech")
+                    self.assertEqual(event["target"], 17)
+                    self.assertTrue(event["pinned"])
+                    self.assertEqual(event["submit"], submit)
+                    session.request(dict(action="status", ack=event["sequence"]))
+                    self.assertEqual(session.events, [])
                 self.assertEqual(session.buffer, "")
             finally:
                 release.set()

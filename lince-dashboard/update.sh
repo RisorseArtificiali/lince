@@ -31,24 +31,18 @@ echo -e "${BLUE}   LINCE Dashboard — Update${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 
-# Ensure rustup toolchain takes precedence
-export PATH="$HOME/.cargo/bin:$PATH"
-
 check_zellij_version || exit 1
 
-# ── Build ──────────────────────────────────────────────────────────────
-echo -e "${GREEN}[1/8] Building plugin...${NC}"
-if ! "$SCRIPT_DIR/plugin/build.sh"; then
-    echo -e "${RED}Build failed.${NC}"
+# ── Plugin ─────────────────────────────────────────────────────────────
+echo -e "${GREEN}[1-2/8] Updating plugin...${NC}"
+PLUGIN_ARGS=()
+if [ "${LINCE_BUILD_FROM_SOURCE:-false}" = "true" ]; then
+    PLUGIN_ARGS+=(--build-from-source)
+fi
+if ! "$SCRIPT_DIR/install-plugin.sh" "${PLUGIN_ARGS[@]}"; then
+    echo -e "${RED}Plugin update failed.${NC}"
     exit 1
 fi
-echo ""
-
-# ── Plugin ─────────────────────────────────────────────────────────────
-echo -e "${GREEN}[2/8] Updating plugin...${NC}"
-PLUGIN_DIR="$HOME/.config/zellij/plugins"
-mkdir -p "$PLUGIN_DIR"
-cp "$SCRIPT_DIR/plugin/lince-dashboard.wasm" "$PLUGIN_DIR/lince-dashboard.wasm"
 echo -e "${GREEN}  ✓ Plugin updated${NC}"
 echo ""
 

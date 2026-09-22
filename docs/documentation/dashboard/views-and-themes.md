@@ -26,7 +26,11 @@ lince-dashboard-launch --preset classic
 | `statusline` | Same managed view, with the sidebar hidden initially | 15% when shown | Off |
 | `classic` | Full agent table and standard Zellij tab/keybinding bars | 40% | On |
 
-When no preset is specified, `minimal` is used, including for existing configurations. Minimal and statusline differ only in initial sidebar
+Minimal also removes the floating agent's entire frame and title. The bottom
+attention bar remains separate; there is no individual bottom-edge frame setting.
+Explicit `--frames` or `pane_frames = true` restores the agent frame.
+
+When no preset is specified, `minimal` is used, including for existing configurations. Minimal and statusline also differ in initial sidebar
 visibility; `Alt+s` toggles it at runtime, restoring the same column arrangement
 on every second press. With the sidebar hidden, agent panes fill the window
 above the status line. An open agent stays visible and keeps focus when the
@@ -65,7 +69,7 @@ preset generation and the session configuration.
 
 ## Compact sidebar and details
 
-Press `Alt+d` from any pane to open the expanded agent list in a bordered popup.
+Press `Alt+d` from any pane to open the detailed agent list in a bordered popup.
 The bare `d` density toggle has been removed. `Alt+s` shows or hides the sidebar
 and its shell/voice pane, preserving agents and restoring the configured column layout.
 The compact list shows the global agent number on the left, the configured
@@ -128,7 +132,7 @@ These shortcuts work with either preset, including while the sidebar is visible:
 
 | Key | Action |
 |-----|--------|
-| `Alt+d` | Expanded agent list in a bordered popup |
+| `Alt+d` | Detailed agent list in a bordered popup |
 | `Alt+i` | Focused agent information directly |
 | `Alt+h` | Help directly |
 | `Alt+s` | Hide/show the sidebar and its shell/voice pane |

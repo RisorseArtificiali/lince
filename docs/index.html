@@ -80,15 +80,22 @@
         sandboxed, monitored, and controllable by voice. No vendor lock-in.
       </p>
 
-      <!-- Install command -->
-      <div class="cmd-box rounded-lg p-4 font-mono text-sm flex items-center gap-3 mb-4 max-w-lg group cursor-pointer" onclick="copyInstall(this)">
+      <!-- Install command: --defaults first (promoted), interactive second -->
+      <div class="cmd-box rounded-lg p-4 font-mono text-sm flex items-center gap-3 mb-2 max-w-xl group cursor-pointer" onclick="copyInstall(this)">
         <span class="text-accent select-none">$</span>
-        <code class="text-white flex-1">curl -sSL https://lince.sh/install | bash</code>
+        <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash -s -- --defaults</code>
         <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
-      <p class="text-xs text-muted">Linux (fully supported) &middot; macOS (experimental) &middot; <a href="https://github.com/RisorseArtificiali/lince/issues/22" class="text-accent hover:underline">Windows (planned)</a></p>
+      <div class="cmd-box rounded-lg p-4 font-mono text-sm flex items-center gap-3 mb-4 max-w-xl group cursor-pointer" onclick="copyInstall(this)">
+        <span class="text-accent select-none">$</span>
+        <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash</code>
+        <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <p class="text-xs text-muted">Linux (fully supported) &middot; macOS (experimental, no Homebrew required) &middot; <a href="https://github.com/RisorseArtificiali/lince/issues/356" class="text-accent hover:underline">WSL not yet supported</a></p>
     </div>
   </section>
 
@@ -156,7 +163,7 @@
         </div>
         <div class="feature-card rounded-lg p-4">
           <h3 class="font-semibold mb-2">Statusline</h3>
-          <p class="text-muted mb-3">Give your agent the screen. One row shows agents and sandbox identity. The sidebar starts hidden; Alt+s restores it. Alt+d opens the expanded list.</p>
+          <p class="text-muted mb-3">Give your agent the screen. One row shows agents and sandbox identity. The sidebar starts hidden; Alt+s restores it. Alt+d opens the detailed agent list.</p>
           <code class="text-accent">--preset statusline</code>
         </div>
         <div class="feature-card rounded-lg p-4">
@@ -201,7 +208,7 @@
         </div>
         <div class="feature-card rounded-lg p-4">
           <h4 class="font-semibold mb-1">Voice relay</h4>
-          <p class="text-muted">Alt+v configures VoxCode; Alt+x / Ctrl+Space toggles PTT. Voice input goes to the active agent or shell, with a compact microphone meter.</p>
+          <p class="text-muted">Alt+v configures VoxCode; Alt+m mutes, Alt+t / Ctrl+Space toggles PTT. Voice input goes to the active agent or shell, with a compact microphone meter.</p>
         </div>
         <div class="feature-card rounded-lg p-4">
           <h4 class="font-semibold mb-1">Sandbox isolation</h4>
@@ -224,26 +231,38 @@
     <div class="max-w-5xl mx-auto px-6 py-20">
       <h2 class="text-2xl font-bold mb-8">Install</h2>
 
-      <div class="grid sm:grid-cols-2 gap-8">
-        <!-- Quick install -->
-        <div>
+      <div class="grid sm:grid-cols-5 gap-8">
+        <!-- Quick install: --defaults first (promoted); wider column so the
+             one-liners never need a scrollbar and the copy button stays put -->
+        <div class="sm:col-span-3">
           <h3 class="font-semibold mb-3">One-liner</h3>
-          <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3">
-            <span class="text-accent">$</span> curl -sSL https://lince.sh/install | bash
+          <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3 flex items-center gap-3 group cursor-pointer" onclick="copyInstall(this)">
+            <span class="text-accent select-none">$</span>
+            <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash -s -- --defaults</code>
+            <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
           </div>
-          <p class="text-sm text-muted">Interactive wizard: detects your OS, installs prerequisites, sets up sandbox + dashboard. Offers optional VoxCode voice input.</p>
+          <div class="cmd-box rounded-lg p-4 font-mono text-sm mb-3 flex items-center gap-3 group cursor-pointer" onclick="copyInstall(this)">
+            <span class="text-accent select-none">$</span>
+            <code class="text-white flex-1 min-w-0 overflow-x-auto whitespace-nowrap">curl -sSL https://lince.sh/install | bash</code>
+            <button class="copy-btn opacity-50 text-muted text-xs" title="Copy">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+          <p class="text-sm text-muted">Unattended or interactive: provisions Zellij and standalone Python when needed, verifies the released dashboard plugin checksum, then sets up the sandbox, dashboard, and updater.</p>
         </div>
 
         <!-- Manual -->
-        <div>
+        <div class="sm:col-span-2">
           <h3 class="font-semibold mb-3">Manual</h3>
-          <div class="cmd-box rounded-lg p-4 font-mono text-sm space-y-1 mb-3">
+          <div class="cmd-box rounded-lg p-4 font-mono text-sm space-y-1 mb-3 overflow-x-auto">
             <div><span class="text-accent">$</span> git clone https://github.com/RisorseArtificiali/lince</div>
             <div><span class="text-accent">$</span> cd lince/sandbox && ./install.sh</div>
             <div><span class="text-accent">$</span> cd ../lince-dashboard && ./install.sh</div>
             <div><span class="text-accent">$</span> source ~/.bashrc && lince</div>
           </div>
-          <p class="text-sm text-muted">Clone, install sandbox + dashboard, launch. Requires Rust with the <span class="font-mono">wasm32-wasip1</span> target for the dashboard plugin. See <a href="https://github.com/RisorseArtificiali/lince/blob/main/QUICKSTART.md" class="text-accent hover:underline">QUICKSTART.md</a> for details.</p>
+          <p class="text-sm text-muted">Clone a tagged release, install sandbox + dashboard, launch. The default uses a checksum-verified prebuilt plugin; Rust is needed only with <span class="font-mono">--build-from-source</span>. See the <a href="documentation/#/install" class="text-accent hover:underline">install and offline guide</a> or <a href="https://github.com/RisorseArtificiali/lince/blob/main/QUICKSTART.md" class="text-accent hover:underline">QUICKSTART.md</a>.</p>
         </div>
       </div>
 
@@ -268,7 +287,7 @@
             <span class="text-muted font-bold">&#x2014;</span>
             <h4 class="font-semibold">Windows</h4>
           </div>
-          <p class="text-muted">Planned. WSL2 likely works today. <a href="https://github.com/RisorseArtificiali/lince/issues/22" class="text-accent hover:underline">Tracking issue.</a></p>
+          <p class="text-muted">Not supported. The installer exits explicitly under WSL before making changes. <a href="https://github.com/RisorseArtificiali/lince/issues/356" class="text-accent hover:underline">Follow WSL support.</a></p>
         </div>
       </div>
     </div>
@@ -374,7 +393,8 @@ You speak    <span class="text-muted">───></span>  <span class="text-cyan"
 
   <script>
     function copyInstall(el) {
-      navigator.clipboard.writeText('curl -sSL https://lince.sh/install | bash');
+      const cmd = el.querySelector('code').textContent.trim();
+      navigator.clipboard.writeText(cmd);
       const btn = el.querySelector('.copy-btn');
       btn.textContent = 'Copied!';
       setTimeout(() => {

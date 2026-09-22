@@ -1,0 +1,10 @@
+{
+  "source": "Captured from a real Claude Code 2.1.272 --print session on Linux, 2026-09-18. Only lifecycle fields retained.",
+  "result": "LINCE_HOOK_PROBE",
+  "events": [
+    {"hook_event_name":"SessionStart","session_id":"1dc3689e-df3b-49ed-882b-5f635214fa7e","source":"startup"},
+    {"hook_event_name":"UserPromptSubmit","session_id":"1dc3689e-df3b-49ed-882b-5f635214fa7e","permission_mode":"default"},
+    {"hook_event_name":"Stop","session_id":"1dc3689e-df3b-49ed-882b-5f635214fa7e","stop_hook_active":false,"permission_mode":"default"},
+    {"hook_event_name":"SessionEnd","session_id":"1dc3689e-df3b-49ed-882b-5f635214fa7e"}
+  ]
+}

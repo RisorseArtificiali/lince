@@ -48,13 +48,16 @@ for density, sidebar width, frame overrides, palettes and upgrade behavior.
 | `[` | Focus previous agent directly |
 | `i` | Toggle info/detail view (`PageUp` / `PageDown` scroll) |
 | `?` | Show help |
-| `Alt+d` | Open the expanded list popup from any pane |
-| `Alt+i` / `Alt+h` | Open information / help directly |
+| `Alt+d` | Open the detailed agent list from any pane |
+| `Alt+i` / `Alt+h` / `Alt+?` | Open information / help directly |
 | `Alt+s` | Toggle the sidebar (minimal/statusline) |
 | `Alt+n` | Open the creation wizard from any pane |
 | `Alt+1`–`Alt+9` | Focus an agent from any pane |
 | `Alt+k` / `Alt+j` | Previous / next agent in status bar order, including locked mode |
 | `Alt+PageUp` / `Alt+PageDown` | Cycle agents from any pane |
+| `Alt+↑` / `Alt+↓` | Passed through to the focused agent (e.g. follow-up input editing) |
+| `Alt+x` | Kill the focused agent and focus the next agent, if any |
+| `Alt+r` | Rename the focused agent, including its name in `lince-msg peers` |
 
 ### Inline Name Prompt
 
@@ -200,7 +203,7 @@ lince-dashboard-launch --preset minimal --layout dashboard-tiled-vox
 ## Voice Relay
 
 VoxCode is now available on demand in any layout. Press `Alt+v` to configure,
-start, pause or stop it. `Alt+x` / `Ctrl+Space` toggles PTT recording; the first row of the
+start, mute or stop it. `Alt+m` mutes/unmutes VoxCode; `Alt+t` / `Ctrl+Space` toggles PTT recording; the first row of the
 left status-bar section shows the live microphone level. Text goes to the last
 active visible agent or shell. Settings persist across dashboard restarts;
 listening never starts automatically. See [Voice input](dashboard/voice-input.md).
@@ -288,3 +291,11 @@ Option 2 — Via GUI: **Terminator → Preferences → Keybindings → copy_clip
 - [Sandbox CLI Reference](sandbox/cli-reference.md) -- the `agent-sandbox` command
 - [lince-config CLI](https://github.com/RisorseArtificiali/lince/blob/main/lince-config/README.md) -- structured CLI for reading and editing LINCE configuration
 - [Multi-Agent Guide](https://github.com/RisorseArtificiali/lince/blob/main/lince-dashboard/MULTI-AGENT-GUIDE.md) -- migration guide for multi-agent support
+
+### Conversations between panes
+
+Enable the optional per-agent `lince-converse` skill to exchange questions and
+replies in the original TUIs. `Alt+d` → `m` opens the delivery log. The status
+bar shows the last sender/reference on its left second line; details/help hints
+follow the agent tabs. See the [operator guide](../../agent-messaging.md) for
+installation, supported integrations, migration and delivery limitations.
