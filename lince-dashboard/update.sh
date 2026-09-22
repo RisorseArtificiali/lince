@@ -74,7 +74,8 @@ else
     # new upstream keys added, orphans preserved). Backs up as .bak.<ts>.
     MERGER="$SCRIPT_DIR/../scripts/config_merge.py"
     set +e
-    python3 "$MERGER" "$CONFIG_DST" "$SCRIPT_DIR/config.toml"
+    python3 "$MERGER" "$CONFIG_DST" "$SCRIPT_DIR/config.toml" \
+        --migrate dashboard.preset statusline minimal
     MERGE_RC=$?
     set -e
     if [ "$MERGE_RC" -eq 0 ]; then
