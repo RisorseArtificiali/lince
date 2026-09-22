@@ -4,7 +4,7 @@ title: End-to-end migration validation for unified CLI + npm
 status: To Do
 assignee: []
 created_date: '2026-05-11 15:00'
-updated_date: '2026-05-11 19:12'
+updated_date: '2026-09-19 13:35'
 labels:
   - testing
   - epic-97
@@ -14,11 +14,6 @@ dependencies:
   - LINCE-108
   - LINCE-109
   - LINCE-110
-  - LINCE-111
-  - LINCE-112
-  - LINCE-113
-  - LINCE-114
-  - LINCE-115
   - LINCE-117
 references:
   - 'https://github.com/RisorseArtificiali/lince/issues/107'

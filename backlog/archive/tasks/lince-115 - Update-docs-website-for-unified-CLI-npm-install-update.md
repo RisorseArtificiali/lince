@@ -4,7 +4,7 @@ title: Update docs + website for unified CLI + npm install/update
 status: To Do
 assignee: []
 created_date: '2026-05-11 15:00'
-updated_date: '2026-05-11 15:01'
+updated_date: '2026-09-19 13:35'
 labels:
   - documentation
   - epic-97
@@ -14,10 +14,6 @@ dependencies:
   - LINCE-108
   - LINCE-109
   - LINCE-110
-  - LINCE-111
-  - LINCE-112
-  - LINCE-113
-  - LINCE-114
 references:
   - 'https://github.com/RisorseArtificiali/lince/issues/106'
   - 'https://github.com/RisorseArtificiali/lince/issues/97'
