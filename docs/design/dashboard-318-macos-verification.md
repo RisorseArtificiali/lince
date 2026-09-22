@@ -2,9 +2,9 @@
 
 Contributor report for [#318](https://github.com/RisorseArtificiali/lince/issues/318)
 (dashboard side) and [voxcode#3](https://github.com/RisorseArtificiali/voxcode/issues/3)
-(VoxCode side). One machine, Apple Silicon only. Checks that need a person at the
-keyboard and microphone are listed as **not verified** at the end; everything
-marked PASS below was reproduced with the commands shown.
+(VoxCode side). One machine, Apple Silicon only. What was not covered is
+listed as **not verified** at the end; everything marked PASS below was
+reproduced with the commands shown.
 
 ## Environment
 
@@ -204,7 +204,7 @@ Not covered by this run: Orca (the terminal used for everything else; it
 has no way to open a window on a given command from a script), iTerm2,
 Ghostty, kitty and WezTerm, none of which are installed here.
 
-## Not verified (needs a person at the keyboard)
+## Not verified
 
 - Option-as-Meta through a physical Option key in Orca, iTerm2, Ghostty,
   kitty and WezTerm (Terminal.app: see section 6; the scripted runs inject the
