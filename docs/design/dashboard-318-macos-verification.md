@@ -121,10 +121,20 @@ pass-through `lince-msg-host` stub for ordinary smoke runs. With the rebuilt
 plugin both presets pass again on macOS (one run hit a 10 s `list-panes`
 timeout right after the save/quit restart and passed on the next run).
 
+The same harness was then run on Linux from this Mac, in an `ubuntu:24.04`
+Docker container (aarch64) with the Zellij 0.45.1 musl binary, to check that
+the macOS changes are a no-op there. The first attempts exposed three
+timing weaknesses of the harness on a slow host, none platform-specific:
+`list-tabs` acknowledged with empty output raised a `JSONDecodeError`
+(`list-panes` already tolerated this), the pane-identity assert did not
+retry, and the session restart after save/quit had no attach grace and only
+15 s. With those guards in place the harness passed 3/3 runs in the
+container and again on macOS.
+
 `test_layout_launch.py`, `test_preset_install.py`, `test_clipboard_setup.py`,
-`test_codex_hooks.py` and `test_plugin_install.py` pass. The Rust plugin tests
-(`tests/run-plugin-tests.sh`) were not run: `wasmtime` is not installed here;
-they run in the `plugin-ci.yml` workflow on the pull request.
+`test_codex_hooks.py` and `test_plugin_install.py` pass. The Rust plugin
+tests (`tests/run-plugin-tests.sh`, wasmtime 49.0.0 from Homebrew) pass:
+112 passed, 1 ignored.
 
 ### 4. Adapter with the real microphone, outside Zellij — PASS
 
