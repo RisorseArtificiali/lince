@@ -15,7 +15,7 @@ A toolkit that turns your terminal into a multi-agent engineering workstation �
 The primary way to use LINCE is the **TUI Dashboard** — a Zellij WASM plugin that acts as a command center for multiple AI coding agents.
 
 New installations use a compact sidebar and a two-row attention bar. Choose a
-statusline-only view or restore the full table with a preset; colors are independent.
+minimal status-line view or restore the sidebar/full table with a preset; colors are independent.
 See [Views and Themes](https://lince.sh/documentation/#/dashboard/views-and-themes).
 
 What the dashboard gives you:
@@ -24,7 +24,7 @@ What the dashboard gives you:
 - **Real-time status**: See at a glance which agents are running, waiting for input, asking for permission, or stopped — five canonical states, color-coded
 - **Pane control**: Show/hide agent panes with a keystroke (`f` to focus, `h` to hide)
 - **Voice relay**: VoxCode transcriptions are piped directly to the focused agent
-- **Session persistence**: Save/restore your agent constellation across sessions (`Q` to save & quit)
+- **Session persistence**: Save/restore your agent constellation across sessions (`Alt+q` to save and quit)
 - **Swimlane grouping**: Agents auto-grouped by project directory when working across repos
 - **Sandbox isolation**: Every agent runs inside [agent-sandbox](sandbox/) — full autonomy, zero host risk
 
@@ -65,7 +65,8 @@ terminal (or source the profile for your current shell), then launch:
 lince
 ```
 
-Press `n` to spawn an agent (quick), or `N` for the full wizard. See the
+Press `n` for the full creation wizard, or `N` to spawn with defaults after a
+name prompt. See the
 [installation guide](docs/documentation/install.md) for manual and offline
 installation, updates, provisioned tools, platform status, and checksum details.
 The [Quickstart guide](QUICKSTART.md) covers the interactive scenarios.
@@ -154,11 +155,11 @@ MIT
 
 ### Dashboard presentation
 
-New installs use a minimal dashboard: compact sidebar, no frames, and a
-two-row status bar. `lince-dashboard-launch --preset classic` restores the full
-presentation; `--preset statusline` uses an on-demand menu with no sidebar.
+New installs use `minimal`: a two-row status bar with no sidebar or standard
+Zellij chrome. `--preset side-pane` adds the compact sidebar, while
+`lince-dashboard-launch --preset classic` restores the full presentation.
 `--frames` restores pane frames. `Alt+d` opens the expanded list, `Alt+i` information, `Alt+h` help, and `Alt+n`
-the wizard. `Alt+s` toggles the 15% sidebar and `Alt+b` cycles the status bar: hidden → left summary → full → agents only in either managed preset. `Alt+q` saves
-agents, sidebar visibility and the status bar mode for the next launch, then quits; `Alt+d`, then `q`, quits without saving.
+the wizard; `Alt+N` creates with defaults and asks only for a name. `Alt+s` toggles the 15% sidebar and `Alt+b` cycles the status bar: hidden → left summary → full → agents only in either managed preset. `Alt+q` saves
+agents, sidebar visibility and the status bar mode for the next launch, then quits; `Alt+Q` quits without saving from any pane.
 See the [presentation settings](docs/documentation/dashboard/config-reference.md)
 and [epic #312 smoke tests](docs/design/dashboard-312-smoke-tests.md).

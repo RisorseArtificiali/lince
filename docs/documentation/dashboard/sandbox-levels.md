@@ -23,7 +23,7 @@ The dashboard tags each agent pane and the wizard's *Sandbox Level (Profile)* st
 
 Non-sandboxed agents keep their existing `[NON-SANDBOXED] <name>` prefix. Agents on the legacy command-template path (no `sandbox_level` set) are not tagged.
 
-**Wizard.** The "N" wizard's *Sandbox Level (Profile)* step colors each level name using the same palette: `paranoid=green`, `normal=blue`, `permissive=yellow`, anything else falls back to the configurable default. (Note: this is the **sandbox profile** axis — the *Provider* step that comes later picks the env-var bundle and is unrelated. See gh#81 for the disambiguation.)
+**Wizard.** The `n` wizard's *Sandbox Level (Profile)* step colors each level name using the same palette: `paranoid=green`, `normal=blue`, `permissive=yellow`, anything else falls back to the configurable default. (Note: this is the **sandbox profile** axis — the *Provider* step that comes later picks the env-var bundle and is unrelated. See gh#81 for the disambiguation.)
 
 **Customising the colors.** The palette is configurable in `~/.config/lince-dashboard/config.toml`:
 
@@ -330,7 +330,7 @@ File-naming convention:
   - `~/.agent-sandbox/profiles/<agent>-<level>.toml` (agent-specific override)
   - `~/.agent-sandbox/profiles/<level>.toml` (agent-agnostic — applies to every agent)
 
-> **Wizard auto-discovery.** The `N` wizard's *Sandbox Level* step scans both
+> **Wizard auto-discovery.** The `n` wizard's *Sandbox Level* step scans both
 > directories above and lists every level it finds, in addition to the shipped
 > `paranoid` / `normal` / `permissive` defaults. Drop a profile file in either
 > path and re-open the wizard — your custom level shows up. Removing a file

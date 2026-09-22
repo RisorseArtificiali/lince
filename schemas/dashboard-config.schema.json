@@ -109,7 +109,7 @@
           "enum": [
             "classic",
             "minimal",
-            "statusline"
+            "side-pane"
           ],
           "description": "Presentation preset at launch; independent of theme (minimal when unspecified)",
           "default": "minimal"

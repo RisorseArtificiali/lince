@@ -14,7 +14,8 @@ Bubblewrap-based sandbox for running AI coding agents safely. Restricts filesyst
 
 Multi-agent TUI dashboard for Zellij. Spawn, monitor, and switch between multiple agents from one terminal pane.
 
-- [Views and Themes](dashboard/views-and-themes.md) -- minimal, statusline and classic presets, palettes, attention and upgrades
+- [Keyboard Reference](dashboard/keyboard-reference.md) -- every shortcut in Help-pane order, with context and details
+- [Views and Themes](dashboard/views-and-themes.md) -- minimal, side-pane and classic presets, palettes and attention
 - [Usage Guide](dashboard/usage-guide.md) -- keybindings, wizard, features
 - [Configuration Reference](dashboard/config-reference.md) -- dashboard and agent type config
 - [Agent Examples](dashboard/agent-examples.md) -- defaults, custom agents, advanced setups

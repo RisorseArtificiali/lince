@@ -31,7 +31,7 @@ for arg in "$@"; do
             echo "  Downloads a checksum-verified prebuilt plugin by default."
             echo "  --build-from-source requires a rustup toolchain and builds locally."
             echo "  Choose a dashboard preset interactively (default: minimal)."
-            echo "  Set LINCE_DASHBOARD_PRESET=minimal|statusline|classic to skip that prompt."
+            echo "  Set LINCE_DASHBOARD_PRESET=minimal|side-pane|classic to skip that prompt."
             echo "  Sandbox isolation levels are offered per agent at spawn time"
             echo "  by the dashboard wizard — no install-time selection needed."
             exit 0 ;;
@@ -356,7 +356,7 @@ echo -e "${GREEN}[13/14] Setting up shell aliases...${NC}"
 ALIAS_LINES="$(cat <<'ALIASES'
 alias lince-classic="lince-dashboard-launch --preset classic"
 alias lince-minimal="lince-dashboard-launch --preset minimal"
-alias lince-statusline="lince-dashboard-launch --preset statusline"
+alias lince-side-pane="lince-dashboard-launch --preset side-pane"
 alias lince='"$HOME/.local/bin/lince"'
 alias lince-floating="lince-dashboard-launch --layout dashboard"
 alias zd="lince-dashboard-launch"
@@ -382,6 +382,7 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
             "${_sed_inplace[@]}" '/alias lince-classic=/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince-minimal=/d' "$rc"
             "${_sed_inplace[@]}" '/alias lince-statusline=/d' "$rc"
+            "${_sed_inplace[@]}" '/alias lince-side-pane=/d' "$rc"
             "${_sed_inplace[@]}" '/alias zd=/d' "$rc"
             "${_sed_inplace[@]}" '/alias z="zellij"/d' "$rc"
             "${_sed_inplace[@]}" '/alias zn=/d' "$rc"

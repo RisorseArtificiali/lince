@@ -14,6 +14,7 @@
   - [Migrating from nono to Seatbelt](sandbox/migration-nono-to-seatbelt.md)
 
 - **Dashboard (lince-dashboard)**
+  - [Keyboard Reference](dashboard/keyboard-reference.md)
   - [Usage Guide](dashboard/usage-guide.md)
   - [Views and Themes](dashboard/views-and-themes.md)
   - [Voice input](dashboard/voice-input.md)

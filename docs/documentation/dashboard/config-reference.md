@@ -25,7 +25,7 @@ Created by `install.sh`. Holds dashboard-wide settings and optional agent type o
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `preset` | string | `"minimal"` | `minimal`, `statusline`, or `classic`; minimal when unspecified. Applied by the launcher. |
+| `preset` | string | `"minimal"` | `minimal`, `side-pane`, or `classic`; minimal (status line, sidebar hidden) when unspecified. Applied by the launcher. |
 | `voxcode_enabled` | boolean | `true` | Offer on-demand VoxCode when installed. `Alt+v` configures/starts it; no automatic microphone activation. See [Voice input](dashboard/voice-input.md). |
 | `attention_blink` | boolean | `false` | Opt in to alternating I/P with opposite-colored dots in both bar sections and the compact sidebar. By default I/P are bold, static letters; R is always static. |
 | `compact` | boolean | Preset-dependent | Classic inline density only; managed sidebar is compact and popup list is full. |
@@ -46,12 +46,12 @@ Created by `install.sh`. Holds dashboard-wide settings and optional agent type o
 
 ### Session defaults (per-project, dynamic)
 
-In addition to the static `default_*` keys above, the `N` wizard's final
+In addition to the static `default_*` keys above, the `n` wizard's final
 **Confirm** step accepts `!` instead of `Enter` to spawn the agent **and**
 save all wizard choices (type, sandbox backend, sandbox level, provider,
-project dir) as the active `n` quick-spawn defaults for the current
+project dir) as the active `N` quick-spawn defaults for the current
 session. Defaults are persisted in `.lince-dashboard` next to the open
-agents when the user exits with `Q`, and reapplied on the next launch in
+agents when the user exits with `Alt+q`, and reapplied on the next launch in
 the same directory. Press `!` again from a later wizard to overwrite.
 
 Session defaults take precedence over the static `[dashboard].default_*`
@@ -276,16 +276,20 @@ with deterministic sample agents, using `tests/render-theme-previews.py`:
 
 ### Sidebar density and width
 
-Minimal and statusline use the same managed layout, with the sidebar initially
-visible or hidden respectively. `Alt+s` toggles it at runtime. The sidebar always
+Minimal and side-pane use the same managed layout, with the sidebar initially
+hidden or visible respectively. `Alt+s` toggles it at runtime. The sidebar always
 shows global agent numbers, configured type labels (`CLA`, `CDX`, etc.) and status,
 with bold colored project headings. `Alt+d` always opens an expanded, bordered
 list; there is no bare `d` density toggle. `compact` affects only classic inline rendering.
 
-`Alt+i`, `Alt+h` and `Alt+n` open information, help and the creation wizard directly.
-`Alt+q` saves and quits from any pane; `Alt+d`, then `q`, quits without saving.
+`Alt+i`, `Alt+h` and `Alt+n` open information, help and the creation wizard directly;
+`Alt+N` creates with defaults and asks only for a name.
+`Alt+q` saves and quits from any pane; `Alt+Q` quits without saving from any pane.
 All popups draw borders even when `pane_frames = false`. Immediately on opening the wizard, or in selection/review
-steps, `n` jumps to default creation with only the name prompt.
+steps, `N` jumps to default creation with only the name prompt.
+The wizard's Project Directory step keeps the editable path and recent projects
+on one screen. Typing filters the recent list, `Tab` completes filesystem paths,
+and `Down` moves into the recents so `Up`/`Down` plus `Enter` can select one.
 
 The attention row’s left overview uses state-colored numbers and letters for all
 agents (`1R 2I 3P 4S 5-`); only `I`/`P` contribute to the distinctly colored `!N`.
@@ -302,8 +306,8 @@ the named viewport, including when panes are resized interactively.
 ### Presentation presets and Zellij chrome
 
 `lince-dashboard-launch --preset minimal` replaces Zellij's top tab bar and
-bottom keybinding strip with the two-row LINCE attention bar. `--preset statusline`
-also removes the sidebar. `--preset classic` restores the standard bars at the
+bottom keybinding strip with the two-row LINCE attention bar and hides the sidebar.
+`--preset side-pane` starts with the compact sidebar visible. `--preset classic` restores the standard bars at the
 next launch; `Alt+h` provides help without permanently showing them.
 Use `[dashboard] preset = "minimal"` to persist the launch choice.
 
@@ -312,16 +316,17 @@ global Zellij configuration. Edit that file for LINCE-specific bindings. Install
 and update preserve custom settings and provide new defaults in `zellij.kdl.dist`.
 Previously shipped Alt+h/i/l/n bindings are migrated with a `.kdl.bak-shortcuts` backup.
 `--zellij-config /path/to/config.kdl` explicitly selects another configuration;
-include LINCE's `lince-ui-open`, `lince-sidebar-toggle`, `lince-save-quit`, `focus-agent`, and `cycle-agent` bindings when
+include LINCE's `lince-ui-open`, `lince-sidebar-toggle`, `lince-save-quit`,
+`lince-quit`, `focus-agent`, and `cycle-agent` bindings when
 using a custom file. All layout variants are installed and updated together.
 Presentation changes take effect when starting a new session, not by attaching
 to an existing one.
 
 ### Minimal defaults and reverting
 
-Fresh installs select `preset = "minimal"`: a compact sidebar, one attention
-row, no pane frames, and simplified Zellij UI. Existing configs without a
-preset are upgraded to `classic`, preserving the old full table and bars.
+Fresh installs select `preset = "minimal"`: the LINCE attention bar, no initial
+sidebar, no pane frames, and simplified Zellij UI. Use `side-pane` to start with
+the compact sidebar visible. The former `statusline` preset name is not accepted.
 Explicit `compact`, `theme`, `sidebar_width` and preset choices remain intact.
 
 To restore frames for one session:
@@ -336,4 +341,4 @@ options affect new sessions; ordinary Zellij launches use their own config.
 Sandbox identity survives frame removal in the compact row's `!` marker,
 the selected agent's `i` details, and the active agent's statusline label.
 
-`Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/statusline, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/statusline preset. Older saved sessions keep the preset defaults. `Alt+d`, then `q`, leaves the previous saved view unchanged.
+`Alt+b` cycles the status bar through hidden, left summary only, full, and agents only in minimal/side-pane, including locked mode. The three visible modes use two rows. Agent panes reclaim its rows when hidden. `Alt+s` and `Alt+b` can hide both surfaces; agent navigation and the global dialogs remain available. Explicit sidebar widths remain configurable. `Alt+q` saves sidebar visibility and the status bar mode in the project’s `.lince-dashboard`; the next launch restores them over the initial minimal/side-pane preset. Older saved sessions keep the preset defaults. `Alt+Q` leaves the previous saved view unchanged.

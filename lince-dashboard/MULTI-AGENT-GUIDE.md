@@ -27,7 +27,7 @@ Each agent gets proper bwrap sandboxing with its own config dirs, env vars, and 
 
 ### 2. The dashboard manages mixed agent types
 
-The wizard (`Shift+N`) now has an Agent Type selection step. When multiple agent types are configured, you pick which one to spawn:
+The wizard (`n`) has an Agent Type selection step. When multiple agent types are configured, you pick which one to spawn:
 
 ```
 ┌─────────── New Agent Wizard ──────────────┐
@@ -141,7 +141,7 @@ Custom agents can define their own event vocabulary via `event_map` in config. T
    export GEMINI_API_KEY=...        # for Gemini
    ```
 
-4. **Spawn from the dashboard** via wizard (`Shift+N`) and select the agent type. Each agent has a direct mode and (where applicable) a sandboxed mode:
+4. **Spawn from the dashboard** via wizard (`n`) and select the agent type. Each agent has a direct mode and (where applicable) a sandboxed mode:
    ```bash
    # Direct mode (uses agent's own sandbox if any):
    # Select "OpenAI Codex" in the wizard

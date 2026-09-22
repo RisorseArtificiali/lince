@@ -109,6 +109,12 @@ updated = re.sub(r'(?m)^[ \t]*bind "Alt (up|down)" \{ MoveFocus "\1"; \}[ \t]*\n
 if 'bind "Alt q"' not in updated:
     updated = re.sub(r'(?m)^([ \t]*)(bind "Alt n" \{ MessagePlugin \{ name "lince-ui-open"; payload "wizard"; \}; \})$',
         lambda m: m.group(0) + '\n' + m.group(1) + 'bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }', updated)
+if 'bind "Alt Shift q"' not in updated:
+    updated = re.sub(r'(?m)^([ \t]*)(bind "Alt q" \{ MessagePlugin \{ name "lince-save-quit"; \}; \})$',
+        lambda m: m.group(0) + '\n' + m.group(1) + 'bind "Alt Shift q" { MessagePlugin { name "lince-quit"; }; }', updated)
+if 'bind "Alt Shift n"' not in updated:
+    updated = re.sub(r'(?m)^([ \t]*)(bind "Alt n" \{ MessagePlugin \{ name "lince-ui-open"; payload "wizard"; \}; \})$',
+        lambda m: m.group(0) + '\n' + m.group(1) + 'bind "Alt Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }', updated)
 if 'bind "Alt b"' not in updated:
     updated = re.sub(r'(?m)^([ \t]*)(bind "Alt s" \{ MessagePlugin \{ name "lince-sidebar-toggle"; \}; \})$',
         lambda m: m.group(0) + '\n' + m.group(1) + 'bind "Alt b" { MessagePlugin { name "lince-statusbar-toggle"; }; }', updated)

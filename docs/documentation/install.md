@@ -25,7 +25,7 @@ Interactive:
 curl -sSL https://lince.sh/install | bash
 ```
 
-Non-interactive, using the default agents, minimal dashboard, and platform
+Non-interactive, using the default agents, minimal status-line dashboard, and platform
 sandbox:
 
 ```bash

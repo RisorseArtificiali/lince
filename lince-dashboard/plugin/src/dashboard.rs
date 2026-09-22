@@ -855,14 +855,24 @@ fn relay_pending_hints() -> Vec<KeyHint> {
 /// Return the context-appropriate key hints.
 fn status_bar_hints(empty: bool, focused: bool, detail: bool) -> Vec<KeyHint> {
     if empty {
-        vec![("n", "New-defaults"), ("N", "New-wizard"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("n", "New"), ("N", "New with defaults"), ("Alt+q", "Save and quit"), ("Alt+Q", "Quit without saving"), ("?", "Help")]
     } else if focused {
-        vec![("Alt-f", "Unfocus"), ("Alt+1-9", "Switch-agent"), ("Alt+k/j", "Cycle"), ("Alt+r", "Rename"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("i", "Info"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("x", "Kill"), ("n", "New"), ("Alt+q", "Save and quit"), ("i", "Info"), ("?", "Help"), ("Alt+Q", "Quit without saving")]
     } else if detail {
-        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("n", "New"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("i", "Hide info"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("j/k", "Nav"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("n", "New"), ("Alt+q", "Save and quit"), ("Alt+Q", "Quit without saving"), ("?", "Help")]
     } else {
-        vec![("n", "New-defaults"), ("N", "New-wizard"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("i", "Info"), ("Alt+q", "Save+Quit"), ("q", "Quit-no-save"), ("?", "Help")]
+        vec![("n", "New"), ("N", "New with defaults"), ("f/Enter", "Focus"), ("1-9", "Focus-N"), ("r", "Rename"), ("K/J", "Move"), ("a", "Sort"), ("x", "Kill"), ("i", "Info"), ("Alt+q", "Save and quit"), ("Alt+Q", "Quit without saving"), ("?", "Help")]
     }
+}
+
+fn print_two_column_status_line(left: &[KeyHint], right: &[KeyHint], cols: usize) {
+    let left_text = format_key_hints(left);
+    let right_text = format_key_hints(right);
+    let gap = (cols / 2).saturating_sub(strip_ansi_len(&left_text)).max(2);
+    let text = format!("{}{}{}", left_text, " ".repeat(gap), right_text);
+    let mut hints = left.to_vec();
+    hints.extend_from_slice(right);
+    print_status_line(&text, &hints, cols);
 }
 
 /// Context-sensitive status bar (always rendered as 2 lines for legibility on
@@ -886,6 +896,24 @@ fn render_status_bar(
     let is_empty = agents.is_empty();
     let is_focused = focused.is_some();
     let is_detail = detail.is_some();
+    if is_empty {
+        print_two_column_status_line(
+            &[("n", "New"), ("N", "New with defaults")],
+            &[("Alt+q", "Save and quit")],
+            cols,
+        );
+        print_two_column_status_line(
+            &[("m", "Messages"), ("?", "Help")],
+            &[("Alt+Q", "Quit without saving")],
+            cols,
+        );
+        return;
+    }
+    if is_focused {
+        print_two_column_status_line(&[("x", "Kill"), ("n", "New")], &[("Alt+q", "Save and quit")], cols);
+        print_two_column_status_line(&[("i", "Info"), ("?", "Help")], &[("Alt+Q", "Quit without saving")], cols);
+        return;
+    }
     let mut hints = status_bar_hints(is_empty, is_focused, is_detail);
     if !is_detail { hints.insert(0, ("m", "Messages")); }
 
@@ -973,7 +1001,7 @@ pub fn render_wizard(
     let header = format!("  Step {}/{}: {}", step_num, total_steps, step_label);
     push_box_line(&mut lines, &header, box_width);
     if quick_start || !matches!(wizard.step, WizardStep::Name | WizardStep::ProjectDir) {
-        push_box_line(&mut lines, "  [n] Use defaults; ask only for name", box_width);
+        push_box_line(&mut lines, "  [N] Use defaults; ask only for name", box_width);
     }
 
     match wizard.step {
@@ -1090,107 +1118,75 @@ pub fn render_wizard(
             );
             push_box_line(&mut lines, "  [j/k] Select  [Enter] Next  [Esc] Cancel", box_width);
         }
-        WizardStep::ProjectDir => match wizard.project_dir_mode {
-            // ── Recents picker (#127) ──────────────────────────────────
-            ProjectDirMode::List => {
+        WizardStep::ProjectDir => {
+            // The input and recent directories deliberately share one screen.
+            // ProjectDirMode records focus, rather than selecting a separate UI.
+            let input_marker = if wizard.project_dir_mode == ProjectDirMode::Input { ">" } else { " " };
+            let input_suffix = if wizard.project_dir_mode == ProjectDirMode::Input { "_" } else { "" };
+            let max_visible = box_width.saturating_sub(9);
+            let dir_display = if wizard.project_dir.chars().count() > max_visible && max_visible > 1 {
+                let skip = wizard.project_dir.chars().count() - max_visible + 1;
+                format!("\u{2026}{}", wizard.project_dir.chars().skip(skip).collect::<String>())
+            } else {
+                wizard.project_dir.clone()
+            };
+            push_box_line(
+                &mut lines,
+                &format!("  {} {}{}", input_marker, dir_display, input_suffix),
+                box_width,
+            );
+            push_box_line(&mut lines, "  [Tab] autocomplete path", box_width);
+
+            if !wizard.completions.is_empty() {
+                push_box_line(&mut lines, "  COMPLETIONS", box_width);
+                let max_show = 4.min(wizard.completions.len());
+                for (i, entry) in wizard.completions.iter().take(max_show).enumerate() {
+                    let marker = if wizard.completion_index == Some(i) { ">" } else { " " };
+                    let display = truncate_left(entry, box_width.saturating_sub(6));
+                    push_box_line(&mut lines, &format!("  {} {}", marker, display), box_width);
+                }
+                if wizard.completions.len() > max_show {
+                    push_box_line(
+                        &mut lines,
+                        &format!("    (+{} more)", wizard.completions.len() - max_show),
+                        box_width,
+                    );
+                }
+            }
+
+            let filtered = wizard.filtered_project_dirs();
+            if !filtered.is_empty() {
+                push_box_line(&mut lines, "  RECENTS", box_width);
+                let max_show = 4;
+                let total = filtered.len();
+                let sel = wizard.project_dir_index.min(total.saturating_sub(1));
+                let start = if sel >= max_show { sel + 1 - max_show } else { 0 };
+                for (i, entry) in filtered.iter().enumerate().skip(start).take(max_show) {
+                    let marker = if wizard.project_dir_mode == ProjectDirMode::List && i == sel { ">" } else { " " };
+                    let display = truncate_left(&collapse_tilde(entry), box_width.saturating_sub(6));
+                    push_box_line(&mut lines, &format!("  {} {}", marker, display), box_width);
+                }
+                if total > start + max_show {
+                    push_box_line(
+                        &mut lines,
+                        &format!("    (+{} more)", total - (start + max_show)),
+                        box_width,
+                    );
+                }
+            }
+
+            if wizard.project_dir_suggested {
+                push_box_line(&mut lines, "  (from selected agent — type or Backspace to replace)", box_width);
+            }
+            if let Some(ref err) = wizard.project_dir_error {
                 push_box_line(
                     &mut lines,
-                    &format!("  Filter: {}_", wizard.project_dir_filter),
+                    &format!("  {}✗ {}{}", theme::color("red"), err, RESET),
                     box_width,
                 );
-                push_box_line(&mut lines, "", box_width);
-
-                let filtered = wizard.filtered_project_dirs();
-                if filtered.is_empty() {
-                    push_box_line(
-                        &mut lines,
-                        "  (no match — [Enter] types it as a new path)",
-                        box_width,
-                    );
-                } else {
-                    push_box_line(&mut lines, "  RECENTS", box_width);
-                    // Scrolling window of up to 6 rows around the selection.
-                    let max_show = 6;
-                    let total = filtered.len();
-                    let sel = wizard.project_dir_index.min(total.saturating_sub(1));
-                    let start = if sel >= max_show { sel + 1 - max_show } else { 0 };
-                    for (i, entry) in filtered.iter().enumerate().skip(start).take(max_show) {
-                        let marker = if i == sel { ">" } else { " " };
-                        let short = collapse_tilde(entry);
-                        // Truncate from the left to keep the distinguishing tail.
-                        let disp = truncate_left(&short, box_width.saturating_sub(6));
-                        push_box_line(&mut lines, &format!("  {} {}", marker, disp), box_width);
-                    }
-                    if total > start + max_show {
-                        push_box_line(
-                            &mut lines,
-                            &format!("    (+{} more)", total - (start + max_show)),
-                            box_width,
-                        );
-                    }
-                }
-                push_box_line(&mut lines, "", box_width);
-                // `[i] free text` only applies while the filter is empty (that's
-                // when `i` switches modes); once filtering, Backspace backs out.
-                let hint = if wizard.project_dir_filter.is_empty() {
-                    "  [type] filter  [\u{2191}/\u{2193}] move  [Enter] select  [i] free text"
-                } else {
-                    "  [type] filter  [\u{2191}/\u{2193}] move  [Enter] select  [\u{232b}] back"
-                };
-                push_box_line(&mut lines, hint, box_width);
             }
-            // ── Free-text input (legacy escape hatch) ──────────────────
-            ProjectDirMode::Input => {
-                // Horizontal scroll: show the tail of the input when it overflows.
-                let input_prefix = "  > ";
-                let input_suffix = "_";
-                let max_visible = box_width.saturating_sub(4 + input_prefix.len() + input_suffix.len());
-                let dir_display = if wizard.project_dir.chars().count() > max_visible && max_visible > 1 {
-                    let skip = wizard.project_dir.chars().count() - max_visible + 1;
-                    let s: String = wizard.project_dir.chars().skip(skip).collect();
-                    format!("\u{2026}{}", s) // …prefix
-                } else {
-                    wizard.project_dir.clone()
-                };
-                push_box_line(&mut lines, &format!("{}{}{}", input_prefix, dir_display, input_suffix), box_width);
-
-                // Show completion suggestions (max 5 visible).
-                if !wizard.completions.is_empty() {
-                    let max_show = 5.min(wizard.completions.len());
-                    for (i, entry) in wizard.completions.iter().take(max_show).enumerate() {
-                        let marker = if wizard.completion_index == Some(i) { ">" } else { " " };
-                        let display = truncate_left(entry, box_width.saturating_sub(6));
-                        push_box_line(&mut lines, &format!("  {} {}", marker, display), box_width);
-                    }
-                    if wizard.completions.len() > max_show {
-                        push_box_line(
-                            &mut lines,
-                            &format!("    (+{} more)", wizard.completions.len() - max_show),
-                            box_width,
-                        );
-                    }
-                } else if wizard.project_dir_suggested {
-                    // #168: the field is pre-filled from the selected agent's dir.
-                    push_box_line(&mut lines, "  (from selected agent — Backspace to clear)", box_width);
-                    push_box_line(&mut lines, "  [Tab] autocomplete path", box_width);
-                } else {
-                    push_box_line(&mut lines, "  (default: current directory)", box_width);
-                    push_box_line(&mut lines, "  [Tab] autocomplete path", box_width);
-                }
-                // Validation error line (set by the ProjectDir Enter handler when
-                // the path is empty/relative/tilde-prefixed). Bold red, cleared as
-                // soon as the user edits the field.
-                if let Some(ref err) = wizard.project_dir_error {
-                    push_box_line(&mut lines, "", box_width);
-                    push_box_line(
-                        &mut lines,
-                        &format!("  {}✗ {}{}", theme::color("red"), err, RESET),
-                        box_width,
-                    );
-                }
-                push_box_line(&mut lines, "", box_width);
-                push_box_line(&mut lines, "  [Enter] Next  [Esc] Cancel", box_width);
-            }
+            push_box_line(&mut lines, "", box_width);
+            push_box_line(&mut lines, "  [\u{2191}/\u{2193}] input / recents  [Enter] Next  [Esc] Cancel", box_width);
         }
         WizardStep::Name => {
             // Horizontal scroll for name input too.
@@ -1222,13 +1218,14 @@ pub fn render_help_overlay(rows: usize, cols: usize) {
     let hints = ["LINCE — Keybindings", "Alt+d        Detailed agent list",
         "Alt+v        VoxCode settings / start / mute / stop", "Alt+m          Mute/unmute VoxCode",
         "Alt+t / Ctrl+Space  PTT: insert / insert + Enter", "Alt+i/h/?    Info / help", "Alt+s        Toggle sidebar",
-        "Alt+b        Bar: hidden / left / full / right", "Alt+n        New agent wizard",
+        "Alt+b        Bar: hidden / left / full / right", "Alt+n / n    New agent wizard",
+        "Alt+N / N    New agent with defaults",
         "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
         "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "Alt+r        Rename focused agent", "Alt+x        Kill focused agent", "i            Info (PgUp/Dn scroll)",
-        "n            New agent", "N            New agent wizard", "r            Rename selected",
+        "r            Rename selected",
         "K/J          Move selected up/down", "a            Reset directory/name order",
         "x            Kill selected", "s            Relay last message", "S            Relay N messages",
-        "Alt+q / Q    Save and quit", "q (list)     Quit without saving", "Esc / ?      Close help"];
+        "Alt+q        Save and quit", "Alt+Q        Quit without saving", "Esc / ?      Close help"];
     for row in 0..rows {
         println!("{}", clip_cells(hints.get(row).copied().unwrap_or(""), cols));
     }
@@ -1240,14 +1237,129 @@ mod tests {
 
     #[test]
     fn help_uses_current_global_shortcuts_and_detailed_list_name() {
-        let frame = crate::render_output::capture(|| render_help_overlay(20, 80));
+        let frame = crate::render_output::capture(|| render_help_overlay(30, 80));
         assert!(frame.contains("Detailed agent list"));
         assert!(frame.contains("Alt+k/j"));
         assert!(frame.contains("Alt+m"));
         assert!(frame.contains("Alt+t / Ctrl+Space"));
         assert!(frame.contains("Alt+r        Rename focused agent"));
         assert!(frame.contains("Alt+x        Kill focused agent"));
+        assert!(frame.contains("Alt+q        Save and quit"));
+        assert!(frame.contains("Alt+Q        Quit without saving"));
+        assert!(!frame.contains("q (list)"));
         assert!(!frame.contains("Alt+←/→"));
+    }
+
+    #[test]
+    fn project_directory_renders_input_and_recents_in_one_step() {
+        let mut wizard = WizardState {
+            step: WizardStep::ProjectDir,
+            available_agent_types: vec![("claude".into(), "Claude Code".into())],
+            agent_type_index: 0,
+            available_sandbox_backends: Vec::new(),
+            sandbox_backend_index: 0,
+            available_sandbox_levels: Vec::new(),
+            sandbox_level_index: 0,
+            name: String::new(),
+            default_name: "alpha-1".into(),
+            available_providers: Vec::new(),
+            provider_index: 0,
+            project_dir: "a".into(),
+            completions: Vec::new(),
+            completion_index: None,
+            project_dir_error: None,
+            project_dir_suggested: false,
+            available_project_dirs: vec!["/work/alpha".into(), "/work/beta".into()],
+            project_dir_index: 0,
+            project_dir_filter: "a".into(),
+            project_dir_mode: ProjectDirMode::Input,
+        };
+        let frame = crate::render_output::capture(|| render_wizard(
+            &wizard,
+            24,
+            80,
+            &HashMap::new(),
+            &SandboxColors::default(),
+            false,
+        ));
+        assert!(frame.contains("> a_"));
+        assert!(frame.contains("RECENTS"));
+        assert!(frame.contains("/work/alpha"));
+        assert!(!frame.contains("[i] free text"));
+
+        wizard.project_dir_mode = ProjectDirMode::List;
+        let selected = crate::render_output::capture(|| render_wizard(
+            &wizard,
+            24,
+            80,
+            &HashMap::new(),
+            &SandboxColors::default(),
+            false,
+        ));
+        assert!(selected.contains("  > /work/alpha"));
+    }
+
+    #[test]
+    fn focused_footer_is_two_columns_with_only_primary_actions() {
+        let frame = crate::render_output::capture(|| {
+            render_status_bar(
+                100,
+                None,
+                &[preview_agent("agent", AgentStatus::Running)],
+                Some("agent"),
+                None,
+                false,
+            )
+        });
+        let mut escape = false;
+        let plain: String = frame.chars().filter(|c| {
+            if *c == '\x1b' { escape = true; return false; }
+            if escape {
+                if c.is_ascii_alphabetic() { escape = false; }
+                return false;
+            }
+            true
+        }).collect();
+        let lines: Vec<&str> = plain.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("[x] Kill"));
+        assert!(lines[0].contains("[n] New"));
+        assert!(lines[0].contains("[Alt+q] Save and quit"));
+        assert!(lines[1].contains("[i] Info"));
+        assert!(lines[1].contains("[?] Help"));
+        assert!(lines[1].contains("[Alt+Q] Quit without saving"));
+        for removed in ["Unfocus", "Switch-agent", "Cycle", "Rename", "Move", "Sort"] {
+            assert!(!plain.contains(removed), "unexpected footer action: {removed}");
+        }
+        assert!(lines[0].find("[Alt+q]").unwrap() >= 50);
+        assert!(lines[1].find("[Alt+Q]").unwrap() >= 50);
+    }
+
+    #[test]
+    fn empty_footer_is_two_columns_without_duplicate_conversations_hint() {
+        let frame = crate::render_output::capture(|| {
+            render_status_bar(100, Some("m: Conversations"), &[], None, None, false)
+        });
+        let mut escape = false;
+        let plain: String = frame.chars().filter(|c| {
+            if *c == '\x1b' { escape = true; return false; }
+            if escape {
+                if c.is_ascii_alphabetic() { escape = false; }
+                return false;
+            }
+            true
+        }).collect();
+        let lines: Vec<&str> = plain.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("[n] New"));
+        assert!(lines[0].contains("[N] New with defaults"));
+        assert!(lines[0].contains("[Alt+q] Save and quit"));
+        assert!(lines[1].contains("[m] Messages"));
+        assert!(lines[1].contains("[?] Help"));
+        assert!(lines[1].contains("[Alt+Q] Quit without saving"));
+        assert!(!plain.contains("Conversations"));
+        assert!(lines[0].find("[Alt+q]").unwrap() >= 50);
+        assert!(lines[1].find("[Alt+Q]").unwrap() >= 50);
     }
 
     #[test]

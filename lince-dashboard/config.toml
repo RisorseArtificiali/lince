@@ -1,7 +1,7 @@
 # Lince Dashboard Configuration
 
 [dashboard]
-# Default: compact sidebar and a two-row LINCE attention bar.
+# Default: two-row LINCE attention bar with the sidebar initially hidden.
 preset = "minimal"
 # Alternate I/P with opposite-colored dots; false keeps the status letters steady
 attention_blink = false
@@ -13,7 +13,7 @@ voxcode_enabled = true
 # compact = true
 # Used by lince-dashboard-launch; restart to change the layout
 # sidebar_width = 15
-# Override preset frame choice (otherwise minimal/statusline=false, classic=true)
+# Override preset frame choice (otherwise minimal/side-pane=false, classic=true)
 # pane_frames = false
 # Default sandbox profile for new agents (empty = no -P flag)
 # default_profile = ""

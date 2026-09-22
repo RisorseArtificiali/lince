@@ -31,7 +31,7 @@
 #   https://lince.sh/documentation/#/dashboard/sandbox-levels
 #
 # sandbox_level here is the *default selection* in the wizard's SandboxLevel
-# step. Users can override it per-spawn via the [N] wizard — no need to
+# step. Users can override it per-spawn via the [n] wizard — no need to
 # maintain separate paranoid/permissive agent-type entries any more.
 #
 # Custom sandbox levels are auto-discovered by the wizard — drop a profile
@@ -60,7 +60,7 @@ display_name = "Claude Code"
 short_label = "CLA"
 # Color follows the sandbox-level gradient (basic ANSI palette):
 #   paranoid=green, normal=blue, permissive=yellow, unsandboxed=red
-# The same palette drives the per-pane title indicator and the "N" wizard's
+# The same palette drives the per-pane title indicator and the "n" wizard's
 # Provider step when the provider name happens to match a level keyword
 # (gh#63). Override via [dashboard.sandbox_colors] in
 # ~/.config/lince-dashboard/config.toml — see docs/documentation/dashboard/
