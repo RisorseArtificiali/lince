@@ -55,6 +55,11 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
         (work / "lince-config").chmod(0o755)
         shutil.copyfile(ROOT / "tests/voice-fixture.py", work / "lince-voice")
         (work / "lince-voice").chmod(0o755)
+        if not messaging:
+            # Agent panes are wrapped by lince-msg-host (#343); ordinary smoke runs only
+            # need a pass-through so the fixture command still runs in the pane.
+            (work / "lince-msg-host").write_text('#!/bin/sh\nwhile [ "$1" != "--" ]; do shift; done\nshift\nexec "$@"\n')
+            (work / "lince-msg-host").chmod(0o755)
         (work / ".lince-dashboard").write_text(json.dumps({"version": 3, "next_agent_id": 0,
             "agents": [{"name": f"fixture{i}",
                         "agent_type": "fixture",
