@@ -1,6 +1,8 @@
 # Lince Dashboard Configuration
 
 [dashboard]
+# Modifier shown in shortcut hints: the installer selects Ctrl on macOS and Alt elsewhere.
+keybinding_style = "alt"
 # Default: two-row LINCE attention bar with the sidebar initially hidden.
 preset = "minimal"
 # Alternate I/P with opposite-colored dots; false keeps the status letters steady

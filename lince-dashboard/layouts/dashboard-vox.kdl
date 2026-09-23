@@ -18,6 +18,7 @@ layout {
             pane size="60%" name="lince-controller" {
                 plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
                     config_path "~/.config/lince-dashboard/config.toml"
+                    keybinding_style "alt"
                 }
             }
             pane {

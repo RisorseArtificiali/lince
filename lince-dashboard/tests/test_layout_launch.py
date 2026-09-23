@@ -11,6 +11,12 @@ launcher = runpy.run_path(str(ROOT / "lince-dashboard-launch"))
 
 
 class LayoutTests(unittest.TestCase):
+    def test_macos_control_help_is_not_shadowed_by_zellij_move_mode(self):
+        config = (ROOT / "zellij-config/config.kdl").read_text()
+        self.assertIn('bind "Ctrl h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }', config)
+        self.assertNotIn('bind "Ctrl h" { SwitchToMode "move"; }', config)
+        self.assertIn('bind "Ctrl Shift u" { SwitchToMode "move"; }', config)
+
     def test_width_changes_only_root_columns(self):
         text = (ROOT / "layouts/dashboard-tiled.kdl").read_text()
         result = launcher["sidebar_layout"](text, 22)
@@ -112,6 +118,7 @@ class LayoutTests(unittest.TestCase):
                    '        bind "Alt n" { NewPane; }\n'
                    '        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
                    '        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
+                   '        bind "Ctrl d" { Write 41; }\n'
                    '        bind "Alt l" { MessagePlugin { name "lince-sidebar-toggle"; }; }\n'
                    '        bind "Alt i" { Write 42; }\n    }\n}\n')
             active.write_text(old)
@@ -131,6 +138,22 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(migrated.count('bind "Alt m" { MessagePlugin { name "lince-voice-mute"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Alt ?" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }'), 2)
             self.assertEqual(migrated.count('bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'), 2)
+            self.assertEqual(migrated.count('bind "Ctrl d"'), 2)
+            self.assertIn('bind "Ctrl d" { Write 41; }', migrated)
+            for key in ('i', 'v', 'x', 'r', 'q', 'Shift q', 'j', 'k', 'left',
+                        'right', 'PageUp', 'PageDown', 'h'):
+                self.assertEqual(
+                    migrated.count(f'bind "Ctrl {key}"'), 2,
+                    f'expected Ctrl+{key} in locked and normal modes',
+                )
+            for key in ('m', 't', 's', 'b', 'n'):
+                self.assertEqual(migrated.count(f'bind "Ctrl {key}"'), 1, key)
+                expected_shifted = 2 if key == 'n' else 1
+                self.assertEqual(migrated.count(f'bind "Ctrl Shift {key}"'), expected_shifted, key)
+            self.assertEqual(migrated.count('bind "Ctrl Shift d"'), 1)
+            self.assertEqual(migrated.count('bind "Ctrl Shift n"'), 2)
+            for key in map(str, range(1, 10)):
+                self.assertEqual(migrated.count(f'bind "Ctrl {key}"'), 2)
             self.assertTrue((Path(directory) / ".local/bin/lince-voice").is_file())
             self.assertIn('bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }', migrated)
             self.assertIn('bind "Alt i" { Write 42; }', migrated)

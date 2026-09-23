@@ -47,6 +47,7 @@ layout {
                 pane size="70%" focus=true name="lince-controller" {
                     plugin location="file:~/.config/zellij/plugins/lince-dashboard.wasm" {
                         config_path "~/.config/lince-dashboard/config.toml"
+                        keybinding_style "alt"
                     }
                 }
                 // C — Shell viewport (30% of left column)

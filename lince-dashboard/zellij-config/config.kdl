@@ -26,6 +26,37 @@ keybinds clear-defaults=true {
         bind "Alt Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }
         bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
         bind "Alt Shift q" { MessagePlugin { name "lince-quit"; }; }
+        // Control aliases keep LINCE shortcuts usable when macOS Option emits
+        // Unicode characters instead of an Alt modifier.
+        bind "Ctrl j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Ctrl k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Ctrl left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Ctrl right" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Ctrl PageUp" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Ctrl PageDown" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Ctrl 1" { MessagePlugin { name "focus-agent"; payload "1"; }; }
+        bind "Ctrl 2" { MessagePlugin { name "focus-agent"; payload "2"; }; }
+        bind "Ctrl 3" { MessagePlugin { name "focus-agent"; payload "3"; }; }
+        bind "Ctrl 4" { MessagePlugin { name "focus-agent"; payload "4"; }; }
+        bind "Ctrl 5" { MessagePlugin { name "focus-agent"; payload "5"; }; }
+        bind "Ctrl 6" { MessagePlugin { name "focus-agent"; payload "6"; }; }
+        bind "Ctrl 7" { MessagePlugin { name "focus-agent"; payload "7"; }; }
+        bind "Ctrl 8" { MessagePlugin { name "focus-agent"; payload "8"; }; }
+        bind "Ctrl 9" { MessagePlugin { name "focus-agent"; payload "9"; }; }
+        bind "Ctrl d" { MessagePlugin { name "lince-ui-open"; }; }
+        bind "Ctrl i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
+        bind "Ctrl v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
+        bind "Ctrl m" { MessagePlugin { name "lince-voice-mute"; }; }
+        bind "Ctrl t" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Ctrl x" { MessagePlugin { name "kill-focused-agent"; }; }
+        bind "Ctrl r" { MessagePlugin { name "rename-focused-agent"; }; }
+        bind "Ctrl h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Ctrl s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
+        bind "Ctrl b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
+        bind "Ctrl n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Ctrl Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }
+        bind "Ctrl q" { MessagePlugin { name "lince-save-quit"; }; }
+        bind "Ctrl Shift q" { MessagePlugin { name "lince-quit"; }; }
         bind "Ctrl l" { SwitchToMode "normal"; }
     }
     pane {
@@ -260,14 +291,43 @@ keybinds clear-defaults=true {
         bind "Alt Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }
         bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }
         bind "Alt Shift q" { MessagePlugin { name "lince-quit"; }; }
+        // Control aliases for macOS terminals where Option emits characters.
+        bind "Ctrl left" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Ctrl right" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Ctrl PageUp" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Ctrl PageDown" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Ctrl d" { MessagePlugin { name "lince-ui-open"; }; }
+        bind "Ctrl 1" { MessagePlugin { name "focus-agent"; payload "1"; }; }
+        bind "Ctrl 2" { MessagePlugin { name "focus-agent"; payload "2"; }; }
+        bind "Ctrl 3" { MessagePlugin { name "focus-agent"; payload "3"; }; }
+        bind "Ctrl 4" { MessagePlugin { name "focus-agent"; payload "4"; }; }
+        bind "Ctrl 5" { MessagePlugin { name "focus-agent"; payload "5"; }; }
+        bind "Ctrl 6" { MessagePlugin { name "focus-agent"; payload "6"; }; }
+        bind "Ctrl 7" { MessagePlugin { name "focus-agent"; payload "7"; }; }
+        bind "Ctrl 8" { MessagePlugin { name "focus-agent"; payload "8"; }; }
+        bind "Ctrl 9" { MessagePlugin { name "focus-agent"; payload "9"; }; }
+        bind "Ctrl v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }
+        bind "Ctrl Shift m" { MessagePlugin { name "lince-voice-mute"; }; }
+        bind "Ctrl Shift t" { MessagePlugin { name "lince-voice-ptt"; }; }
+        bind "Ctrl x" { MessagePlugin { name "kill-focused-agent"; }; }
+        bind "Ctrl r" { MessagePlugin { name "rename-focused-agent"; }; }
+        bind "Ctrl h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }
+        bind "Ctrl i" { MessagePlugin { name "lince-ui-open"; payload "info"; }; }
+        bind "Ctrl j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }
+        bind "Ctrl k" { MessagePlugin { name "cycle-agent"; payload "prev"; }; }
+        bind "Ctrl Shift s" { MessagePlugin { name "lince-sidebar-toggle"; }; }
+        bind "Ctrl Shift b" { MessagePlugin { name "lince-statusbar-toggle"; }; }
+        bind "Ctrl Shift n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }
+        bind "Ctrl Shift d" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }
+        bind "Ctrl q" { MessagePlugin { name "lince-save-quit"; }; }
+        bind "Ctrl Shift q" { MessagePlugin { name "lince-quit"; }; }
         bind "Alt o" { MoveTab "right"; }
         bind "Alt p" { TogglePaneInGroup; }
         bind "Alt Shift p" { ToggleGroupMarking; }
-        bind "Ctrl q" { Quit; }
         bind "Ctrl Shift c" { Copy; }
     }
     shared_except "locked" "move" {
-        bind "Ctrl h" { SwitchToMode "move"; }
+        bind "Ctrl Shift u" { SwitchToMode "move"; }
     }
     shared_except "locked" "session" {
         bind "Ctrl m" { SwitchToMode "session"; }
