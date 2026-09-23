@@ -27,6 +27,8 @@ pub struct Snapshot {
     pub mailbox: String,
     #[serde(default)]
     pub provenance: String,
+    #[serde(default)]
+    pub keybinding_modifier: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Entry {
@@ -49,6 +51,7 @@ impl Snapshot {
             voice: None,
             mailbox: "Chat off".into(),
             provenance: "—".into(),
+            keybinding_modifier: config.keybinding_style.modifier().into(),
             theme: config.theme.clone(), warning: warning.map(str::to_owned),
             agents: agents.iter().enumerate().map(|(i, a)| Entry {
                 slot: i + 1, label: dashboard::compact_name(a),
@@ -113,8 +116,9 @@ impl Snapshot {
         if center_width > 0 {
             let mut row = 0;
             let mut groups: Vec<_> = if self.summary_only { Vec::new() } else { self.groups(down).into_iter().skip(1).collect() };
-            groups.push(vec![("  Alt+d details".into(), theme::color("cyan"))]);
-            groups.push(vec![("  Alt+h help".into(), theme::color("cyan"))]);
+            let modifier = &self.keybinding_modifier;
+            groups.push(vec![(format!("  {modifier}+d details"), theme::color("cyan"))]);
+            groups.push(vec![(format!("  {modifier}+h help"), theme::color("cyan"))]);
             for group in &groups {
                 let cells = cell_width(group);
                 if cells > center_width.saturating_sub(used[row]) && used[row] > 0 && row + 1 < center.len() {
@@ -206,6 +210,18 @@ mod tests {
         assert!(!lines.join("").contains("Mail 2"));
         assert!(lines.join("").contains("←R"));
         assert!(!lines.join("").contains("!1 1"));
+    }
+
+    #[test]
+    fn control_style_uses_ctrl_in_attention_hints() {
+        let agents = vec![dashboard::preview_agent("reviewer", AgentStatus::Running)];
+        let mut config = DashboardConfig::default();
+        config.keybinding_style = crate::config::KeybindingStyle::Ctrl;
+        let snapshot = Snapshot::from_agents(&agents, Some("reviewer"), &config, None);
+        let lines: Vec<_> = snapshot.styled_lines(2, 120, false).iter().map(|s| plain(s)).collect();
+        assert!(lines[0].contains("Ctrl+d details"));
+        assert!(lines[0].contains("Ctrl+h help"));
+        assert!(!lines[0].contains("Alt+d details"));
     }
     #[test]
     fn unicode_and_controls_never_exceed_terminal_width() {

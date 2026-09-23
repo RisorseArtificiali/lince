@@ -283,6 +283,9 @@ impl ZellijPlugin for State {
         self.passive_bar = configuration.get("role").map(String::as_str) == Some("statusline");
         self.compact_default = configuration.get("compact").map(String::as_str) == Some("true");
         self.config.compact = self.compact_default;
+        if configuration.get("keybinding_style").map(String::as_str) == Some("ctrl") {
+            self.config.keybinding_style = config::KeybindingStyle::Ctrl;
+        }
         self.layout_override = match configuration.get("agent_layout").map(String::as_str) {
             Some("tiled") => Some(config::AgentLayout::Tiled),
             Some("floating") => Some(config::AgentLayout::Floating),
@@ -2765,7 +2768,7 @@ impl State {
         if self.messages_browser.open { self.messages_browser.render(self.messages.as_ref(), rows, cols); return; }
         // If help overlay is active, render it and return
         if self.show_help {
-            dashboard::render_help_overlay(rows, cols);
+            dashboard::render_help_overlay(rows, cols, self.config.keybinding_style.modifier());
             return;
         }
 

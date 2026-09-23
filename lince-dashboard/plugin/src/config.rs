@@ -259,6 +259,10 @@ pub struct ProviderDetails {
 /// Main dashboard configuration, deserialized from the `[dashboard]` TOML table.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DashboardConfig {
+    /// Modifier shown in the dashboard's shortcut hints. The installer sets
+    /// this to `ctrl` on macOS and `alt` elsewhere; users may override it.
+    #[serde(default)]
+    pub keybinding_style: KeybindingStyle,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
@@ -361,6 +365,26 @@ pub struct DashboardConfig {
     pub discovered_sandbox_levels: HashMap<String, Vec<String>>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum KeybindingStyle {
+    Alt,
+    Ctrl,
+}
+
+impl Default for KeybindingStyle {
+    fn default() -> Self { Self::Alt }
+}
+
+impl KeybindingStyle {
+    pub fn modifier(&self) -> &'static str {
+        match self {
+            Self::Alt => "Alt",
+            Self::Ctrl => "Ctrl",
+        }
+    }
+}
+
 fn default_voxcode_enabled() -> bool { true }
 
 fn default_theme() -> String { "default".into() }
@@ -368,6 +392,7 @@ fn default_theme() -> String { "default".into() }
 impl Default for DashboardConfig {
     fn default() -> Self {
         DashboardConfig {
+            keybinding_style: KeybindingStyle::default(),
             theme: default_theme(),
             compact: false,
             attention_blink: false,

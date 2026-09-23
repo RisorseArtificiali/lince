@@ -1213,21 +1213,42 @@ pub fn render_wizard(
 
 // ── Overlay: Help (keybinding reference) ────────────────────────────
 
-pub fn render_help_overlay(rows: usize, cols: usize) {
+pub fn render_help_overlay(rows: usize, cols: usize, modifier: &str) {
     if rows == 0 || cols == 0 { return; }
-    let hints = ["LINCE — Keybindings", "Alt+d        Detailed agent list",
-        "Alt+v        VoxCode settings / start / mute / stop", "Alt+m          Mute/unmute VoxCode",
-        "Alt+t / Ctrl+Space  PTT: insert / insert + Enter", "Alt+i/h/?    Info / help", "Alt+s        Toggle sidebar",
-        "Alt+b        Bar: hidden / left / full / right", "Alt+n / n    New agent wizard",
-        "Alt+N / N    New agent with defaults",
-        "j/k, arrows  Select agent", "1-9, Enter/f Focus agent", "Alt+1-9      Switch from any pane",
-        "Alt+k/j or Alt+PgUp/Dn  Cycle agents", "Alt+r        Rename focused agent", "Alt+x        Kill focused agent", "i            Info (PgUp/Dn scroll)",
-        "r            Rename selected",
-        "K/J          Move selected up/down", "a            Reset directory/name order",
-        "x            Kill selected", "s            Relay last message", "S            Relay N messages",
-        "Alt+q        Save and quit", "Alt+Q        Quit without saving", "Esc / ?      Close help"];
+    let hints = vec![
+        "LINCE — Keybindings".to_string(),
+        format!("{modifier}+d        Detailed agent list"),
+        format!("{modifier} shortcuts shown"),
+        format!("{modifier}+v        VoxCode settings / start / mute / stop"),
+        format!("{modifier}+m          Mute/unmute VoxCode"),
+        format!("{modifier}+t / Ctrl+Space  PTT: insert / insert + Enter"),
+        format!("{modifier}+i/h/?    Info / help"),
+        format!("{modifier}+s        Toggle sidebar"),
+        format!("{modifier}+b        Bar: hidden / left / full / right"),
+        format!("{modifier}+n / n    New agent wizard"),
+        format!("{modifier}+N / N    New agent with defaults"),
+        "j/k, arrows  Select agent".into(),
+        "1-9, Enter/f Focus agent".into(),
+        format!("{modifier}+1-9      Switch from any pane"),
+        format!("{modifier}+k/j or {modifier}+PgUp/Dn  Cycle agents"),
+        format!("{modifier}+r        Rename focused agent"),
+        format!("{modifier}+x        Kill focused agent"),
+        "i            Info (PgUp/Dn scroll)".into(),
+        "r            Rename selected".into(),
+        "K/J          Move selected up/down".into(),
+        "a            Reset directory/name order".into(),
+        "x            Kill selected".into(),
+        "s            Relay last message".into(),
+        "S            Relay N messages".into(),
+        format!("{modifier}+q        Save and quit"),
+        format!("{modifier}+Q        Quit without saving"),
+        "Esc / ?      Close help".into(),
+    ];
     for row in 0..rows {
-        println!("{}", clip_cells(hints.get(row).copied().unwrap_or(""), cols));
+        println!(
+            "{}",
+            clip_cells(hints.get(row).map(String::as_str).unwrap_or(""), cols)
+        );
     }
 }
 
@@ -1237,7 +1258,7 @@ mod tests {
 
     #[test]
     fn help_uses_current_global_shortcuts_and_detailed_list_name() {
-        let frame = crate::render_output::capture(|| render_help_overlay(30, 80));
+        let frame = crate::render_output::capture(|| render_help_overlay(30, 80, "Alt"));
         assert!(frame.contains("Detailed agent list"));
         assert!(frame.contains("Alt+k/j"));
         assert!(frame.contains("Alt+m"));

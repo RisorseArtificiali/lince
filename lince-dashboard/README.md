@@ -105,6 +105,11 @@ Press `n` for the full wizard (type, directory, name, sandbox and provider), or 
 | `Alt+Q` | Quit without saving from any pane |
 | `?` | Help overlay |
 
+On macOS, where Option may produce characters instead of an Alt modifier, use
+the equivalent `Ctrl` shortcuts shown in the help overlay (for example,
+`Ctrl+d` for the detailed list and `Ctrl+Shift+s` for the sidebar while
+Zellij is unlocked).
+
 ## Documentation
 
 | Document | Description |
