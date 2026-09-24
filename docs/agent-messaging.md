@@ -21,6 +21,13 @@ personal skill directory. It permits opted-in agents in this LINCE session to
 send text to each other. Start fresh agent panes after changing choices.
 The host wrapper provisions credentials only for opted-in agent types.
 
+Every `install.sh` / `update.sh` run — including a bare opt-in change — stops
+the running messaging services first. Registrations live only in service
+memory, so agent panes opened before the run keep failing with
+`access_denied: Communication disabled or instance has closed` until each pane
+is closed and launched again. Opt-ins and installed skills are unchanged; only
+a relaunch re-provisions the per-pane credential.
+
 | Agent | Default personal skill directory | Automatic reception in LINCE |
 | --- | --- | --- |
 | Claude | `~/.claude/skills` | Existing dashboard hooks |
@@ -131,6 +138,12 @@ Old mailbox data is left untouched but is no longer loaded. Existing instances
 must be restarted. Updating the communication runtime stops its services and
 discards pending deliveries and the in-memory log; inspect pending/uncertain
 messages before updating and resend intentionally after restarting panes.
+Afterwards, panes opened before the update report
+`access_denied — Communication disabled or instance has closed` on any
+`lince-msg` command until they are closed and launched again: credentials are
+provisioned per pane process at launch, and the restarted service knows no old
+registrations. Relaunching the pane is enough — no reinstall or opt-in change
+is needed.
 Uninstall removes only unmodified LINCE-owned skills; locally
 edited or unrelated files are preserved.
 
