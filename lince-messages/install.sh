@@ -46,4 +46,7 @@ elif [[ $# == 0 && -t 0 ]]; then
         if [[ "$answer" =~ ^[Yy]$ ]]; then python3 "$DEST/skill_config.py" --enable "$agent"; fi
     done
 fi
-echo "Communication runtime installed. Start fresh agent panes after changing opt-ins."
+echo "Communication runtime installed. Its per-session services were stopped and restart on demand:"
+echo "close and relaunch every agent pane that should use lince-msg. Panes started before this"
+echo "run keep failing with access_denied ('Communication disabled or instance has closed') until"
+echo "relaunched, even with unchanged opt-ins. Start fresh agent panes after changing opt-ins."

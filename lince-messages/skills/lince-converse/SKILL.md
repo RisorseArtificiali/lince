@@ -7,6 +7,11 @@ Use `lince-msg peers` to discover enabled live agents and your own identity.
 If communication is unavailable, report it; do not provision credentials or
 change installation settings. Target an exact ID or an unambiguous peer name.
 
+`access_denied — Communication disabled or instance has closed` means this pane
+was started before a runtime install/update and its registration is gone: ask
+the user to close and relaunch this pane, then retry. Do not suggest enabling
+communication or changing settings — the opt-in is not the problem.
+
 Send a new message:
 
 ```sh
