@@ -131,7 +131,7 @@ lince
 
 ## Optional: Voice Input
 
-For voice-controlled coding, install [VoxCode](https://github.com/RisorseArtificiali/voxcode) separately. Once installed, the dashboard can use it automatically (re-run `lince-dashboard/install.sh` to enable the VoxCode layout).
+For voice-controlled coding, install [VoxCode](https://github.com/RisorseArtificiali/voxcode) separately. Once installed, re-run `lince-dashboard/install.sh` (or set `LINCE_VOXCODE_ENABLED=true`) to enable the integration: `Alt+v` opens the voice settings, no dedicated pane is added. See [Voice input](docs/documentation/dashboard/voice-input.md); on macOS install VoxCode with `uv tool install` as described there.
 
 ---
 

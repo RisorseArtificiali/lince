@@ -72,6 +72,41 @@ voice commands such as `comando: invia` and `comando: cancella` still send or cl
 it. VAD and manual buffer insertion do not add an Enter keystroke. Clipboard PTT is not part of this
 integration.
 
+## macOS
+
+Verified on Apple Silicon with Zellij 0.45.1 and Whisper on CPU; see the
+[macOS verification report](https://github.com/RisorseArtificiali/lince/blob/main/docs/design/dashboard-318-macos-verification.md)
+for the environment, the exact steps and what is still unverified.
+
+- **Install VoxCode with uv.** Its `install.sh` currently stops at a Linux-only
+  PortAudio check on macOS. No Homebrew library is needed, because the
+  `sounddevice` wheel bundles PortAudio:
+
+  ```bash
+  git clone https://github.com/RisorseArtificiali/voxcode.git
+  uv tool install --from ./voxcode voxcode
+  mkdir -p ~/.config/voxcode && cp voxcode/config.example.toml ~/.config/voxcode/config.toml
+  voxcode --list-devices
+  ```
+
+  Keep `~/.local/bin` on `PATH`, then run `lince-dashboard/install.sh` (or
+  re-run it with `LINCE_VOXCODE_ENABLED=true`). `quickstart.sh` reports
+  "VoxCode installation failed" on macOS for the same reason and continues
+  without voice.
+- **Microphone permission** belongs to the terminal application: System
+  Settings → Privacy & Security → Microphone. If the level indicator never
+  moves while you speak, check this permission first.
+- **Alt shortcuts need Option as Meta.** Terminal.app: *Use Option as Meta key*;
+  iTerm2: *Left Option key: Esc+*; Ghostty: `macos-option-as-alt = true`.
+  Otherwise Option plus a letter types a special character instead.
+- **Ctrl+Space** is also the macOS *Select the previous input source* shortcut
+  when enabled (System Settings → Keyboard → Keyboard Shortcuts → Input
+  Sources). Disable it or use `Alt+t`.
+- **CPU only.** Select CPU in `Alt+v`; the CUDA choice does nothing on macOS and
+  the ctranslate2 backend used by VoxCode has no Metal/MPS support.
+- The worker socket lives in `/tmp/lince-voice-<uid>/` because
+  `XDG_RUNTIME_DIR` is unset on macOS.
+
 ## Destination and indicator
 
 PTT fixes the destination to the active terminal when recording stops. Switching
