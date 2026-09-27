@@ -127,6 +127,29 @@ class VoiceTests(unittest.TestCase):
         finally:
             request("shutdown")
 
+    def test_socket_worker_falls_back_when_runtime_dir_is_too_long(self):
+        # macOS caps AF_UNIX paths at 104 bytes and its per-user temp dir is already ~60.
+        long_dir = Path(self.temp.name) / ("x" * 90)
+        long_dir.mkdir()
+        env = {**os.environ, "HOME": self.temp.name, "XDG_RUNTIME_DIR": str(long_dir)}
+
+        def request(action):
+            payload = json.dumps({"action": action})
+            return subprocess.run(
+                [str(ROOT / "lince-voice"), "--controller", "long", "--request", payload],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=True,
+            )
+
+        try:
+            self.assertEqual(json.loads(request("status").stdout)["status"], "stopped")
+            self.assertEqual(list(long_dir.iterdir()), [])
+        finally:
+            request("shutdown")
+
     def test_audio_ptt_mute_resume_and_late_result(self):
         self._audio_ptt(cancel=True)
 

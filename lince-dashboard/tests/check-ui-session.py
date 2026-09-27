@@ -32,7 +32,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
     match = re.fullmatch(r'zellij (\d+)\.(\d+)\.(\d+)', version)
     if not match or tuple(map(int, match.groups())) < (0, 45, 1):
         raise SystemExit(f'Zellij >= 0.45.1 required; found {version} at {zellij}')
-    with tempfile.TemporaryDirectory(prefix="lince-ui-test-") as directory:
+    with tempfile.TemporaryDirectory(prefix="lince-ui-test-", ignore_cleanup_errors=True) as directory:
         work = Path(directory)
         layout_name = "dashboard-statusline" if preset == "minimal" else "dashboard-tiled"
         text = LAUNCHER["presentation_layout"](
@@ -55,6 +55,14 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
         (work / "lince-config").chmod(0o755)
         shutil.copyfile(ROOT / "tests/voice-fixture.py", work / "lince-voice")
         (work / "lince-voice").chmod(0o755)
+        if not messaging:
+            # Agent panes are wrapped by lince-msg-host (#343); ordinary smoke runs only
+            # need a pass-through so the fixture command still runs in the pane.
+            (work / "lince-msg-host").write_text(
+                '#!/bin/sh\nwhile [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done\n'
+                '[ "$#" -gt 0 ] || { echo "lince-msg-host stub: missing -- separator" >&2; exit 1; }\n'
+                'shift\nexec "$@"\n')
+            (work / "lince-msg-host").chmod(0o755)
         (work / ".lince-dashboard").write_text(json.dumps({"version": 3, "next_agent_id": 0,
             "agents": [{"name": f"fixture{i}",
                         "agent_type": "fixture",
@@ -62,7 +70,12 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                        for i in (1, 2, 3)]}))
         (work / "session.kdl").write_text((ROOT / "zellij-config/config.kdl").read_text()
             + f'\nenv {{ PATH "{work}:{Path(zellij).parent}:/usr/bin:/bin"; }}\n')
-        permissions = work / "cache/zellij/permissions.kdl"
+        # Zellij reads plugin permissions from the platform cache directory:
+        # $XDG_CACHE_HOME on Linux, ~/Library/Caches on macOS (HOME is redirected below).
+        if sys.platform == "darwin":
+            permissions = work / "Library/Caches/org.Zellij-Contributors.Zellij/permissions.kdl"
+        else:
+            permissions = work / "cache/zellij/permissions.kdl"
         permissions.parent.mkdir(parents=True)
         permissions.write_text(f'"{wasm}" {{\n RunCommands\n ReadApplicationState\n ReadCliPipes\n'
                                ' WriteToStdin\n ChangeApplicationState\n OpenTerminalsOrPlugins\n'
@@ -82,7 +95,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
             terminal = ObservationScreen(100, 32)
             terminal_stream = pyte.ByteStream(terminal)
         env = {key: value for key, value in os.environ.items() if not key.startswith("ZELLIJ")}
-        env.update(TERM="xterm-256color", XDG_CACHE_HOME=str(work / "cache"),
+        env.update(TERM="xterm-256color", XDG_CACHE_HOME=str(work / "cache"), HOME=str(work),
                    PATH=f"{Path(zellij).parent}:{work}:{os.environ['PATH']}")
         if messaging:
             env.update(HOME=str(work), LINCE_MESSAGES_BIN_DIR=str(work),
@@ -310,7 +323,13 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                     return False
                 # Unsuppressed floating panes can still be hidden as a layer.
                 status, stdout, _ = cli(["-s", session, "action", "list-tabs", "--json", "--state"])
-                return status == 0 and any(tab["are_floating_panes_visible"] for tab in json.loads(stdout))
+                # Like list-panes, list-tabs can be acknowledged before a manifest exists.
+                if status != 0 or not stdout.strip():
+                    return False
+                try:
+                    return any(tab["are_floating_panes_visible"] for tab in json.loads(stdout))
+                except json.JSONDecodeError:
+                    return False
 
             key(b"\x1b1")
             agent_panes = wait_for(agent_fills_viewport)
@@ -338,7 +357,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                     and "lince-viewport" in ps and (ps["lince-viewport"]["pane_columns"] < 100) == expected
                     and (not expected or (ps["lince-controller"]["pane_y"] == 0
                         and ps["lince-viewport"]["pane_columns"] == 85)))
-                assert {(p["id"], p["is_plugin"]) for p in panes()} == identities
+                wait_for(lambda ps: {(p["id"], p["is_plugin"]) for p in ps.values()} == identities)
                 assert "lince-sidebar-aux" not in changed
                 if expected:
                     assert changed["lince-controller"]["pane_x"] == 0, changed
@@ -375,7 +394,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                     active_fixture = f"fixture{number}"
                     key(b"\x1b" + str(number).encode())
                     wait_for(agent_fills_viewport)
-                assert {(p["id"], p["is_plugin"]) for p in panes()} == identities
+                wait_for(lambda ps: {(p["id"], p["is_plugin"]) for p in ps.values()} == identities)
             # Status bar shortcut also works while Zellij is locked.
             key(b"\x0c")
             for shown in (True, False, True, True):
@@ -426,11 +445,15 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                          "options", "--session-name", session], cwd=work, env=env,
                         stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
                     os.close(slave)
+                    # Same attach grace as the first start; a restart on a busy host is slower.
+                    attach_deadline = time.monotonic() + 0.5
+                    while time.monotonic() < attach_deadline and process.poll() is None:
+                        pump()
                     wait_for(lambda ps: visible("lince-controller", expected_sidebar)(ps)
                         and visible("lince-attention", expected_mode != "hidden")(ps)
                         and sum("fixture" in name for name in ps) == 3
                         and ps.get("lince-viewport", {}).get("pane_columns") == (85 if expected_sidebar else 100)
-                        and ps.get("lince-viewport", {}).get("pane_rows") == (32 if expected_mode == "hidden" else 30))
+                        and ps.get("lince-viewport", {}).get("pane_rows") == (32 if expected_mode == "hidden" else 30), timeout=30)
                     active_fixture = "fixture2"
                     key(b"\x1b2")
                     wait_for(agent_fills_viewport)
@@ -468,6 +491,13 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
+                # A fixture request spawned by the plugin can outlive the session for a
+                # moment and recreate lince-voice.json while the directory is removed.
+                if shutil.which("pgrep"):
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline and subprocess.run(
+                            ["pgrep", "-f", str(work / "lince-voice")], capture_output=True).returncode == 0:
+                        time.sleep(0.1)
                 if messaging:
                     subprocess.run(["python3", str(work / "messages/maintenance.py")],
                                    env=env, check=True, timeout=15)
