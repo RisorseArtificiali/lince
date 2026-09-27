@@ -32,7 +32,7 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
     match = re.fullmatch(r'zellij (\d+)\.(\d+)\.(\d+)', version)
     if not match or tuple(map(int, match.groups())) < (0, 45, 1):
         raise SystemExit(f'Zellij >= 0.45.1 required; found {version} at {zellij}')
-    with tempfile.TemporaryDirectory(prefix="lince-ui-test-") as directory:
+    with tempfile.TemporaryDirectory(prefix="lince-ui-test-", ignore_cleanup_errors=True) as directory:
         work = Path(directory)
         layout_name = "dashboard-statusline" if preset == "statusline" else "dashboard-tiled"
         text = LAUNCHER["presentation_layout"](
@@ -58,7 +58,10 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
         if not messaging:
             # Agent panes are wrapped by lince-msg-host (#343); ordinary smoke runs only
             # need a pass-through so the fixture command still runs in the pane.
-            (work / "lince-msg-host").write_text('#!/bin/sh\nwhile [ "$1" != "--" ]; do shift; done\nshift\nexec "$@"\n')
+            (work / "lince-msg-host").write_text(
+                '#!/bin/sh\nwhile [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done\n'
+                '[ "$#" -gt 0 ] || { echo "lince-msg-host stub: missing -- separator" >&2; exit 1; }\n'
+                'shift\nexec "$@"\n')
             (work / "lince-msg-host").chmod(0o755)
         (work / ".lince-dashboard").write_text(json.dumps({"version": 3, "next_agent_id": 0,
             "agents": [{"name": f"fixture{i}",
@@ -488,6 +491,13 @@ def check(zellij, wasm, preset, messaging=False, conversations_only=False):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
+                # A fixture request spawned by the plugin can outlive the session for a
+                # moment and recreate lince-voice.json while the directory is removed.
+                if shutil.which("pgrep"):
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline and subprocess.run(
+                            ["pgrep", "-f", str(work / "lince-voice")], capture_output=True).returncode == 0:
+                        time.sleep(0.1)
                 if messaging:
                     subprocess.run(["python3", str(work / "messages/maintenance.py")],
                                    env=env, check=True, timeout=15)
