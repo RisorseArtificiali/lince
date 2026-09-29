@@ -1892,7 +1892,11 @@ def _discover_levels(base: str, allowed_levels: list) -> dict:
     discovery (shells, gh#91).
     """
     if allowed_levels:
-        return {"agent-sandbox": list(allowed_levels), "nono": list(allowed_levels)}
+        return {
+            "agent-sandbox": list(allowed_levels),
+            "seatbelt": list(allowed_levels),
+            "nono": list(allowed_levels),
+        }
     by_backend: dict = {}
     for backend in ("agent-sandbox", "nono"):
         levels = list(SHIPPED_LEVELS)
@@ -1914,6 +1918,9 @@ def _discover_levels(base: str, allowed_levels: list) -> dict:
             if level not in levels:
                 levels.append(level)
         by_backend[backend] = levels
+    # Seatbelt is an agent-sandbox backend: it merges the same level fragments
+    # from ~/.agent-sandbox/profiles/, so it offers the same levels.
+    by_backend["seatbelt"] = list(by_backend["agent-sandbox"])
     return by_backend
 
 

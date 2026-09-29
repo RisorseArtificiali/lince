@@ -237,6 +237,12 @@ class ResolveTestCase(unittest.TestCase):
             ["paranoid", "normal", "permissive", "relaxed", "strict"],
         )
         self.assertIn("nstrict", claude["levels_by_backend"]["nono"])
+        # seatbelt merges the same agent-sandbox fragments, so it offers the
+        # same custom levels (the macOS wizard used to show only the trio)
+        self.assertEqual(
+            claude["levels_by_backend"]["seatbelt"],
+            claude["levels_by_backend"]["agent-sandbox"],
+        )
         # codex-hard is codex's fragment, not an agnostic level for claude
         self.assertNotIn("codex-hard", claude["levels_by_backend"]["agent-sandbox"])
         self.assertIn("hard", view["agents"]["codex"]["levels_by_backend"]["agent-sandbox"])
