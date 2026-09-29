@@ -356,6 +356,10 @@ fn render_empty_state(table_rows: usize, cols: usize) {
     }
 }
 
+/// Width of the Sbox column: the longest backend label ("seatbelt") plus the
+/// "!" degraded marker, so the marker is never truncated away.
+const SANDBOX_COL_WIDTH: usize = 9;
+
 /// Render the agent table (#, Name, Status), grouped by project_dir swimlanes.
 fn render_agent_table(
     agents: &[AgentInfo],
@@ -368,7 +372,7 @@ fn render_agent_table(
 ) {
     let col_idx: usize = 3;
     let col_type: usize = 5;  // 3 chars label + "!" marker + space
-    let col_sandbox: usize = 6; // "bwrap" / "nono" / "NOSB" + padding
+    let col_sandbox: usize = SANDBOX_COL_WIDTH;
     let col_name: usize = 20;
     let col_provider: usize = 12;
     let col_status: usize = 12;
@@ -1393,6 +1397,22 @@ mod tests {
         let frame = crate::render_output::capture(|| render_rename_prompt(&prompt, 8, 40));
         assert!(frame.contains("\x1b[1mRename agent"));
         assert!(frame.contains("\x1b[2mprimo\x1b[0m"));
+    }
+
+    /// The degraded "!" marker must survive padding for every backend label,
+    /// including the longest one ("seatbelt!").
+    #[test]
+    fn sandbox_column_keeps_degraded_marker_for_every_backend() {
+        use crate::sandbox_backend::SandboxBackend;
+        for backend in [
+            SandboxBackend::AgentSandbox,
+            SandboxBackend::Seatbelt,
+            SandboxBackend::Nono,
+            SandboxBackend::None,
+        ] {
+            let label = format!("{}!", backend.display_name());
+            assert_eq!(pad_left(&label, SANDBOX_COL_WIDTH).trim_end(), label);
+        }
     }
 
     /// Plain text fits — return as-is.
