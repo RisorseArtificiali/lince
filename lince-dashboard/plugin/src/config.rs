@@ -1112,13 +1112,13 @@ impl DashboardConfig {
         ];
         if let Some(b) = backend {
             // Cache key MUST match the backend key that `apply_resolved_view`
-            // stores ("agent-sandbox:" / "nono:") — NOT `display_name()`, which
+            // stores ("agent-sandbox:" / "seatbelt:" / "nono:") — NOT `display_name()`, which
             // returns "bwrap" for AgentSandbox and would silently miss the cache.
             // `None` has no custom-profile concept (no fs lookup), so skip.
             use crate::sandbox_backend::SandboxBackend;
             let backend_key = match b {
                 SandboxBackend::AgentSandbox => "agent-sandbox",
-                SandboxBackend::Seatbelt => return levels,
+                SandboxBackend::Seatbelt => "seatbelt",
                 SandboxBackend::Nono => "nono",
                 SandboxBackend::None => return levels,
             };
@@ -1389,6 +1389,7 @@ mod tests {
                     "level": "paranoid",
                     "levels_by_backend": {
                         "agent-sandbox": ["paranoid", "normal", "permissive", "strict"],
+                        "seatbelt": ["paranoid", "normal", "permissive", "strict"],
                         "nono": ["paranoid", "normal", "permissive"]
                     },
                     "allowed_levels": [],
@@ -1451,6 +1452,9 @@ mod tests {
             &vec!["strict".to_string()],
         );
         assert!(cfg.discovered_sandbox_levels.get("nono:claude").is_none());
+        // the wizard offers seatbelt customs too, not just the shipped trio
+        let seatbelt = cfg.supported_sandbox_levels("claude", Some(&SandboxBackend::Seatbelt));
+        assert_eq!(seatbelt, vec!["paranoid", "normal", "permissive", "strict"]);
     }
 
     /// An empty / malformed resolve payload must fail loudly so the caller
