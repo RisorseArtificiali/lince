@@ -11,10 +11,13 @@ done
 # style to the host before the plugin's user config is loaded asynchronously.
 python3 - "$HOME/.config/zellij/layouts"/*.kdl <<'PY'
 from pathlib import Path
+import os
 import platform
 import sys
 
-style = "ctrl" if platform.system() == "Darwin" else "alt"
+# LINCE_HOST_OS lets tests exercise the macOS branch on any host.
+is_macos = os.environ.get("LINCE_HOST_OS", platform.system()) == "Darwin"
+style = "ctrl" if is_macos else "alt"
 for raw_path in sys.argv[1:]:
     path = Path(raw_path)
     text = path.read_text()
@@ -68,11 +71,14 @@ cp "$UI_SOURCE/zellij-config/config.kdl" "$HOME/.config/lince-dashboard/zellij.k
 # an explicit keybinding_style in the user's config is preserved.
 python3 - "$HOME/.config/lince-dashboard/config.toml" <<'PY'
 from pathlib import Path
+import os
 import platform
 import sys
 
 path = Path(sys.argv[1])
-style = "ctrl" if platform.system() == "Darwin" else "alt"
+# LINCE_HOST_OS lets tests exercise the macOS branch on any host.
+is_macos = os.environ.get("LINCE_HOST_OS", platform.system()) == "Darwin"
+style = "ctrl" if is_macos else "alt"
 if path.exists():
     text = path.read_text()
 else:
@@ -109,6 +115,8 @@ for filename in sys.argv[1:]:
 PY
 python3 - "$HOME/.config/lince-dashboard/zellij.kdl" <<'PY'
 from pathlib import Path
+import os
+import platform
 import sys
 import re
 path = Path(sys.argv[1])
@@ -205,20 +213,19 @@ def add_locked_shortcuts(match):
     return body
 updated = re.sub(r'(?m)^    locked \{\n(?:(?!^    \}).*\n)*', add_locked_shortcuts, updated)
 
-# macOS commonly maps Option to character input rather than an Alt modifier.
-# Add Control aliases in both global modes, but leave an existing custom
-# Control binding untouched.
-# Replace the shipped Zellij Ctrl+q quit binding with Lince's save-and-quit
-# action before adding aliases. A user-defined action with another command is
-# left untouched by the presence check below.
-updated = updated.replace(
-    'bind "Ctrl q" { Quit; }',
-    'bind "Ctrl q" { MessagePlugin { name "lince-save-quit"; }; }',
-)
-updated = updated.replace(
-    'bind "Ctrl h" { SwitchToMode "move"; }',
-    'bind "Ctrl Shift u" { SwitchToMode "move"; }',
-)
+# macOS commonly maps Option to character input rather than an Alt modifier, so
+# only there Lince adds Control aliases to its global shortcuts, leaving an
+# existing custom Control binding untouched. Elsewhere the Alt bindings pass
+# through unchanged and Control stays with the focused program (Ctrl+d EOF,
+# Ctrl+v verbatim, Ctrl+r search), so aliases installed by earlier releases are
+# removed again on update. LINCE_HOST_OS lets tests exercise the macOS branch
+# on any host.
+is_macos = os.environ.get("LINCE_HOST_OS", platform.system()) == "Darwin"
+
+ctrl_quit_shipped = 'bind "Ctrl q" { Quit; }'
+ctrl_quit_alias = 'bind "Ctrl q" { MessagePlugin { name "lince-save-quit"; }; }'
+ctrl_move_shipped = 'bind "Ctrl h" { SwitchToMode "move"; }'
+ctrl_move_alias = 'bind "Ctrl Shift u" { SwitchToMode "move"; }'
 
 control_bindings = [
     ('Ctrl j', 'bind "Ctrl j" { MessagePlugin { name "cycle-agent"; payload "next"; }; }'),
@@ -241,41 +248,71 @@ control_bindings = [
     ('Ctrl b', 'bind "Ctrl b" { MessagePlugin { name "lince-statusbar-toggle"; }; }'),
     ('Ctrl n', 'bind "Ctrl n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }'),
     ('Ctrl Shift n', 'bind "Ctrl Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }'),
-    ('Ctrl q', 'bind "Ctrl q" { MessagePlugin { name "lince-save-quit"; }; }'),
+    ('Ctrl q', ctrl_quit_alias),
     ('Ctrl Shift q', 'bind "Ctrl Shift q" { MessagePlugin { name "lince-quit"; }; }'),
 ]
 
-def add_control_aliases(match):
-    body = match.group(0)
-    for key, binding in control_bindings:
-        if key in ('Ctrl h', 'Ctrl m', 'Ctrl t', 'Ctrl s', 'Ctrl b', 'Ctrl n') \
-                and f'bind "Ctrl Shift {key[5:]}"' in body:
-            continue
-        if f'bind "{key}"' not in body:
-            body += f'        {binding}\n'
-    return body
+if is_macos:
+    # Replace the shipped Zellij Ctrl+q quit binding with Lince's save-and-quit
+    # action before adding aliases. A user-defined action with another command is
+    # left untouched by the presence check below.
+    updated = updated.replace(ctrl_quit_shipped, ctrl_quit_alias)
+    updated = updated.replace(ctrl_move_shipped, ctrl_move_alias)
 
-updated = re.sub(r'(?m)^    locked \{\n(?:(?!^    \}).*\n)*', add_control_aliases, updated)
-updated = re.sub(r'(?m)^    shared_except "locked" \{\n(?:(?!^    \}).*\n)*', add_control_aliases, updated)
+    def add_control_aliases(match):
+        body = match.group(0)
+        for key, binding in control_bindings:
+            if key in ('Ctrl h', 'Ctrl m', 'Ctrl t', 'Ctrl s', 'Ctrl b', 'Ctrl n') \
+                    and f'bind "Ctrl Shift {key[5:]}"' in body:
+                continue
+            if f'bind "{key}"' not in body:
+                body += f'        {binding}\n'
+        return body
 
-# Normal mode reserves Ctrl+h/m/t/s/b/n for Zellij's mode navigation. Keep
-# those aliases usable by adding Shift in normal mode; locked mode retains the
-# shorter Ctrl variants above.
-def shift_normal_conflicts(match):
-    body = match.group(0)
-    body = body.replace(
-        'bind "Ctrl Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }',
-        'bind "Ctrl Shift d" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }',
-    )
-    for key in ('m', 't', 's', 'b', 'n'):
+    updated = re.sub(r'(?m)^    locked \{\n(?:(?!^    \}).*\n)*', add_control_aliases, updated)
+    updated = re.sub(r'(?m)^    shared_except "locked" \{\n(?:(?!^    \}).*\n)*', add_control_aliases, updated)
+
+    # Normal mode reserves Ctrl+h/m/t/s/b/n for Zellij's mode navigation. Keep
+    # those aliases usable by adding Shift in normal mode; locked mode retains the
+    # shorter Ctrl variants above.
+    def shift_normal_conflicts(match):
+        body = match.group(0)
         body = body.replace(
-            f'bind "Ctrl {key}" {{ MessagePlugin',
-            f'bind "Ctrl Shift {key}" {{ MessagePlugin',
+            'bind "Ctrl Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }',
+            'bind "Ctrl Shift d" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }',
         )
-    return body
+        for key in ('m', 't', 's', 'b', 'n'):
+            body = body.replace(
+                f'bind "Ctrl {key}" {{ MessagePlugin',
+                f'bind "Ctrl Shift {key}" {{ MessagePlugin',
+            )
+        return body
 
-updated = re.sub(r'(?m)^    shared_except "locked" \{\n(?:(?!^    \}).*\n)*',
-                 shift_normal_conflicts, updated)
+    updated = re.sub(r'(?m)^    shared_except "locked" \{\n(?:(?!^    \}).*\n)*',
+                     shift_normal_conflicts, updated)
+else:
+    # Undo the aliases earlier releases installed on non-macOS hosts. Only exact
+    # generated bindings are removed, so custom Control bindings survive; the
+    # extra entries are the Shift variants the normal-mode pass could produce,
+    # and the comments those releases baked into the shipped config.
+    alias_binds = {binding for _, binding in control_bindings}
+    alias_binds.update([
+        'bind "Ctrl Shift d" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }',
+        'bind "Ctrl Shift m" { MessagePlugin { name "lince-voice-mute"; }; }',
+        'bind "Ctrl Shift t" { MessagePlugin { name "lince-voice-ptt"; }; }',
+        'bind "Ctrl Shift s" { MessagePlugin { name "lince-sidebar-toggle"; }; }',
+        'bind "Ctrl Shift b" { MessagePlugin { name "lince-statusbar-toggle"; }; }',
+        'bind "Ctrl Shift n" { MessagePlugin { name "lince-ui-open"; payload "wizard"; }; }',
+        '// Control aliases keep LINCE shortcuts usable when macOS Option emits',
+        '// Unicode characters instead of an Alt modifier.',
+        '// Control aliases for macOS terminals where Option emits characters.',
+    ])
+    updated = '\n'.join(line for line in updated.split('\n') if line.strip() not in alias_binds)
+    # Restore the shipped Zellij bindings those releases replaced. Ctrl+q stays
+    # unbound on purpose: unbound keys reach the pane (Ctrl+q is XON), which is
+    # safer than the old quit-without-saving.
+    updated = updated.replace(ctrl_quit_alias, ctrl_quit_shipped)
+    updated = updated.replace(ctrl_move_alias, ctrl_move_shipped)
 if updated != text:
     path.with_suffix('.kdl.bak-shortcuts').write_text(text)
     path.write_text(updated)

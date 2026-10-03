@@ -13,7 +13,9 @@ for example, use `Ctrl+d` for the detailed list, `Ctrl+Shift+s` for the sidebar
 while Zellij is unlocked, and `Ctrl+q` to save and quit. The original `Alt`
 bindings remain available. In locked mode, the conflicting shortcuts also
 work without Shift; Zellij reserves those plain Control combinations in its
-normal mode.
+normal mode. These Control aliases are installed on macOS only: elsewhere the
+`Alt` bindings work natively, and Control combinations keep reaching the
+program in the pane (`Ctrl+d`, `Ctrl+v`, `Ctrl+r`).
 Command/Super is intentionally not used: macOS and terminal emulators may
 reserve combinations such as Command-Q before Zellij can receive them.
 
