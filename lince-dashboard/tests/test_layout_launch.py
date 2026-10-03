@@ -11,11 +11,15 @@ launcher = runpy.run_path(str(ROOT / "lince-dashboard-launch"))
 
 
 class LayoutTests(unittest.TestCase):
-    def test_macos_control_help_is_not_shadowed_by_zellij_move_mode(self):
+    def test_shipped_config_keeps_control_keys_free_of_lince_aliases(self):
         config = (ROOT / "zellij-config/config.kdl").read_text()
-        self.assertIn('bind "Ctrl h" { MessagePlugin { name "lince-ui-open"; payload "help"; }; }', config)
-        self.assertNotIn('bind "Ctrl h" { SwitchToMode "move"; }', config)
-        self.assertIn('bind "Ctrl Shift u" { SwitchToMode "move"; }', config)
+        # Shipped defaults stay Alt-only: Control must keep reaching the pane's
+        # own program on Linux (Ctrl+d EOF, Ctrl+v verbatim, Ctrl+r search).
+        self.assertNotIn('bind "Ctrl d" { MessagePlugin', config)
+        self.assertNotIn('bind "Ctrl v" { MessagePlugin', config)
+        self.assertNotIn('bind "Ctrl h" { MessagePlugin', config)
+        self.assertIn('bind "Ctrl h" { SwitchToMode "move"; }', config)
+        self.assertIn('bind "Ctrl q" { Quit; }', config)
 
     def test_width_changes_only_root_columns(self):
         text = (ROOT / "layouts/dashboard-tiled.kdl").read_text()
@@ -106,7 +110,7 @@ class LayoutTests(unittest.TestCase):
                 self.assertNotEqual(invalid.returncode, 0)
                 self.assertIn('lince:', invalid.stderr)
 
-    def test_shortcut_migration_preserves_custom_bindings(self):
+    def test_macos_migration_adds_control_aliases(self):
         import os
         import subprocess
         import tempfile
@@ -122,7 +126,7 @@ class LayoutTests(unittest.TestCase):
                    '        bind "Alt l" { MessagePlugin { name "lince-sidebar-toggle"; }; }\n'
                    '        bind "Alt i" { Write 42; }\n    }\n}\n')
             active.write_text(old)
-            env = {**os.environ, "HOME": directory}
+            env = {**os.environ, "HOME": directory, "LINCE_HOST_OS": "Darwin"}
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
             migrated = active.read_text()
             self.assertIn('payload "wizard"', migrated)
@@ -158,6 +162,71 @@ class LayoutTests(unittest.TestCase):
             self.assertIn('bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }', migrated)
             self.assertIn('bind "Alt i" { Write 42; }', migrated)
             self.assertNotIn('bind "Alt n" { NewPane; }', migrated)
+            # The install also points the hint display and layouts at Ctrl.
+            self.assertIn('keybinding_style = "ctrl"',
+                          (Path(directory) / ".config/lince-dashboard/config.toml").read_text())
+            self.assertIn('keybinding_style "ctrl"',
+                          (Path(directory) / ".config/zellij/layouts/dashboard-tiled.kdl").read_text())
+            self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), old)
+            subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
+            self.assertEqual(active.read_text(), migrated)
+            self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), old)
+
+    def test_non_macos_migration_keeps_control_keys_free(self):
+        import os
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            active = Path(directory) / ".config/lince-dashboard/zellij.kdl"
+            active.parent.mkdir(parents=True)
+            # Stale lines in locked and shared blocks mimic an install made by a
+            # release that added Control aliases unconditionally.
+            old = ('keybinds {\n    locked {\n        bind "Ctrl l" { SwitchToMode "normal"; }\n'
+                   '        bind "Ctrl v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }\n'
+                   '        bind "Ctrl Shift s" { MessagePlugin { name "lince-sidebar-toggle"; }; }\n    }\n'
+                   '    shared_except "locked" {\n'
+                   '        // Control aliases keep LINCE shortcuts usable when macOS Option emits\n'
+                   '        // Unicode characters instead of an Alt modifier.\n'
+                   '        bind "Alt n" { NewPane; }\n'
+                   '        bind "Alt x" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
+                   '        bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; }; }\n'
+                   '        bind "Ctrl d" { Write 41; }\n'
+                   '        bind "Ctrl q" { MessagePlugin { name "lince-save-quit"; }; }\n'
+                   '        bind "Ctrl Shift u" { SwitchToMode "move"; }\n'
+                   '        bind "Alt l" { MessagePlugin { name "lince-sidebar-toggle"; }; }\n'
+                   '        bind "Alt i" { Write 42; }\n    }\n}\n')
+            active.write_text(old)
+            env = {**os.environ, "HOME": directory, "LINCE_HOST_OS": "Linux"}
+            subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
+            migrated = active.read_text()
+            # Custom and unrelated Control bindings survive untouched.
+            self.assertIn('bind "Ctrl d" { Write 41; }', migrated)
+            self.assertEqual(migrated.count('bind "Ctrl d"'), 1)
+            self.assertIn('bind "Ctrl l" { SwitchToMode "normal"; }', migrated)
+            # Aliases from earlier releases are removed again.
+            self.assertNotIn('bind "Ctrl v"', migrated)
+            self.assertNotIn('bind "Ctrl Shift s"', migrated)
+            self.assertNotIn('bind "Ctrl q"', migrated)
+            self.assertNotIn('macOS Option emits', migrated)
+            self.assertIn('bind "Ctrl h" { SwitchToMode "move"; }', migrated)
+            self.assertNotIn('bind "Ctrl Shift u"', migrated)
+            for key in ('i', 'x', 'r', 'h', 'j', 'k', 'left', 'right', 'PageUp',
+                        'PageDown', '1', '5', '9'):
+                self.assertNotIn(f'bind "Ctrl {key}" {{ MessagePlugin', migrated, key)
+                self.assertNotIn(f'bind "Ctrl Shift {key}" {{ MessagePlugin', migrated, key)
+            self.assertNotIn('name "focus-agent"', migrated)
+            # The Alt shortcuts and the Ctrl Space submit upgrade still apply.
+            # The stale aliases keep the locked block from matching the wholesale
+            # pre-migration rewrite, so assert presence here and leave the
+            # per-block duplication counts to the macOS test.
+            self.assertIn('payload "wizard"', migrated)
+            self.assertIn('bind "Alt Shift n" { MessagePlugin { name "lince-ui-open"; payload "defaults"; }; }', migrated)
+            self.assertIn('bind "Alt s" { MessagePlugin { name "lince-sidebar-toggle"; }; }', migrated)
+            self.assertIn('bind "Alt v" { MessagePlugin { name "lince-ui-open"; payload "voice"; }; }', migrated)
+            self.assertIn('bind "Alt q" { MessagePlugin { name "lince-save-quit"; }; }', migrated)
+            self.assertEqual(migrated.count('bind "Ctrl Space" { MessagePlugin { name "lince-voice-ptt"; payload "submit"; }; }'), 2)
+            self.assertIn('keybinding_style = "alt"',
+                          (Path(directory) / ".config/lince-dashboard/config.toml").read_text())
             self.assertEqual(active.with_suffix('.kdl.bak-shortcuts').read_text(), old)
             subprocess.run(["bash", str(ROOT / "install-ui.sh")], env=env, check=True)
             self.assertEqual(active.read_text(), migrated)
