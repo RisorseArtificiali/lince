@@ -25,6 +25,7 @@ Status legend: `generated` (produced by a tool, do not hand-edit) | `hand-curate
 | `docs/documentation/dashboard/agent-examples.md` | dashboard docs | stale (`:28-47` backend choices bwrap/nono only) | DEFERRED — updated under #199 work |
 | `docs/documentation/dashboard/sandbox-levels.md` | dashboard docs (canonical) | hand-curated | Keep |
 | `docs/documentation/dashboard/sandbox-levels-testing.md` | dashboard docs | stale (nono-era manual test matrix, cells 3.2-3.9) | Rewrite matrix for seatbelt or archive; follow-up under #212 (sidebar entry added in this PR so it is at least reachable) |
+| `docs/documentation/messaging/index.md` | messaging docs (canonical) | hand-curated (promoted from `docs/agent-messaging.md` into the docs site) | Keep — full operator guide: opt-in per agent, conversation commands, delivery states, limits and migration |
 | `sandbox/README.md` | sandbox | hand-curated (macOS/nono guidance fixed in this PR) | Keep |
 | `sandbox/CHEATSHEET.md` | sandbox | hand-curated | Keep |
 | `sandbox/config.toml.example` (shipped-file comments) | sandbox | stale (drifts from the embedded `_DEFAULT_CONFIG` in `agent-sandbox`; doc surface read by users at install time) | DEFERRED — alignment + legacy-key migration tracked in [#205](https://github.com/RisorseArtificiali/lince/issues/205) |

@@ -23,6 +23,9 @@
   - [Sandbox Levels](dashboard/sandbox-levels.md)
   - [Sandbox Levels Testing](dashboard/sandbox-levels-testing.md)
 
+- **Messaging (lince-messages)**
+  - [Overview](messaging/index.md)
+
 - **Configuration CLI (lince-config)**
   - [README & Commands](https://github.com/RisorseArtificiali/lince/blob/main/lince-config/README.md)
 

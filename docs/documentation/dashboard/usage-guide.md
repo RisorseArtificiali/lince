@@ -297,5 +297,5 @@ Option 2 — Via GUI: **Terminator → Preferences → Keybindings → copy_clip
 Enable the optional per-agent `lince-converse` skill to exchange questions and
 replies in the original TUIs. `Alt+d` → `m` opens the delivery log. The status
 bar shows the last sender/reference on its left second line; details/help hints
-follow the agent tabs. See the [operator guide](../../agent-messaging.md) for
+follow the agent tabs. See the [messaging guide](../messaging/index.md) for
 installation, supported integrations, migration and delivery limitations.

@@ -21,6 +21,12 @@ Multi-agent TUI dashboard for Zellij. Spawn, monitor, and switch between multipl
 - [Agent Examples](dashboard/agent-examples.md) -- defaults, custom agents, advanced setups
 - [Sandbox Levels](dashboard/sandbox-levels.md) -- paranoid / normal / permissive: what each level does and how to ship a custom one
 
+## Messaging (lince-messages)
+
+Optional conversations between agent panes. Opted-in agents exchange questions and replies in their own terminals through the `lince-converse` skill and `lince-msg`; the dashboard tracks delivery.
+
+- [Overview](messaging/index.md) -- enable/disable per agent, conversation commands, delivery states, limits and migration
+
 ## Configuration CLI (lince-config)
 
 Structured CLI for reading and editing LINCE TOML configuration files. Also powers the `/lince-configure` skill for natural-language configuration.

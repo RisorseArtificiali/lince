@@ -112,11 +112,11 @@ Documentation: [Usage Guide](https://lince.sh/documentation/#/dashboard/usage-gu
 
 ### [lince-messages/](lince-messages/)
 
-Optional skill-based conversations for Claude, Codex, Bob, Pi and OpenCode in their original
-terminal panes. Agents use `lince-msg peers` and `lince-msg send` for questions
-and replies, with a conversation reference and a lightweight delivery log in
-Alt+d. No groups or task lifecycle. Enable the skill separately for each agent;
-see the [operator guide](docs/agent-messaging.md) and
+Optional skill-based conversations for Claude, Codex, Bob, Pi, OpenCode, Gemini,
+Amp and Goose in their original terminal panes. Agents use `lince-msg peers` and
+`lince-msg send` for questions and replies, with a conversation reference and a
+lightweight delivery log in Alt+d. No groups or task lifecycle. Enable the skill
+separately for each agent; see the [operator guide](https://lince.sh/documentation/#/messaging/index.md) and
 [validation limits](docs/agent-messaging-validation.md).
 
 ### [lince-config/](lince-config/)
