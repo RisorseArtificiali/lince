@@ -147,4 +147,4 @@ is needed.
 Uninstall removes only unmodified LINCE-owned skills; locally
 edited or unrelated files are preserved.
 
-See [smoke instructions](../smoke.md) and [validation](agent-messaging-validation.md).
+See [smoke instructions](https://github.com/RisorseArtificiali/lince/blob/main/docs/smoke.md) and [validation](https://github.com/RisorseArtificiali/lince/blob/main/docs/agent-messaging-validation.md).

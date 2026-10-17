@@ -225,6 +225,18 @@
     </div>
   </section>
 
+  <!-- Messaging -->
+  <section id="messaging" class="border-t border-border">
+    <div class="max-w-5xl mx-auto px-6 py-20">
+      <h2 class="text-2xl font-bold mb-4">Agents that talk to each other</h2>
+      <p class="text-muted mb-8 max-w-2xl">Stop ferrying text between panes. The optional <span class="font-mono text-accent">lince-converse</span> skill lets opted-in agents ask each other questions and answer in their own terminals &mdash; each message lands as a normal prompt when the recipient is idle.</p>
+      <div class="rounded-lg border border-border bg-surface p-4 mb-8">
+        <p class="font-mono text-sm mb-3 overflow-x-auto"><span class="text-accent">$</span> lince-msg send reviewer --text 'Review the permission check in auth.py and reply to me.'</p>
+        <p class="text-sm text-muted">The recipient answers in its own TUI, and the reply arrives as a new prompt in the sender's pane. <span class="font-mono">Alt+d</span> &rarr; <span class="font-mono">m</span> shows every exchange with its delivery state &mdash; pending, submitted, failed or uncertain. Per-agent opt-in, no shared inbox, and each agent keeps its own permissions and human confirmation flow. <a href="documentation/#/messaging/index.md" class="text-accent hover:underline">Read the messaging guide &rarr;</a></p>
+      </div>
+    </div>
+  </section>
+
   <!-- Install -->
   <section id="install" class="border-t border-border">
     <div class="max-w-5xl mx-auto px-6 py-20">
