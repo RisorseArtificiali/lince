@@ -24,6 +24,10 @@ If a step does not produce its stated expected result — a test fails for a dif
 
 **Approved deviation (Task 1 intake tests, 2026-10-19):** The first GREEN run expected a passing newer-v2-version diagnostic test, but the new assertion looked for `version` while the existing `lince-config.check_version_contract` diagnostic says `newer lince` and `lince update`. The user approved changing that assertion to match the existing diagnostic and resuming focused tests, installed-copy verification, and implementation. No change to the version contract or masking guarantee.
 
+**Approved deviation (Task 3 regression harnesses, 2026-10-19):** The prescribed regression scripts were expected to load `sandbox/agent-sandbox` after the new sibling-module import. In fact their `SourceFileLoader`/`exec_module` harnesses do not add `sandbox/` to `sys.path`, so both stopped at `ModuleNotFoundError: mount_masking` before collecting tests. The user approved updating `scripts/tests/test_sandbox_broker_bind.py` and `scripts/tests/test_policy_record.py` to expose that script directory while importing, then finishing the focused and regression tests. This only adjusts the test harnesses; no weakening of the runtime policy.
+
+**Approved baseline exceptions (Task 3 supplemental checks, 2026-10-19):** After the import fix, `test_x11_clipboard.py` expected X11 bind after every `--tmpfs` but found a late messaging tmpfs; `test_default_config.py` expected identical embedded/example text but found a pre-existing `LINCE_STATUS_DIR` difference. Both exact failures were reproduced in a temporary detached worktree at Task 3's base `db4445a`, before the uncommitted Task 3 changes. The user approved continuing Task 3, treating X11 as outside this mount-masking task and restoring embedded/example parity in Task 5 as already planned. A headless SSH session was suggested as a possible X11 factor; the failing assertion is specifically about generated mount order, so no cause is presumed beyond the reproduced baseline.
+
 ---
 
 ## Verified baseline (worktree `feat/mount-masking`, clean at `d52f0d9`)

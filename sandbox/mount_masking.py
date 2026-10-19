@@ -149,3 +149,128 @@ def validate_mount_mask_points(paths: tuple[Path, ...]) -> tuple[Path, ...]:
             print(f"agent-sandbox: warning: {point}: path is not mounted at launch; "
                   "masking the path anyway", file=sys.stderr)
     return ordered
+
+
+def _within(path: Path, parent: Path) -> bool:
+    return path == parent or parent in path.parents
+
+
+def _dirs_between(parent: Path, child: Path) -> list[str]:
+    """Make each component traversable after a parent tmpfs hides the tree."""
+    result: list[str] = []
+    current = parent
+    for part in child.relative_to(parent).parts:
+        current = current / part
+        result += ["--dir", str(current)]
+    return result
+
+
+def mask_mount_args(paths: tuple[Path, ...], project_dir: Path) -> list[str]:
+    """Plan ordered overlays and a persistent project bind for an opt-in run."""
+    args: list[str] = []
+    project = project_dir.resolve()
+    for point in paths:
+        parents = [previous for previous in paths if previous != point and _within(point, previous)]
+        if parents:
+            args += _dirs_between(parents[-1], point)
+        args += ["--tmpfs", str(point)]
+
+    parents = [point for point in paths if _within(project, point)]
+    if parents:
+        args += _dirs_between(parents[-1], project)
+    args += ["--bind", str(project), str(project)]
+
+    # A project bind also overlays masks inside that project. Reapply those
+    # masks so the project remains writable without revealing those children.
+    reapplied: list[Path] = []
+    for point in paths:
+        if point != project and _within(point, project):
+            parents = [previous for previous in reapplied if _within(point, previous)]
+            if parents:
+                args += _dirs_between(parents[-1], point)
+            args += ["--tmpfs", str(point)]
+            reapplied.append(point)
+    return args
+
+
+_BIND_OPTIONS = frozenset(("--bind", "--ro-bind", "--dev-bind", "--bind-try",
+                           "--ro-bind-try", "--dev-bind-try"))
+_MOUNT_OPTIONS = frozenset(("--tmpfs", "--dev", "--proc", "--mqueue"))
+
+
+def _host_path(value: str) -> Path:
+    # bwrap binds use host sources, including paths reached through symlinks.
+    # Resolve destinations conservatively too: a host symlink alias could
+    # target a masked point, and refusing it is safer than overlooking it.
+    try:
+        return Path(value).resolve()
+    except (OSError, RuntimeError) as exc:
+        raise MountMaskError(f"{value}: cannot inspect automatic mount path: {exc}") from exc
+
+
+def check_mount_exposures(argv: list[str], paths: tuple[Path, ...], project_dir: Path) -> None:
+    """Fail closed if generated mounts reveal original content after masking.
+
+    Call with the *final* bwrap argv, excluding explicit experimental raw args.
+    Mount source paths refer to the host namespace, not the earlier overlays.
+    """
+    if not paths:
+        return
+    mounts: list[tuple[str, Path | None, Path]] = []
+    i = 1
+    while i < len(argv) and argv[i] != "--":
+        option = argv[i]
+        if option in _BIND_OPTIONS:
+            if i + 2 >= len(argv):
+                raise MountMaskError(f"incomplete bwrap mount option: {option}")
+            mounts.append((option, _host_path(argv[i + 1]), _host_path(argv[i + 2])))
+            i += 3
+        elif option in _MOUNT_OPTIONS:
+            if i + 1 >= len(argv):
+                raise MountMaskError(f"incomplete bwrap mount option: {option}")
+            mounts.append((option, None, _host_path(argv[i + 1])))
+            i += 2
+        elif option == "--setenv":
+            i += 3
+        elif option in ("--dir", "--unsetenv", "--chdir"):
+            i += 2
+        elif option in ("--symlink", "--file", "--bind-data"):
+            i += 3
+        else:
+            i += 1
+
+    project = project_dir.resolve()
+    for point in paths:
+        covering = [(option, src, dest) for option, src, dest in mounts if _within(point, dest)]
+        if not covering:
+            raise MountMaskError(f"{point}: missing mask mount in bwrap command")
+        option, src, dest = covering[-1]
+        if not (option == "--tmpfs" and dest == point or
+                option == "--bind" and dest == project and point == project and src == project):
+            raise MountMaskError(f"{point}: automatic mount at {dest} would re-expose a masked path; "
+                                 "remove the overlapping mount or change mask_mount_points")
+
+        for index, (option, src, dest) in enumerate(mounts):
+            if src is None or not _within(src, point):
+                continue
+            if option == "--bind" and src == dest == project:
+                continue
+            # A subsequent tmpfs at the destination (or its ancestor)
+            # completely obscures this exposure in the final namespace.
+            if any(later == "--tmpfs" and _within(dest, target)
+                   for later, _, target in mounts[index + 1:]):
+                continue
+            raise MountMaskError(f"{src}: automatic {option} to {dest} would expose content from masked "
+                                 f"{point}; remove the overlapping mount or change mask_mount_points")
+
+    # Hooks need this always-generated host status bind. An opt-in tmpfs may
+    # hide an earlier mount; a run with no reachable status directory is not
+    # equivalent to a safely masked run.
+    status = Path("/tmp/lince-dashboard")
+    if any(_within(status, point) for point in paths):
+        covering = [(option, src, dest) for option, src, dest in mounts if _within(status, dest)]
+        if not covering or not (covering[-1] == ("--bind", status, status) or
+                                covering[-1] == ("--bind", project, project)
+                                and _within(status, project)):
+            raise MountMaskError(f"{status}: mask_mount_points would hide the required status runtime bind; "
+                                 "choose a narrower mask mount point")

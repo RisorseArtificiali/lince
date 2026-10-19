@@ -14,10 +14,12 @@ Run with:
 import importlib.machinery
 import importlib.util
 import pathlib
+import sys
 import tempfile
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT / "sandbox"))
 
 
 def load_agent_sandbox():

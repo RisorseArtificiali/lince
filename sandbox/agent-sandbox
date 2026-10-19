@@ -29,10 +29,28 @@ from contextlib import contextmanager
 from datetime import datetime
 from difflib import unified_diff
 import http.client
+import importlib.util
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from socketserver import ThreadingTCPServer
 from urllib.parse import urlparse
+
+try:
+    from mount_masking import (MountMaskError, check_mount_exposures, load_mount_mask_points,
+                               mask_mount_args, validate_mount_mask_points)
+except ModuleNotFoundError as exc:
+    if exc.name != "mount_masking":
+        raise
+    # SourceFileLoader does not add this script's directory to sys.path.
+    # Load the shipped sibling by file path for direct-import integrations.
+    spec = importlib.util.spec_from_file_location("mount_masking", Path(__file__).with_name("mount_masking.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    MountMaskError = module.MountMaskError
+    check_mount_exposures = module.check_mount_exposures
+    load_mount_mask_points = module.load_mount_mask_points
+    mask_mount_args = module.mask_mount_args
+    validate_mount_mask_points = module.validate_mount_mask_points
 
 try:
     import tomllib
@@ -3120,7 +3138,8 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
                     proxy_env: dict[str, str] | None = None,
                     scratch_binds: list[tuple[str, str]] | None = None,
                     landlock: dict | None = None,
-                    raw_bwrap_args: list[str] | None = None) -> list[str]:
+                    raw_bwrap_args: list[str] | None = None,
+                    mask_mount_points: tuple[Path, ...] = ()) -> list[str]:
     home = str(Path.home())
     home_p = Path.home()
     sandbox = config.get("sandbox", {})
@@ -3226,7 +3245,8 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
 
     # --- 6. Project directory (read-write) — AFTER ro mounts so it wins ------
     project = str(project_dir.resolve())
-    cmd += ["--bind", project, project]
+    if not mask_mount_points:
+        cmd += ["--bind", project, project]
 
     # --- 7. Claude config (read-write) ----------------------------------------
     # If `.claude` or `.claude.json` are scratched (paranoid via
@@ -3352,6 +3372,9 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     lince_lab_sock = SANDBOX_DIR / "lince-lab.sock"
     if lince_lab_sock.exists():
         cmd += ["--bind", str(lince_lab_sock), str(lince_lab_sock)]
+
+    if mask_mount_points:
+        cmd += mask_mount_args(mask_mount_points, project_dir)
 
     # --- 11. Security options ------------------------------------------------
     if sec.get("unshare_pid", True):
@@ -3487,6 +3510,7 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     # --- [experimental].raw_bwrap_args (#210) ---------------------------------
     # Appended LAST (mxc profileOverride precedent): the expert's args win
     # over every generated option. Before the trailing `--` like all options.
+    raw_at = len(cmd) - 1
     if raw_bwrap_args:
         if cmd and cmd[-1] == "--":
             cmd[-1:-1] = list(raw_bwrap_args)
@@ -3555,6 +3579,13 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
                     + " 2>&1 | tee " + shlex.quote(str(log_file))]
     else:
         cmd += agent_cmd
+
+    if mask_mount_points:
+        # Expert raw options intentionally override generated policy. Inspect
+        # every generated option, including late messaging and Landlock mounts.
+        generated = (cmd[:raw_at] + cmd[raw_at + len(raw_bwrap_args):]
+                     if raw_bwrap_args else cmd)
+        check_mount_exposures(generated, mask_mount_points, project_dir)
 
     return cmd
 
@@ -4694,11 +4725,23 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     if getattr(args, "backend", None):
         config.setdefault("sandbox", {})["backend"] = args.backend
 
-    backend = resolve_backend(config)
-
     project_dir = Path(args.project).resolve()
     if not project_dir.is_dir():
         print(f"Error: not a directory: {project_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        mask_mount_points = validate_mount_mask_points(
+            load_mount_mask_points(Path.cwd(), project_dir))
+    except MountMaskError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    backend = resolve_backend(config)
+    if mask_mount_points and backend != "agent-sandbox":
+        print(f"Error: mask_mount_points requires the agent-sandbox (bwrap) backend; "
+              f"selected backend is '{backend}'. Choose --backend agent-sandbox or clear the list.",
+              file=sys.stderr)
         sys.exit(1)
 
     # Resolve agent configuration
@@ -5467,15 +5510,22 @@ def cmd_run(args, agent_extra: list[str]) -> None:
     experimental = load_experimental_overrides(agent_name)
 
     # Build command
-    cmd = build_bwrap_cmd(config, project_dir, agent_extra, log_file,
-                          profile=profile, safe_mode=args.safe,
-                          extra_rw_cli=args.rw, extra_ro_cli=args.ro,
-                          agent_config=agent_cfg, agent_id=args.id,
-                          agent_name=agent_name,
-                          proxy_env=proxy_env if proxy_env else None,
-                          scratch_binds=scratch_binds or None,
-                          landlock=landlock,
-                          raw_bwrap_args=experimental["raw_bwrap_args"] or None)
+    try:
+        cmd = build_bwrap_cmd(config, project_dir, agent_extra, log_file,
+                              profile=profile, safe_mode=args.safe,
+                              extra_rw_cli=args.rw, extra_ro_cli=args.ro,
+                              agent_config=agent_cfg, agent_id=args.id,
+                              agent_name=agent_name,
+                              proxy_env=proxy_env if proxy_env else None,
+                              scratch_binds=scratch_binds or None,
+                              landlock=landlock,
+                              raw_bwrap_args=experimental["raw_bwrap_args"] or None,
+                              mask_mount_points=mask_mount_points)
+    except MountMaskError as exc:
+        if proxy:
+            proxy.stop()
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     # Paranoid wrap: create a userns + fresh netns OUTSIDE bwrap so we can
     # bring up loopback (needs CAP_NET_ADMIN, which non-setuid bwrap drops

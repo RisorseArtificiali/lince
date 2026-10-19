@@ -1,12 +1,16 @@
 """Strict mount-mask policy intake, independent of the legacy config merge."""
 
 import io
+import importlib.machinery
+import importlib.util
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
+
+from scripts.tests.test_sandbox_broker_bind import MIN_CONFIG, MIN_AGENT_CONFIG
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sandbox"))
 
@@ -285,6 +289,162 @@ class TestMountMaskValidation(unittest.TestCase):
         with patch.object(mask.Path, "read_text", side_effect=OSError("permission denied")):
             with self.assertRaisesRegex(mask.MountMaskError, "mountinfo.*permission denied"):
                 mask.validate_mount_mask_points((self.point,))
+
+
+def load_sandbox():
+    path = Path(__file__).resolve().parents[2] / "sandbox/agent-sandbox"
+    loader = importlib.machinery.SourceFileLoader("sandbox_mask_test", str(path))
+    spec = importlib.util.spec_from_loader("sandbox_mask_test", loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+class TestMountMaskPlanning(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.point = self.root / "volume"
+        self.project = self.point / "parent/deep/project"
+        self.project.mkdir(parents=True)
+        self.sandbox = load_sandbox()
+        self.runtime = self.root / "runtime"
+        self.runtime.mkdir()
+        self.sandbox.SANDBOX_DIR = self.runtime
+
+    def build(self, **kwargs):
+        return self.sandbox.build_bwrap_cmd(MIN_CONFIG, self.project, [], agent_config=MIN_AGENT_CONFIG, **kwargs)
+
+    def test_ordered_mask_deep_project_and_writable_outside(self):
+        argv = self.build(mask_mount_points=(self.point,))
+        root = argv.index("--ro-bind")
+        mask_at = next(
+            i for i in range(root + 1, len(argv) - 1) if argv[i:i + 2] == ["--tmpfs", str(self.point)])
+        bind_at = next(i for i in range(mask_at + 1, len(argv) - 2)
+                       if argv[i:i + 3] == ["--bind", str(self.project), str(self.project)])
+        self.assertEqual(argv[root:root + 3], ["--ro-bind", "/", "/"])
+        self.assertLess(root, mask_at)
+        self.assertEqual(argv[mask_at:bind_at + 3], [
+            "--tmpfs", str(self.point),
+            "--dir", str(self.point / "parent"),
+            "--dir", str(self.point / "parent/deep"),
+            "--dir", str(self.project),
+            "--bind", str(self.project), str(self.project),
+        ])
+        outside = self.point / "other"
+        outside.mkdir()
+        # Earlier config/CLI writable binds are hidden by the later tmpfs.
+        self.build(mask_mount_points=(self.point,), extra_rw_cli=[str(outside)])
+
+    def test_nested_masks_and_project_wide_mask(self):
+        nested = self.point / "parent"
+        self.assertEqual(mask.mask_mount_args((self.point, nested), self.project), [
+            "--tmpfs", str(self.point), "--dir", str(nested), "--tmpfs", str(nested),
+            "--dir", str(nested / "deep"), "--dir", str(self.project),
+            "--bind", str(self.project), str(self.project),
+        ])
+        argv = self.build(mask_mount_points=(self.project,))
+        at = next(
+            i for i in range(len(argv) - 1) if argv[i:i + 2] == ["--tmpfs", str(self.project)])
+        self.assertEqual(argv[at:at + 5], ["--tmpfs", str(self.project),
+                                               "--bind", str(self.project), str(self.project)])
+
+    def test_project_child_mask_survives_project_bind(self):
+        child = self.project / "private"
+        child.mkdir()
+        argv = self.build(mask_mount_points=(child,))
+        project_at = next(i for i in range(len(argv) - 2)
+                          if argv[i:i + 3] == ["--bind", str(self.project), str(self.project)])
+        self.assertIn(["--tmpfs", str(child)], [argv[i:i + 2] for i in range(project_at + 1, len(argv) - 1)])
+
+    def test_nested_project_children_recreate_directory_after_parent_tmpfs(self):
+        child = self.project / "private"
+        nested = child / "deeper"
+        nested.mkdir(parents=True)
+        argv = self.build(mask_mount_points=(child, nested))
+        self.assertIn(["--tmpfs", str(child), "--dir", str(nested), "--tmpfs", str(nested)],
+                      [argv[i:i + 6] for i in range(len(argv) - 5)])
+
+    def test_experimental_raw_mount_is_an_explicit_override(self):
+        sibling = self.point / "hidden"
+        sibling.mkdir()
+        argv = self.build(mask_mount_points=(self.point,),
+                          raw_bwrap_args=["--bind", str(sibling), str(sibling)])
+        self.assertIn(["--bind", str(sibling), str(sibling)],
+                      [argv[i:i + 3] for i in range(len(argv) - 2)])
+
+    def test_later_sibling_or_ancestor_bind_rejected_even_after_messaging(self):
+        sibling = self.point / "hidden"
+        sibling.mkdir()
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=["--bind", str(sibling), str(sibling)]):
+            with self.assertRaisesRegex(mask.MountMaskError, "hidden"):
+                self.build(mask_mount_points=(self.point,))
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=["--ro-bind", str(self.point), str(self.point)]):
+            with self.assertRaisesRegex(mask.MountMaskError, "volume"):
+                self.build(mask_mount_points=(self.point,))
+
+    def test_later_bind_through_symlinked_source_is_rejected(self):
+        sibling = self.point / "hidden"
+        sibling.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(self.point, target_is_directory=True)
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=["--bind", str(alias / "hidden"), str(self.root / "exposed")]):
+            with self.assertRaisesRegex(mask.MountMaskError, "hidden"):
+                self.build(mask_mount_points=(self.point,))
+
+    def test_mask_cannot_hide_required_status_runtime_bind(self):
+        with self.assertRaisesRegex(mask.MountMaskError, "lince-dashboard"):
+            self.build(mask_mount_points=(Path("/tmp"),))
+
+    def test_no_list_unchanged_argv_with_late_options(self):
+        old = self.build(landlock={"connect_ports": [], "bind_ports": []})
+        self.assertEqual(old, self.build(mask_mount_points=(), landlock={"connect_ports": [], "bind_ports": []}))
+
+    def test_run_empty_list_keeps_backend_selection_and_checks_local_policy(self):
+        args = type("Args", (), {"project": str(self.project), "agent": "claude", "backend": None,
+                                 "sandbox_level": None})()
+        with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+             patch.object(self.sandbox, "load_mount_mask_points", return_value=()) as load, \
+             patch.object(self.sandbox, "validate_mount_mask_points", return_value=()) as validate, \
+             patch.object(self.sandbox, "resolve_backend", side_effect=RuntimeError("backend selected")) as choose:
+            with self.assertRaisesRegex(RuntimeError, "backend selected"):
+                self.sandbox.cmd_run(args, [])
+        load.assert_called_once_with(Path.cwd(), self.project)
+        validate.assert_called_once_with(())
+        choose.assert_called_once()
+
+    def test_run_bad_local_policy_fails_before_backend_selection(self):
+        args = type("Args", (), {"project": str(self.project), "agent": "claude", "backend": None,
+                                 "sandbox_level": None})()
+        with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+             patch.object(self.sandbox, "load_mount_mask_points",
+                          side_effect=mask.MountMaskError("local global-only")), \
+             patch.object(self.sandbox, "resolve_backend", side_effect=AssertionError("backend selected")):
+            with redirect_stderr(io.StringIO()) as output, self.assertRaises(SystemExit):
+                self.sandbox.cmd_run(args, [])
+        self.assertIn("local global-only", output.getvalue())
+
+    def test_run_preflight_rejects_nono_and_seatbelt_before_helpers(self):
+        args = type("Args", (), {"project": str(self.project), "agent": "claude", "backend": None,
+                                 "sandbox_level": None})()
+        for backend in ("nono", "seatbelt"):
+            with self.subTest(backend=backend):
+                with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+                     patch.object(self.sandbox, "resolve_backend", return_value=backend), \
+                     patch.object(self.sandbox, "load_mount_mask_points", return_value=(self.point,)), \
+                     patch.object(self.sandbox, "validate_mount_mask_points",
+                                  return_value=(self.point,)) as validate, \
+                     patch.object(self.sandbox, "ensure_git_wrapper", side_effect=AssertionError("helper started")), \
+                     patch.object(self.sandbox.subprocess, "Popen", side_effect=AssertionError("agent started")):
+                    with self.assertRaisesRegex(SystemExit, "1"):
+                        with redirect_stderr(io.StringIO()) as output:
+                            self.sandbox.cmd_run(args, [])
+                    self.assertIn("mask_mount_points", output.getvalue())
+                    validate.assert_called_once_with((self.point,))
 
 
 if __name__ == "__main__":
