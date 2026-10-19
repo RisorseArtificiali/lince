@@ -251,17 +251,37 @@ def check_mount_exposures(argv: list[str], paths: tuple[Path, ...], project_dir:
                                  "remove the overlapping mount or change mask_mount_points")
 
         for index, (option, src, dest) in enumerate(mounts):
-            if src is None or not _within(src, point):
+            if src is None:
                 continue
             if option == "--bind" and src == dest == project:
                 continue
-            # A subsequent tmpfs at the destination (or its ancestor)
-            # completely obscures this exposure in the final namespace.
-            if any(later == "--tmpfs" and _within(dest, target)
-                   for later, _, target in mounts[index + 1:]):
-                continue
-            raise MountMaskError(f"{src}: automatic {option} to {dest} would expose content from masked "
-                                 f"{point}; remove the overlapping mount or change mask_mount_points")
+            if _within(src, point):
+                # A subsequent tmpfs at the destination (or its ancestor)
+                # completely obscures this exposure in the final namespace.
+                if any(later == "--tmpfs" and _within(dest, target)
+                       for later, _, target in mounts[index + 1:]):
+                    continue
+                raise MountMaskError(f"{src}: automatic {option} to {dest} would expose content from masked "
+                                     f"{point}; remove the overlapping mount or change mask_mount_points")
+
+            if _within(point, src):
+                # Binding a parent maps the protected child to a *different*
+                # location. Masking point itself cannot hide that alias.
+                alias = dest / point.relative_to(src)
+                covering = next(((later, later_src, target)
+                                 for later, later_src, target in reversed(mounts[index + 1:])
+                                 if _within(alias, target)), None)
+                if covering:
+                    later, later_src, target = covering
+                    if later in _MOUNT_OPTIONS:
+                        continue
+                    if later in _BIND_OPTIONS:
+                        mapped_child = _host_path(str(later_src / alias.relative_to(target)))
+                        if (later == "--bind" and later_src == target == project or
+                                not _within(mapped_child, point) and not _within(point, mapped_child)):
+                            continue
+                raise MountMaskError(f"{src}: automatic {option} to {dest} would expose masked "
+                                     f"{point} at {alias}; add a later isolated overlay there or remove the bind")
 
     # Hooks need this always-generated host status bind. An opt-in tmpfs may
     # hide an earlier mount; a run with no reachable status directory is not

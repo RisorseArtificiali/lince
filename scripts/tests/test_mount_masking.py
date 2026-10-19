@@ -396,6 +396,35 @@ class TestMountMaskPlanning(unittest.TestCase):
             with self.assertRaisesRegex(mask.MountMaskError, "hidden"):
                 self.build(mask_mount_points=(self.point,))
 
+    def test_generated_claude_bind_of_masked_ancestor_exposes_child_alias(self):
+        config_dir = self.runtime / "claude-config"
+        hidden = config_dir / "private"
+        hidden.mkdir(parents=True)
+        config = {**MIN_CONFIG, "claude": {"config_dir": str(config_dir)}}
+        with self.assertRaisesRegex(mask.MountMaskError, r"private.*\.claude/private"):
+            self.sandbox.build_bwrap_cmd(config, self.project, [], agent_config=MIN_AGENT_CONFIG,
+                                         mask_mount_points=(hidden,))
+
+    def test_late_ancestor_alias_requires_final_overlay_of_mapped_child(self):
+        alias = self.root / "alternate"
+        hidden_alias = alias / self.point.relative_to(self.root)
+        bind = ["--bind", str(self.root), str(alias)]
+        with patch.object(self.sandbox, "messaging_bwrap_args", return_value=bind):
+            with self.assertRaisesRegex(mask.MountMaskError, "alternate"):
+                self.build(mask_mount_points=(self.point,))
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=bind + ["--tmpfs", str(hidden_alias)]):
+            self.build(mask_mount_points=(self.point,))
+        safe = self.root / "safe"
+        safe.mkdir()
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=bind + ["--ro-bind", str(safe), str(hidden_alias)]):
+            self.build(mask_mount_points=(self.point,))
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=bind + ["--tmpfs", str(hidden_alias)] + bind):
+            with self.assertRaisesRegex(mask.MountMaskError, "alternate"):
+                self.build(mask_mount_points=(self.point,))
+
     def test_mask_cannot_hide_required_status_runtime_bind(self):
         with self.assertRaisesRegex(mask.MountMaskError, "lince-dashboard"):
             self.build(mask_mount_points=(Path("/tmp"),))
