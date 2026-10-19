@@ -140,8 +140,13 @@ Nonexistent, non-directory, symlink-containing and essential mount paths
 of `/run` are permitted. An existing but unmounted configured path produces
 a warning and is **still masked** (this says nothing about the volume's
 physical presence). Unsafe overlap with required automatic binds is refused
-before agent execution. Changes take effect on **new** launches only: restart
-existing agents for a new view. Dashboard-started agents do not have a
+before agent execution. The preflight catches directly identifiable hidden
+launch executables and their shebang interpreters, but does not inspect every
+agent argument or ELF dynamic loader. A script or other dependency under the
+mask may instead cause a later error from the launched tool; that failure does
+not expose the original file through the configured path. Changes take effect
+on **new** launches only: restart existing agents for a new view.
+Dashboard-started agents do not have a
 verified mount-masking guarantee in this direct-launch phase.
 
 The mask applies to configured paths, not unconfigured aliases to the same

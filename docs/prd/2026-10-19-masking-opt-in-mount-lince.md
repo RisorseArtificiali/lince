@@ -21,6 +21,7 @@
 - A configured path that does not exist causes an error and prevents launch — so a configuration mistake cannot be hidden behind an apparently protected launch.
 - A path essential to the sandbox, including `/`, `/proc`, and `/dev`, is rejected before launch — so masking cannot break the agent's runtime environment.
 - Configuration changes apply to new launches; already-running agents must be restarted — because the filesystem view is established when the sandbox starts.
+- Pre-launch refusal covers invalid policy, incompatible backends, unsafe automatic mount exposures, and directly identifiable launch executables (including their shebang interpreters). It does not promise to infer arbitrary dependencies from agent arguments or an ELF binary's dynamic loader. If an agent later tries to read a file hidden by the mask, it may fail at that point with the tool's own error; the original file remains hidden through the configured path. This is a diagnostic limit, not a relaxation of the filesystem mask.
 
 ## Phase 1: Masking for direct agent-sandbox launches
 
@@ -49,7 +50,7 @@
 - [ ] Path components needed to reach the working directory remain traversable in the sandbox.
 - [ ] Outside the working directory and the path components needed to reach it, original contents of the masked point are not visible.
 - [ ] Writes outside the working directory within the masked path are allowed but do not persist on the host.
-- [ ] When a configured point overlaps a path LINCE automatically re-exposes, including the writable home in `learn` or a temporary directory, original content outside the working directory remains unreadable and writes there remain ephemeral at every bwrap level; if LINCE cannot preserve both the mask and the agent's required runtime paths, launch fails before the agent starts with an explicit error.
+- [ ] When a configured point overlaps a path LINCE automatically re-exposes, including the writable home in `learn` or a temporary directory, original content outside the working directory remains unreadable and writes there remain ephemeral at every bwrap level; unsafe automatic exposures are rejected before the agent starts with an explicit error. Dependencies hidden by the mask but not identifiable before launch may instead fail at use time.
 - [ ] A working directory spanning the entire configured point is not rejected merely because of its breadth.
 - [ ] If the configured point exists but is not mounted, launch warns that the point is not mounted without claiming that the physical volume is absent.
 - [ ] If the configured point exists but is not mounted, the path is still masked.
@@ -130,7 +131,7 @@
 - [ ] Path components needed to reach the working directory remain traversable in the sandbox.
 - [ ] Outside the working directory and the path components needed to reach it, original contents of the masked point are not visible.
 - [ ] Writes outside the working directory within the masked path are allowed but do not persist on the host.
-- [ ] When a configured point overlaps a path LINCE automatically re-exposes, including the writable home in `learn` or a temporary directory, original content outside the working directory remains unreadable and writes there remain ephemeral at every bwrap level; if LINCE cannot preserve both the mask and the agent's required runtime paths, launch fails before the agent starts with an explicit error.
+- [ ] When a configured point overlaps a path LINCE automatically re-exposes, including the writable home in `learn` or a temporary directory, original content outside the working directory remains unreadable and writes there remain ephemeral at every bwrap level; unsafe automatic exposures are rejected before the agent starts with an explicit error. Dependencies hidden by the mask but not identifiable before launch may instead fail at use time.
 - [ ] A working directory spanning the entire configured point is not rejected merely because of its breadth.
 - [ ] If the configured point exists but is not mounted, launch warns that the point is not mounted without claiming that the physical volume is absent.
 - [ ] If the configured point exists but is not mounted, the path is still masked.

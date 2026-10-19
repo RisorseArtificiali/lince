@@ -218,6 +218,14 @@ Missing, non-directory, symlink-containing, or essential mount paths (such as
 allowed when valid. A path that exists but is **not mounted at launch** warns
 and is still masked; the warning does not mean the physical volume is absent.
 Unsafe overlaps with required automatic binds fail before agent execution.
+The preflight also catches directly identifiable hidden launch executables and
+their shebang interpreters. It cannot infer every dependency from an agent's
+arguments: for example, `python3` may start and then fail when a script in
+`default_args` is hidden, or an ELF binary may fail if its dynamic loader is
+hidden. Such errors can appear later in the launched tool rather than as an
+early LINCE refusal; they do not make the original files readable through the
+masked path.
+
 Configuration changes affect **new launches**; restart running agents to get
 the new view. Dashboard-started agents are not covered by this direct-launch
 feature until dashboard integration is implemented and verified.
