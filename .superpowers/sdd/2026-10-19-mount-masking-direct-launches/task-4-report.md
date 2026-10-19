@@ -1,4 +1,6 @@
-# Task 1, subtask 4 — stopped at Deviation Protocol
+# Task 1, subtask 4 — complete
+
+**Final status: COMPLETE.** Scoped implementation, approved plan notes and this evidence were committed as `44c3cad feat(sandbox): mask learn launches and verify namespace views`. `git status --short --branch` after commit returned only `## feat/mount-masking` (clean). Earlier blocked entries below are retained as chronological deviation evidence; all subsequent approvals and final passing gates are recorded at the end of this report. The whole-script globally forced ABI 0 invocation remains a documented failed invocation; dedicated ABI 0 checks within the standard gate passed.
 
 **Status: BLOCKED / NOT COMMITTED.** Base HEAD `362ec93` (`feat/mount-masking`), initially clean. Implementation and tests below are uncommitted and not accepted as complete.
 
