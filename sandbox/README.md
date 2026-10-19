@@ -202,8 +202,11 @@ mask_mount_points = ["/run/media/alessio/Dati"]
 
 The list is **global-only**; a definition in either project-local config format
 is an error, even if empty. When a global Config v2 file exists, its list takes
-precedence over legacy, including `[]`; an invalid v2 file fails rather than
-falling back. With `[]` or no list, the previous filesystem view is unchanged.
+precedence over legacy, including `[]`. Malformed v2 TOML, a missing or
+unsupported v2 version, or an invalid `[filesystem].mask_mount_points` list
+or path fails without falling back to legacy. The mount-mask loader does not
+fully validate unrelated v2 settings; other runner settings still use the
+legacy configuration. With `[]` or no list, the previous view is unchanged.
 With a non-empty list, the configured path is an empty, writable, ephemeral
 view except for the re-exposed writable working directory (whose writes persist)
 and its traversable path components. Symlinks to the configured mount path

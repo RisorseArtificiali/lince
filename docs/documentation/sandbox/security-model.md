@@ -124,13 +124,16 @@ mask_mount_points = ["/run/media/alessio/Dati"]
 
 Configure the real mount path, not a symlink such as `/dati`. An empty or
 absent list retains the old view. If global v2 exists it selects its list,
-even `[]`, rather than the legacy list; invalid v2 does not fall back. A
-project-local definition in either config format (even `[]`) fails: schema
-types do not grant local authorization. On direct bwrap launches at all levels,
-including `learn`, the listed path becomes an empty writable ephemeral view;
-only the working directory is re-exposed read/write with host-persistent writes
-and traversable ancestors. Symlinks to that path follow the same view. An
-unsupported backend refuses the launch.
+even `[]`, rather than the legacy list. Malformed v2 TOML, a missing or
+unsupported v2 version, or an invalid `[filesystem].mask_mount_points` list
+or path fails without legacy fallback. The mount-mask loader does not fully
+validate unrelated v2 settings; other runner settings still use legacy
+configuration. A project-local definition in either config format (even `[]`)
+fails: schema types do not grant local authorization. On direct bwrap launches
+at all levels, including `learn`, the listed path becomes an empty writable
+ephemeral view; only the working directory is re-exposed read/write with
+host-persistent writes and traversable ancestors. Symlinks to that path
+follow the same view. An unsupported backend refuses the launch.
 
 Nonexistent, non-directory, symlink-containing and essential mount paths
 (`/`, `/proc`, `/dev`, `/run`) are rejected before launch; valid descendants
