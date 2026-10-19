@@ -99,22 +99,15 @@ VISIBLE
         done
     done
 
-    # learn uses cwd as project. Exit status alone is insufficient: check the
-    # marker, or confirm that a refusal happened before the probe could exec.
+    # With HOME outside the mask and the probe inside the remounted project,
+    # learn must execute successfully. Only the HOME-overlap case below may
+    # legitimately refuse when runtime paths cannot be preserved.
     write_config "[\"$POINT\"]" "$PROJECT/mount_mask_probe.py" true
     rm -f "$PROJECT/persisted" "$POINT/ephemeral"
-    if ( cd "$PROJECT" && python3 "$SANDBOX" learn --agent mask-probe --duration 5 ) >"$WORK/learn.log" 2>&1; then
-        test "$(<"$PROJECT/persisted")" = yes
-        test ! -e "$POINT/ephemeral"
-        echo "PASS: $kind learn hides siblings and persists project"
-    else
-        test ! -e "$PROJECT/persisted"
-        if ! grep -q 'Error: .*mask_mount_points\|Error: .*masked' "$WORK/learn.log"; then
-            echo "FAIL: learn did not exec and did not explicitly refuse overlap" >&2
-            exit 1
-        fi
-        echo "PASS: $kind learn refused before agent exec"
-    fi
+    ( cd "$PROJECT" && python3 "$SANDBOX" learn --agent mask-probe --duration 5 ) >"$WORK/learn.log" 2>&1
+    test "$(<"$PROJECT/persisted")" = yes
+    test ! -e "$POINT/ephemeral"
+    echo "PASS: $kind learn hides siblings and persists project"
 
     if [[ "$kind" == point ]]; then
         # Learn normally binds HOME rw. Exercise the dangerous overlap with a
@@ -180,6 +173,7 @@ done
 # when launching from HOME; it must not be mistaken for a local override.
 POINT="$FIXTURE/plain"
 write_config "[\"$POINT\"]" "$PROJECT/mount_mask_probe.py" false
+rm -f "$PROJECT/persisted"
 ( cd "$HOME" && python3 "$SANDBOX" run -p "$PROJECT" --agent mask-probe ) >"$WORK/home-run.log" 2>&1
 test "$(<"$PROJECT/persisted")" = yes
 echo "PASS: run from HOME with -p loads the global legacy mask"
