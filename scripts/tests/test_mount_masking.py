@@ -1,8 +1,10 @@
 """Strict mount-mask policy intake, independent of the legacy config merge."""
 
+import io
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -177,6 +179,112 @@ class TestMountMaskIntake(unittest.TestCase):
             mask.load_mount_mask_points(self.invocation, self.project)
         self.assertIn("mask_mount_points", str(raised.exception))
         self.assertTrue(str(path) in str(raised.exception) or "lince.toml" in str(raised.exception))
+
+
+class TestMountMaskValidation(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.point = self.root / "mounted"
+        self.point.mkdir()
+
+    def mountinfo(self, *points):
+        def escape(path):
+            return str(path).replace("\\", r"\134").replace(" ", r"\040").replace("\t", r"\011")
+
+        data = "".join(f"36 25 0:31 / {escape(point)} rw - tmpfs tmpfs rw\n" for point in points)
+        return patch.object(mask.Path, "read_text", return_value=data)
+
+    def test_empty_list_does_not_inspect_mounts_or_warn(self):
+        output = io.StringIO()
+        with patch.object(mask.Path, "read_text", side_effect=AssertionError("mountinfo read")):
+            with redirect_stderr(output):
+                self.assertEqual(mask.validate_mount_mask_points(()), ())
+        self.assertEqual(output.getvalue(), "")
+
+    def test_invalid_spellings(self):
+        for value in (Path("relative"), Path("~/mounted"), self.root / "../mounted"):
+            with self.subTest(value=value):
+                with self.assertRaises(mask.MountMaskError):
+                    mask.validate_mount_mask_points((value,))
+
+    def test_final_and_intermediate_symlinks_are_rejected(self):
+        real = self.root / "real"
+        real.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(real, target_is_directory=True)
+        (real / "child").mkdir()
+        for point in (alias, alias / "child"):
+            with self.subTest(point=point):
+                with self.assertRaisesRegex(mask.MountMaskError, "symlink"):
+                    mask.validate_mount_mask_points((point,))
+
+    def test_file_and_missing_directory_are_rejected(self):
+        ordinary_file = self.root / "file"
+        ordinary_file.write_text("data", encoding="utf-8")
+        with self.assertRaisesRegex(mask.MountMaskError, "not a directory"):
+            mask.validate_mount_mask_points((ordinary_file,))
+        with self.assertRaisesRegex(mask.MountMaskError, "does not exist"):
+            mask.validate_mount_mask_points((self.root / "missing",))
+
+    def test_exact_essential_paths_but_not_run_descendant(self):
+        for point in (Path("/"), Path("/proc"), Path("/dev"), Path("/run")):
+            with self.subTest(point=point):
+                with self.assertRaises(mask.MountMaskError):
+                    mask.validate_mount_mask_points((point,))
+        run = self.root / "run"
+        child = run / "user"
+        child.mkdir(parents=True)
+        with patch.object(mask, "_ESSENTIAL_MOUNT_POINTS", frozenset({run})):
+            with self.mountinfo(child):
+                self.assertEqual(mask.validate_mount_mask_points((child,)), (child,))
+
+    def test_exact_mountpoint_warns_for_existing_unmounted_point(self):
+        unmounted = self.point / "unmounted"
+        unmounted.mkdir()
+        output = io.StringIO()
+        with self.mountinfo(self.point):
+            with redirect_stderr(output):
+                self.assertEqual(mask.validate_mount_mask_points((self.point, unmounted)),
+                                 (self.point, unmounted))
+        warning = output.getvalue()
+        self.assertEqual(warning.count("path is not mounted at launch; masking the path anyway"), 1)
+        self.assertIn(str(unmounted), warning)
+        self.assertNotIn("volume absent", warning)
+
+    def test_decodes_escaped_mountpoint_in_mountinfo(self):
+        for name in ("space dir", "tab\tdir", "back\\slash"):
+            with self.subTest(name=name):
+                point = self.root / name
+                point.mkdir()
+                output = io.StringIO()
+                with self.mountinfo(point):
+                    with redirect_stderr(output):
+                        self.assertEqual(mask.validate_mount_mask_points((point,)), (point,))
+                self.assertEqual(output.getvalue(), "")
+
+    def test_validation_never_resolves_symlinks(self):
+        with patch.object(mask.Path, "resolve", side_effect=AssertionError("resolve called")):
+            with self.mountinfo(self.point):
+                self.assertEqual(mask.validate_mount_mask_points((self.point,)), (self.point,))
+
+    def test_duplicate_paths_rejected_after_lexical_normalization(self):
+        with self.assertRaisesRegex(mask.MountMaskError, "duplicate"):
+            mask.validate_mount_mask_points((self.point, Path(str(self.point) + "/./")))
+
+    def test_nested_points_are_ancestor_first_in_either_input_order(self):
+        child = self.point / "child"
+        child.mkdir()
+        with self.mountinfo(self.point, child):
+            for paths in ((self.point, child), (child, self.point)):
+                with self.subTest(paths=paths):
+                    self.assertEqual(mask.validate_mount_mask_points(paths), (self.point, child))
+
+    def test_unavailable_mountinfo_is_an_explicit_error(self):
+        with patch.object(mask.Path, "read_text", side_effect=OSError("permission denied")):
+            with self.assertRaisesRegex(mask.MountMaskError, "mountinfo.*permission denied"):
+                mask.validate_mount_mask_points((self.point,))
 
 
 if __name__ == "__main__":
