@@ -7,17 +7,34 @@ SANDBOX="$HERE/../agent-sandbox"
 WORK="$(mktemp -d /tmp/lince-mask-test.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 
-for tool in unshare mount bwrap python3 strace; do
+for tool in unshare mount bwrap python3; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "SKIP: missing namespace/mount test dependency: $tool"
-        exit 0
+        echo "FAIL: missing required test dependency: $tool" >&2
+        exit 1
     fi
 done
 
 # Probe capability before treating any subsequent launch failure as a test failure.
-if ! unshare -Urmpf -- mount -t tmpfs tmpfs "$WORK" 2>"$WORK/probe-error"; then
-    echo "SKIP: private user/mount namespace cannot mount tmpfs: $(<"$WORK/probe-error")"
-    exit 0
+if unshare -Urmpf -- mount -t tmpfs tmpfs "$WORK" 2>"$WORK/probe-error"; then
+    :
+else
+    probe_status=$?
+    probe_error="$(<"$WORK/probe-error")"
+    detail="${probe_error,,}"
+    first_line="${detail%%$'\n'*}"
+    # unshare exits 1 for a denied user namespace; mount exits 32 when the
+    # namespace lacks CAP_SYS_ADMIN. Other failures are broken gates, not SKIPs.
+    if [[ "$probe_status" -eq 1 && "$first_line" == unshare:* &&
+          ( "$first_line" == *"operation not permitted"* || "$first_line" == *"permission denied"* ||
+            "$first_line" == *"eperm"* ) ]] ||
+       [[ "$probe_status" -eq 32 && "$first_line" == mount:* &&
+          ( "$first_line" == *"operation not permitted"* || "$first_line" == *"permission denied"* ||
+            "$first_line" == *"eperm"* ) ]]; then
+        echo "SKIP: private user/mount namespace capability denied (exit $probe_status): $probe_error"
+        exit 0
+    fi
+    echo "FAIL: private user/mount namespace probe failed (exit $probe_status): $probe_error" >&2
+    exit 1
 fi
 
 unshare -Urmpf --mount-proc -- bash -euo pipefail -s -- "$WORK" "$HERE" "$SANDBOX" <<'NAMESPACE'

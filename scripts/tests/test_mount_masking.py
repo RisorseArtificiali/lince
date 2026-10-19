@@ -3,6 +3,9 @@
 import io
 import importlib.machinery
 import importlib.util
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -560,6 +563,55 @@ class TestMountMaskPlanning(unittest.TestCase):
                 options = argv[:argv.index("--")]
                 self.assertIn(["--ro-bind", source, target],
                               [options[i:i + 3] for i in range(len(options) - 2)])
+
+
+class TestMountMaskGateExitSemantics(unittest.TestCase):
+    """Exercise the gate's early exits without running or changing host mounts."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.bin = Path(self.temp.name) / "bin"
+        self.bin.mkdir()
+        self.script = Path(__file__).resolve().parents[2] / "sandbox/tests/test-mount-masking.sh"
+        for name in ("dirname", "mktemp", "rm", "mount", "bwrap", "python3"):
+            (self.bin / name).symlink_to(shutil.which(name))
+
+    def run_gate(self):
+        return subprocess.run(["/bin/bash", str(self.script)], capture_output=True,
+                              text=True, env={**os.environ, "PATH": str(self.bin)}, check=False)
+
+    def test_missing_required_tool_fails_not_skips(self):
+        (self.bin / "unshare").symlink_to(shutil.which("unshare"))
+        for name in ("unshare", "mount", "bwrap", "python3"):
+            with self.subTest(tool=name):
+                (self.bin / name).unlink()
+                try:
+                    result = self.run_gate()
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(f"FAIL: missing required test dependency: {name}", result.stderr)
+                    self.assertNotIn("SKIP:", result.stdout + result.stderr)
+                finally:
+                    (self.bin / name).symlink_to(shutil.which(name))
+
+    def test_only_known_capability_denials_skip(self):
+        for name, code, message, skip in (
+            ("userns EPERM", 1, "unshare: unshare failed: Operation not permitted", True),
+            ("mount permission", 32, "mount: /tmp/test: permission denied", True),
+            ("unexpected error", 1, "unshare: unknown option", False),
+            ("unexpected status", 7, "unshare: Operation not permitted", False),
+            ("misleading follow-up", 1, "unshare: unknown option\nOperation not permitted", False),
+        ):
+            with self.subTest(name=name):
+                fake = self.bin / "unshare"
+                fake.write_text(f"#!/bin/sh\nprintf '%s\\n' '{message}' >&2\nexit {code}\n",
+                                encoding="utf-8")
+                fake.chmod(0o755)
+                result = self.run_gate()
+                self.assertEqual(result.returncode, 0 if skip else 1, result.stderr)
+                self.assertIn(message, result.stdout + result.stderr)
+                self.assertIn(f"exit {code}", result.stdout + result.stderr)
+                self.assertIn("SKIP:" if skip else "FAIL:", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
