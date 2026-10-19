@@ -55,9 +55,9 @@ cp "$HERE/../profiles/claude-permissive.toml" "$HOME/.agent-sandbox/profiles/mas
 cp "$HERE/../profiles/claude-paranoid.toml" "$HOME/.agent-sandbox/profiles/mask-probe-paranoid.toml"
 
 write_config() {
-    local point="$1" probe="$2" landlock="$3"
-    printf '[sandbox]\nbackend = "agent-sandbox"\nauto_expose_path = false\npersist_toolchains = false\nmask_mount_points = %s\n[security]\nlandlock = %s\nblock_git_push = false\n[agents.mask-probe]\ncommand = "python3"\ndefault_args = ["%s"]\n' \
-        "$point" "$landlock" "$probe" > "$HOME/.agent-sandbox/config.toml"
+    local point="$1" probe="$2" landlock="$3" command="${4:-python3}" auto_path="${5:-false}"
+    printf '[sandbox]\nbackend = "agent-sandbox"\nauto_expose_path = %s\npersist_toolchains = false\nmask_mount_points = %s\n[security]\nlandlock = %s\nblock_git_push = false\n[agents.mask-probe]\ncommand = "%s"\ndefault_args = ["%s"]\n' \
+        "$auto_path" "$point" "$landlock" "$command" "$probe" > "$HOME/.agent-sandbox/config.toml"
 }
 
 for kind in point plain; do
@@ -140,4 +140,52 @@ VISIBLE
         fi
     fi
 done
+
+# An executable from masked HOME outside the project must be refused before
+# the probe executes. Exercise both direct entry points, not just argv tests.
+PROJECT="$FIXTURE/plain/project"
+mkdir -p "$HOME/.local/bin"
+HIDDEN_AGENT="$HOME/.local/bin/my-agent"
+printf '#!/bin/sh\nprintf ran > "%s"\n' "$PROJECT/hidden-agent-ran" > "$HIDDEN_AGENT"
+chmod +x "$HIDDEN_AGENT"
+for spelling in absolute path; do
+    if [[ "$spelling" == absolute ]]; then
+        write_config "[\"$HOME\"]" "$PROJECT/mount_mask_probe.py" false "$HIDDEN_AGENT"
+    else
+        write_config "[\"$HOME\"]" "$PROJECT/mount_mask_probe.py" false my-agent true
+    fi
+    for command in run learn; do
+        rm -f "$PROJECT/hidden-agent-ran"
+        if [[ "$command" == run ]]; then
+            if ( cd "$HOME" && PATH="$HOME/.local/bin:$PATH" python3 "$SANDBOX" run -p "$PROJECT" --agent mask-probe ) \
+                >"$WORK/hidden-$spelling-run.log" 2>&1; then
+                echo "FAIL: run launched masked executable" >&2; exit 1
+            fi
+        else
+            if ( cd "$PROJECT" && PATH="$HOME/.local/bin:$PATH" python3 "$SANDBOX" learn --agent mask-probe --duration 5 ) \
+                >"$WORK/hidden-$spelling-learn.log" 2>&1; then
+                echo "FAIL: learn launched masked executable" >&2; exit 1
+            fi
+        fi
+        test ! -e "$PROJECT/hidden-agent-ran"
+        if ! grep -q 'Error: .*my-agent.*mask_mount_points hides a required executable' \
+            "$WORK/hidden-$spelling-$command.log"; then
+            echo "FAIL: $command did not explicitly refuse masked executable" >&2; exit 1
+        fi
+        echo "PASS: $command refuses masked HOME executable ($spelling) before agent exec"
+    done
+done
+
+# The same legacy global config is encountered at the invocation/learn root
+# when launching from HOME; it must not be mistaken for a local override.
+POINT="$FIXTURE/plain"
+write_config "[\"$POINT\"]" "$PROJECT/mount_mask_probe.py" false
+( cd "$HOME" && python3 "$SANDBOX" run -p "$PROJECT" --agent mask-probe ) >"$WORK/home-run.log" 2>&1
+test "$(<"$PROJECT/persisted")" = yes
+echo "PASS: run from HOME with -p loads the global legacy mask"
+printf 'from pathlib import Path\n(Path.home() / "learn-home-ran").write_text("yes")\n' > "$HOME/home_probe.py"
+write_config "[\"$POINT\"]" "$HOME/home_probe.py" false
+( cd "$HOME" && python3 "$SANDBOX" learn --agent mask-probe --duration 5 ) >"$WORK/home-learn.log" 2>&1
+test "$(<"$HOME/learn-home-ran")" = yes
+echo "PASS: learn from HOME loads the global legacy mask"
 NAMESPACE

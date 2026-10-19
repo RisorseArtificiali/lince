@@ -3,7 +3,9 @@
 Existing runner settings continue to use the legacy config loader.
 """
 
+import os
 import re
+import shlex
 import stat
 import sys
 import tomllib
@@ -66,20 +68,27 @@ def load_mount_mask_points(invocation_dir: Path, project_dir: Path) -> tuple[Pat
     formats are checked at each distinct command root, independently of the
     format chosen globally and independently of the runner's legacy merge.
     """
+    home = Path.home()
     for label, root in (("invocation", invocation_dir), ("project", project_dir)):
         if label == "project" and project_dir == invocation_dir:
             continue
         for relative, table_name in ((".lince/lince.toml", "filesystem"),
-                                     (".agent-sandbox/config.toml", "sandbox")):
+                                      (".agent-sandbox/config.toml", "sandbox")):
             path = root / relative
+            # The legacy global file also appears at the command root when
+            # invoked from HOME (or an alias of HOME); it is not a local
+            # override. Other local paths, even in the non-selected format,
+            # still get checked below.
             if not (path.exists() or path.is_symlink()):
+                continue
+            if (relative == ".agent-sandbox/config.toml" and root.resolve() == home.resolve()
+                    and path.resolve() == (home / relative).resolve()):
                 continue
             key = f"[{table_name}].mask_mount_points"
             table = _table(_read(path, key), table_name, path)
             if "mask_mount_points" in table:
                 raise MountMaskError(f"{label} config {path}: {key} is global-only")
 
-    home = Path.home()
     v2_path = home / ".config/lince/lince.toml"
     if v2_path.exists() or v2_path.is_symlink():
         table = _read(v2_path, "[filesystem].mask_mount_points")
@@ -294,3 +303,112 @@ def check_mount_exposures(argv: list[str], paths: tuple[Path, ...], project_dir:
                                 and _within(status, project)):
             raise MountMaskError(f"{status}: mask_mount_points would hide the required status runtime bind; "
                                  "choose a narrower mask mount point")
+
+
+def check_required_executables(argv: list[str], paths: tuple[Path, ...], project_dir: Path,
+                               commands: tuple[str, ...]) -> None:
+    """Check required exec paths in the final generated mount view, before spawning bwrap.
+
+    Bind sources are host paths; the most recent mount covering an exec path
+    determines whether that file survives the overlays. For a bare command,
+    search the actual PATH passed to bwrap (not the host shell's PATH).
+    """
+    if not paths:
+        return
+    options = argv[:argv.index("--")]
+    mounts: list[tuple[str, Path | None, Path]] = []
+    sandbox_path = ""
+    i = 1
+    while i < len(options):
+        option = options[i]
+        if option in _BIND_OPTIONS:
+            mounts.append((option, Path(options[i + 1]), Path(options[i + 2])))
+            i += 3
+        elif option in _MOUNT_OPTIONS:
+            mounts.append((option, None, Path(options[i + 1])))
+            i += 2
+        elif option == "--setenv":
+            if options[i + 1] == "PATH":
+                sandbox_path = options[i + 2]
+            i += 3
+        elif option in ("--symlink", "--file", "--bind-data"):
+            i += 3
+        elif option in ("--dir", "--unsetenv", "--chdir"):
+            i += 2
+        else:
+            i += 1
+
+    def visible_executable(candidate: Path, visited: frozenset[Path] = frozenset()) -> Path | None:
+        if candidate in visited:
+            return None
+        covering = next(((source, dest) for _, source, dest in reversed(mounts)
+                         if _within(candidate, dest)), None)
+        if covering is None or covering[0] is None:
+            return None
+        source, dest = covering
+        mapped = source / candidate.relative_to(dest)
+        if not mapped.is_file() or not os.access(mapped, os.X_OK):
+            return None
+        if mapped.is_symlink():
+            link = mapped.readlink()
+            target = link if link.is_absolute() else Path(os.path.normpath(str(candidate.parent / link)))
+            return visible_executable(target, visited | {candidate})
+        # A symlink in a parent component can likewise resolve into a mask,
+        # unless a final bind replaced that parent with different content.
+        resolved = candidate.resolve()
+        if resolved != candidate and mapped == candidate:
+            return visible_executable(resolved, visited | {candidate})
+        return mapped
+
+    pending = list(commands)
+    checked: set[str] = set()
+    while pending:
+        command = pending.pop(0)
+        if command in checked:
+            continue
+        checked.add(command)
+        if "/" in command:
+            candidate = Path(command)
+            if not candidate.is_absolute():
+                candidate = project_dir / candidate
+            candidates = [candidate]
+        else:
+            candidates = [Path(directory or ".") / command for directory in sandbox_path.split(":")]
+
+        def has_executable_source(candidate: Path) -> bool:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return True
+            covering = next(((source, dest) for _, source, dest in reversed(mounts)
+                             if _within(candidate, dest)), None)
+            if covering is None or covering[0] is None:
+                return False
+            source, dest = covering
+            mapped = source / candidate.relative_to(dest)
+            return mapped.is_file() and os.access(mapped, os.X_OK)
+
+        possible = [candidate for candidate in candidates if has_executable_source(candidate)]
+        visible = next((source for candidate in possible if (source := visible_executable(candidate)) is not None),
+                       None)
+        if possible and visible is None:
+            raise MountMaskError(f"{command}: mask_mount_points hides a required executable in the final "
+                                 "sandbox view; move it into the project or choose a narrower mask mount point")
+        if visible is not None:
+            # An executable script also needs its kernel shebang interpreter.
+            # Inspect the source that survives the final bind, not an earlier
+            # host file shadowed at the same destination.
+            try:
+                with visible.open("rb") as stream:
+                    first_line = stream.readline(256)
+            except OSError:
+                continue
+            if first_line.startswith(b"#!"):
+                try:
+                    shebang = shlex.split(first_line[2:].decode("utf-8"))
+                except (UnicodeError, ValueError):
+                    continue
+                if shebang:
+                    pending.append(shebang[0])
+                    if shebang[0] == "/usr/bin/env":
+                        args = [arg for arg in shebang[1:] if not arg.startswith("-")]
+                        if args:
+                            pending.append(args[0])

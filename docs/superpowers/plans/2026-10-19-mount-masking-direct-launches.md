@@ -48,6 +48,8 @@ If a step does not produce its stated expected result — a test fails for a dif
 
 **Approved baseline exception (Task 5 shipped schema check, 2026-10-19):** The planned pre-regeneration `test_schemas.py` had its expected stale-schema failure plus a warning-failure for the unrelated shipped `lince-dashboard/config.toml` key `dashboard.keybinding_style`. The exact `test_shipped_configs` failure was reproduced in a detached clean worktree at Task 5 base `f1c7816`. The user approved keeping dashboard schema metadata outside this mount-masking task and proceeding with generation and focused mask-key checks. Do not claim the full schema suite passes if this existing warning remains; record it explicitly. No claim of Dati host acceptance while `/run/media/alessio/Dati` is unavailable here.
 
+**Approved deviation (final review executable regression test, 2026-10-19):** The whole-branch review found that masking HOME could hide the agent executable without a pre-exec refusal. A new absolute-executable regression test was expected to fail on the missing guard, but its helper passed `agent_config` twice and raised `TypeError` before exercising the builder; the separate PATH-resolved test reached its expected failing assertion. The user approved changing only the erroneous test invocation to call `build_bwrap_cmd` directly with one `agent_config`, obtaining a valid RED, then continuing the consolidated two-finding fix wave and verification. The runtime fail-closed guarantee remains mandatory.
+
 ---
 
 ## Verified baseline (worktree `feat/mount-masking`, clean at `d52f0d9`)
