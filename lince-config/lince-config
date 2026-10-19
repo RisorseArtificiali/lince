@@ -295,6 +295,11 @@ LINCE_SCHEMA = {
                 "ro_dirs": _STR_LIST,
                 "home_ro_dirs": _STR_LIST,
                 "home_rw_dirs": _STR_LIST,
+                "mask_mount_points": _d(_STR_LIST, "Global-only mount-point directories to mask for direct "
+                                        "agent-sandbox run/learn bwrap launches; [] or absent retains the "
+                                        "previous filesystem view. Config v2 takes precedence over legacy "
+                                        "even when empty. Runtime rejects project-local definitions and "
+                                        "invalid paths; JSON Schema validates types only.", []),
             },
             "additionalProperties": False,
         },
@@ -458,6 +463,11 @@ SANDBOX_CONFIG_SCHEMA = {
                                               "read-write (relative to $HOME); "
                                               "shadows any isolated toolchain cache "
                                               "in the same subtree (#286)", []),
+                "mask_mount_points": _d(_STR_LIST, "Global-only mount-point directories to mask for direct "
+                                        "agent-sandbox run/learn bwrap launches when no global Config v2 "
+                                        "file exists; [] or absent retains the previous filesystem view. "
+                                        "Runtime rejects project-local definitions and invalid paths; "
+                                        "JSON Schema validates types only.", []),
                 "default_provider": _d(_STR, "Provider used when -P / --provider is "
                                              "not given; empty = none", ""),
                 "default_profile": _d(_STR, "LEGACY alias of default_provider "

@@ -157,6 +157,23 @@ class TestVersionContract(unittest.TestCase):
 class TestSchemaEngine(unittest.TestCase):
     """The validate engine catches the acceptance-criteria cases."""
 
+    def test_global_mount_mask_list_types(self):
+        # JSON Schema checks shape only; runtime rejects local definitions and
+        # validates path/source/precedence regardless of what this schema accepts.
+        for schema, base, table in (
+            (LC.LINCE_SCHEMA, {"version": "2.0"}, "filesystem"),
+            (LC.SANDBOX_CONFIG_SCHEMA, {}, "sandbox"),
+        ):
+            for values in ([], ["/run/media/alessio/Dati"]):
+                with self.subTest(table=table, values=values):
+                    doc = {**base, table: {"mask_mount_points": values}}
+                    self.assertEqual(LC.schema_validate(doc, schema, "", []), [])
+            for values in (["/run/media/alessio/Dati", 123], [False], "not an array"):
+                with self.subTest(table=table, invalid=values):
+                    doc = {**base, table: {"mask_mount_points": values}}
+                    issues = LC.schema_validate(doc, schema, "", [])
+                    self.assertTrue(any(i["level"] == "error" for i in issues), issues)
+
     def test_unknown_key_is_warning(self):
         doc = {"version": "2.0", "network": {"default": "deny", "tyop": True}}
         issues = LC.schema_validate(doc, LC.LINCE_SCHEMA, "", [])

@@ -8,6 +8,12 @@ extra_rw = []
 # Directories with read-only access
 ro_dirs = ["~/project"]
 
+# Global-only mount masking for direct agent-sandbox run/learn (bwrap).
+# Empty (or absent) keeps the previous filesystem view. To enable, replace
+# [] with absolute mount paths, e.g. ["/run/media/alessio/Dati"] when mounted.
+# Do not put this key in a project-local .agent-sandbox/config.toml.
+mask_mount_points = []
+
 # Persist build tool caches between sessions
 persist_toolchains = true
 
@@ -122,6 +128,7 @@ passthrough = [
     "ZELLIJ",
     "ZELLIJ_SESSION_NAME",
     "LINCE_AGENT_ID",
+    "LINCE_STATUS_DIR",
     # Lets Chromium-based browsers use their native Wayland backend (#284).
     # Also works when X11 exposure is disabled or no X11 display is available.
     "XDG_SESSION_TYPE",

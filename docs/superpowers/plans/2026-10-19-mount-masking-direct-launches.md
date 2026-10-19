@@ -46,6 +46,8 @@ If a step does not produce its stated expected result — a test fails for a dif
 
 **Approved deviation (Task 4 ABI 0 test invocation, 2026-10-19):** Real mounted/unmounted mount-masking matrix (all three levels, Landlock on/off and learn), 41 focused unit tests, and the standard standalone Landlock gate (11/11) passed. Forcing `LINCE_LANDLOCK_FORCE_ABI=0` on the *entire* standalone gate failed five earlier checks that assert ABI-7 enforcement, even though its own ABI-0 graceful and fail-closed checks passed. The user approved treating these dedicated ABI-0 checks within the normally invoked standalone gate as the plan's ABI-0 simulation evidence, and recording that the whole script is not designed for global forced-ABI-0 invocation. Do not weaken the ABI-7 checks or mark the global forced run as a pass.
 
+**Approved baseline exception (Task 5 shipped schema check, 2026-10-19):** The planned pre-regeneration `test_schemas.py` had its expected stale-schema failure plus a warning-failure for the unrelated shipped `lince-dashboard/config.toml` key `dashboard.keybinding_style`. The exact `test_shipped_configs` failure was reproduced in a detached clean worktree at Task 5 base `f1c7816`. The user approved keeping dashboard schema metadata outside this mount-masking task and proceeding with generation and focused mask-key checks. Do not claim the full schema suite passes if this existing warning remains; record it explicitly. No claim of Dati host acceptance while `/run/media/alessio/Dati` is unavailable here.
+
 ---
 
 ## Verified baseline (worktree `feat/mount-masking`, clean at `d52f0d9`)
