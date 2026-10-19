@@ -66,7 +66,7 @@ def load_mount_mask_points(invocation_dir: Path, project_dir: Path) -> tuple[Pat
         for relative, table_name in ((".lince/lince.toml", "filesystem"),
                                      (".agent-sandbox/config.toml", "sandbox")):
             path = root / relative
-            if not path.exists():
+            if not (path.exists() or path.is_symlink()):
                 continue
             key = f"[{table_name}].mask_mount_points"
             table = _table(_read(path, key), table_name, path)
@@ -75,13 +75,13 @@ def load_mount_mask_points(invocation_dir: Path, project_dir: Path) -> tuple[Pat
 
     home = Path.home()
     v2_path = home / ".config/lince/lince.toml"
-    if v2_path.exists():
+    if v2_path.exists() or v2_path.is_symlink():
         table = _read(v2_path, "[filesystem].mask_mount_points")
         _check_v2_version(table, v2_path)
         return _values(_table(table, "filesystem", v2_path), v2_path, "filesystem")
 
     legacy_path = home / ".agent-sandbox/config.toml"
-    if legacy_path.exists():
+    if legacy_path.exists() or legacy_path.is_symlink():
         return _values(_table(_read(legacy_path, "[sandbox].mask_mount_points"), "sandbox", legacy_path),
                        legacy_path, "sandbox")
     return ()

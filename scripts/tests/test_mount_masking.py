@@ -57,6 +57,42 @@ class TestMountMaskIntake(unittest.TestCase):
     def test_no_global_policy(self):
         self.assertEqual(mask.load_mount_mask_points(self.invocation, self.project), ())
 
+    def test_dangling_global_v2_symlink_blocks_legacy_fallback(self):
+        self.legacy()
+        path = self.home / ".config/lince/lince.toml"
+        path.parent.mkdir(parents=True)
+        path.symlink_to(self.root / "missing-v2.toml")
+        with self.assertRaises(mask.MountMaskError) as raised:
+            mask.load_mount_mask_points(self.invocation, self.project)
+        self.assertIn(str(path), str(raised.exception))
+        self.assertIn("[filesystem].mask_mount_points", str(raised.exception))
+
+    def test_dangling_global_legacy_symlink_is_invalid(self):
+        path = self.home / ".agent-sandbox/config.toml"
+        path.parent.mkdir(parents=True)
+        path.symlink_to(self.root / "missing-legacy.toml")
+        with self.assertRaises(mask.MountMaskError) as raised:
+            mask.load_mount_mask_points(self.invocation, self.project)
+        self.assertIn(str(path), str(raised.exception))
+        self.assertIn("[sandbox].mask_mount_points", str(raised.exception))
+
+    def test_dangling_local_symlinks_are_invalid_before_global_selection(self):
+        self.legacy()
+        for root, label in ((self.invocation, "invocation"), (self.project, "project")):
+            for relative, key in ((".lince/lince.toml", "[filesystem].mask_mount_points"),
+                                  (".agent-sandbox/config.toml", "[sandbox].mask_mount_points")):
+                with self.subTest(root=label, format=relative):
+                    path = root / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.symlink_to(self.root / "missing-local.toml")
+                    try:
+                        with self.assertRaises(mask.MountMaskError) as raised:
+                            mask.load_mount_mask_points(self.invocation, self.project)
+                        self.assertIn(str(path), str(raised.exception))
+                        self.assertIn(key, str(raised.exception))
+                    finally:
+                        path.unlink()
+
     def test_invalid_selected_v2_never_falls_back(self):
         cases = (
             ("malformed", 'version = "2.0"\n[filesystem]\nmask_mount_points = [', "mask_mount_points"),
