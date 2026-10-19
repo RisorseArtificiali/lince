@@ -3526,7 +3526,10 @@ def build_bwrap_cmd(config: dict, project_dir: Path,
     # writable mounts — one intent, two mechanisms (bwrap + Landlock).
     if landlock is not None:
         shim_src = str(Path(__file__).resolve())
-        opts = ["--ro-bind", shim_src, LANDLOCK_SHIM_MOUNT]
+        module_src = str(Path(shim_src).with_name("mount_masking.py"))
+        module_dst = str(Path(LANDLOCK_SHIM_MOUNT).with_name("mount_masking.py"))
+        opts = ["--ro-bind", shim_src, LANDLOCK_SHIM_MOUNT,
+                "--ro-bind", module_src, module_dst]
         if agent_id:
             record_file = policy_record_path(agent_id)
             try:
@@ -7708,6 +7711,7 @@ def build_learn_bwrap_cmd(
     agent_config: dict,
     agent_name: str = "claude",
     profile: str | None = None,
+    mask_mount_points: tuple[Path, ...] = (),
 ) -> list[str]:
     """Build a permissive bwrap command for learn mode.
 
@@ -7770,7 +7774,10 @@ def build_learn_bwrap_cmd(
 
     # 4. Project directory (read-write)
     project = str(project_dir.resolve())
-    cmd += ["--bind", project, project]
+    if mask_mount_points:
+        cmd += mask_mount_args(mask_mount_points, project_dir)
+    else:
+        cmd += ["--bind", project, project]
 
     # 5. Security options (keep PID isolation)
     if sec.get("unshare_pid", True):
@@ -7865,6 +7872,9 @@ def build_learn_bwrap_cmd(
             if da not in args_source:
                 args_source.append(da)
     cmd += [agent_cfg["command"]] + args_source
+
+    if mask_mount_points:
+        check_mount_exposures(cmd, mask_mount_points, project_dir)
 
     return cmd
 
@@ -8019,6 +8029,12 @@ def cmd_learn(args) -> None:
     # 1. Load config and check backend first
     config, config_path = load_config()
     project_dir = Path.cwd().resolve()
+    try:
+        mask_mount_points = validate_mount_mask_points(
+            load_mount_mask_points(Path.cwd(), project_dir))
+    except MountMaskError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     # 1a. Gate: learn mode requires strace (Linux-only). Seatbelt and nono
     # backends cannot use strace-based learn mode.
     _learn_backend = resolve_backend(config)
@@ -8068,10 +8084,15 @@ def cmd_learn(args) -> None:
         profile = resolve_default_provider(config)
 
     # 6. Build the permissive bwrap command
-    bwrap_cmd = build_learn_bwrap_cmd(
-        config, project_dir, agent_cfg,
-        agent_name=agent_name, profile=profile,
-    )
+    try:
+        bwrap_cmd = build_learn_bwrap_cmd(
+            config, project_dir, agent_cfg,
+            agent_name=agent_name, profile=profile,
+            mask_mount_points=mask_mount_points,
+        )
+    except MountMaskError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     # 7. Create temp file for strace output
     trace_fd, trace_file = tempfile.mkstemp(

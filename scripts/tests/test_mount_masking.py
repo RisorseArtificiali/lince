@@ -475,6 +475,92 @@ class TestMountMaskPlanning(unittest.TestCase):
                     self.assertIn("mask_mount_points", output.getvalue())
                     validate.assert_called_once_with((self.point,))
 
+    def test_learn_mask_after_writable_home_and_before_project(self):
+        with patch.object(self.sandbox.Path, "home", return_value=self.point):
+            argv = self.sandbox.build_learn_bwrap_cmd(
+                MIN_CONFIG, self.project, MIN_AGENT_CONFIG, mask_mount_points=(self.point,))
+        home_at = next(i for i in range(len(argv) - 2)
+                       if argv[i:i + 3] == ["--bind", str(self.point), str(self.point)])
+        mask_at = next(i for i in range(len(argv) - 1)
+                       if argv[i:i + 2] == ["--tmpfs", str(self.point)])
+        project_at = next(i for i in range(len(argv) - 2)
+                          if argv[i:i + 3] == ["--bind", str(self.project), str(self.project)])
+        self.assertEqual(argv[home_at:home_at + 3], ["--bind", str(self.point), str(self.point)])
+        self.assertLess(home_at, mask_at)
+        self.assertLess(mask_at, project_at)
+        self.assertIn(["--dir", str(self.project)],
+                      [argv[i:i + 2] for i in range(mask_at, project_at)])
+
+    def test_learn_home_overlap_does_not_reveal_sibling_via_late_bind(self):
+        with patch.object(self.sandbox.Path, "home", return_value=self.point), \
+             patch.object(self.sandbox, "x11_bwrap_args",
+                          return_value=["--ro-bind", str(self.point / "parent"), str(self.root / "alias")]):
+            with self.assertRaisesRegex(mask.MountMaskError, "expose"):
+                self.sandbox.build_learn_bwrap_cmd(
+                    MIN_CONFIG, self.project, MIN_AGENT_CONFIG, mask_mount_points=(self.point,))
+
+    def test_learn_local_policy_rejected_before_backend_and_strace(self):
+        args = type("Args", (), {"agent": "claude", "duration": None})()
+        with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+             patch.object(self.sandbox, "load_mount_mask_points",
+                          side_effect=mask.MountMaskError("local global-only")) as load, \
+             patch.object(self.sandbox, "resolve_backend", side_effect=AssertionError("backend selected")), \
+             patch.object(self.sandbox.subprocess, "Popen", side_effect=AssertionError("agent started")):
+            with redirect_stderr(io.StringIO()) as output, self.assertRaises(SystemExit):
+                self.sandbox.cmd_learn(args)
+        load.assert_called_once_with(Path.cwd(), Path.cwd().resolve())
+        self.assertIn("local global-only", output.getvalue())
+
+    def test_learn_rejected_home_overlap_never_starts_agent(self):
+        args = type("Args", (), {"agent": "mask-probe", "duration": None})()
+        config = {**MIN_CONFIG, "security": {"block_git_push": False}}
+        with patch.object(self.sandbox, "load_config", return_value=(config, self.root)), \
+             patch.object(self.sandbox.Path, "cwd", return_value=self.project), \
+             patch.object(self.sandbox.Path, "home", return_value=self.point), \
+             patch.object(self.sandbox, "load_mount_mask_points", return_value=(self.point,)), \
+             patch.object(self.sandbox, "validate_mount_mask_points", return_value=(self.point,)), \
+             patch.object(self.sandbox, "resolve_backend", return_value="agent-sandbox"), \
+             patch.object(self.sandbox, "resolve_agent_config", return_value=MIN_AGENT_CONFIG), \
+             patch.object(self.sandbox.shutil, "which", return_value="/usr/bin/strace"), \
+             patch.object(self.sandbox, "check_bwrap"), \
+             patch.object(self.sandbox, "x11_bwrap_args",
+                          return_value=["--ro-bind", str(self.point / "parent"), str(self.root / "alias")]), \
+             patch.object(self.sandbox.tempfile, "mkstemp", side_effect=AssertionError("trace started")), \
+             patch.object(self.sandbox.subprocess, "Popen", side_effect=AssertionError("agent started")):
+            with redirect_stderr(io.StringIO()) as output, self.assertRaises(SystemExit):
+                self.sandbox.cmd_learn(args)
+        self.assertIn("would expose content from masked", output.getvalue())
+
+    def test_learn_empty_list_preserves_argv(self):
+        original = self.sandbox.build_learn_bwrap_cmd(MIN_CONFIG, self.project, MIN_AGENT_CONFIG)
+        self.assertEqual(original, self.sandbox.build_learn_bwrap_cmd(
+            MIN_CONFIG, self.project, MIN_AGENT_CONFIG, mask_mount_points=()))
+
+    def test_landlock_targets_include_mask_and_project_even_with_late_policy_bind(self):
+        record = self.root / "record"
+        record.mkdir()
+        with patch.object(self.sandbox, "policy_record_path", return_value=record / "id.json"):
+            argv = self.build(mask_mount_points=(self.point,), agent_id="id",
+                              landlock={"connect_ports": [], "bind_ports": []})
+        targets = self.sandbox.bwrap_rw_targets(argv[:argv.index("--")])
+        self.assertIn(str(self.point), targets)
+        self.assertIn(str(self.project), targets)
+        self.assertIn(str(record), targets)
+        shim = argv[argv.index("--") + 1:]
+        self.assertIn(["--rw", str(self.point)], [shim[i:i + 2] for i in range(len(shim) - 1)])
+        self.assertIn(["--rw", str(self.project)], [shim[i:i + 2] for i in range(len(shim) - 1)])
+
+    def test_landlock_shim_binds_sibling_module_with_and_without_mask(self):
+        source = str(Path(self.sandbox.__file__).with_name("mount_masking.py"))
+        target = str(Path(self.sandbox.LANDLOCK_SHIM_MOUNT).with_name("mount_masking.py"))
+        for points in ((), (self.point,)):
+            with self.subTest(mask_mount_points=points):
+                argv = self.build(mask_mount_points=points,
+                                  landlock={"connect_ports": [], "bind_ports": []})
+                options = argv[:argv.index("--")]
+                self.assertIn(["--ro-bind", source, target],
+                              [options[i:i + 3] for i in range(len(options) - 2)])
+
 
 if __name__ == "__main__":
     unittest.main()
