@@ -104,6 +104,7 @@ if [ -f "$INSTALL_DST" ]; then
     cp "$INSTALL_DST" "${INSTALL_DST}.bak.$(date +%Y%m%d-%H%M%S)"
 fi
 cp "$SANDBOX_CMD" "$INSTALL_DST"
+cp "$SCRIPT_DIR/mount_masking.py" "$HOME/.local/bin/mount_masking.py"
 chmod +x "$INSTALL_DST"
 echo -e "${GREEN}  ✓ Installed: $INSTALL_DST${NC}"
 

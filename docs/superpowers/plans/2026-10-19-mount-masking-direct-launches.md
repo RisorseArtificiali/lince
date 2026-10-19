@@ -22,6 +22,8 @@
 
 If a step does not produce its stated expected result — a test fails for a different reason, a referenced symbol differs, or a bwrap/Landlock capability does not behave as hypothesized — STOP that task. Do not silently change the guarantee. Record step, expected versus observed, and the smallest question needed to proceed; revise this plan and obtain a decision before implementation resumes.
 
+**Approved deviation (Task 1 intake tests, 2026-10-19):** The first GREEN run expected a passing newer-v2-version diagnostic test, but the new assertion looked for `version` while the existing `lince-config.check_version_contract` diagnostic says `newer lince` and `lince update`. The user approved changing that assertion to match the existing diagnostic and resuming focused tests, installed-copy verification, and implementation. No change to the version contract or masking guarantee.
+
 ---
 
 ## Verified baseline (worktree `feat/mount-masking`, clean at `d52f0d9`)
