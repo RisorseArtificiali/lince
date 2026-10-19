@@ -21,6 +21,13 @@ The homepage links to the [Views and Themes guide](documentation/dashboard/views
 Its palette previews in `assets/dashboard-theme-*.svg` come from the dashboard
 renderer; they are not screenshots of the compact or statusline layouts.
 
+## Planning records
+
+Feature requirements and their related design, review, and implementation-plan
+documents are indexed in [Product requirements](prd/README.md). These are
+repository planning records, separate from the published user documentation in
+`docs/documentation/`.
+
 ## Custom domain
 
 The `CNAME` file points to `lince.sh`. DNS must have:
