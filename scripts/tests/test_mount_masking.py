@@ -670,6 +670,46 @@ class TestMountMaskPlanning(unittest.TestCase):
                 self.sandbox.build_bwrap_cmd(MIN_CONFIG, self.project, [], agent_config=agent,
                                              mask_mount_points=(self.point,))
 
+    def test_bound_directory_parent_symlink_into_masked_home_is_rejected(self):
+        home = self.root / "home"
+        hidden_dir = home / ".local/bin"
+        hidden_dir.mkdir(parents=True)
+        hidden = hidden_dir / "my-agent"
+        hidden.write_text("#!/bin/sh\nexit 0\n")
+        hidden.chmod(0o755)
+        safe = self.root / "safe"
+        safe.mkdir()
+        (safe / "linkdir").symlink_to(hidden_dir, target_is_directory=True)
+        command = home / ".claude/linkdir/my-agent"
+        agent = {**MIN_AGENT_CONFIG, "command": str(command)}
+        config = {**MIN_CONFIG, "claude": {"config_dir": str(safe)}}
+        with patch.object(self.sandbox.Path, "home", return_value=home):
+            with self.assertRaisesRegex(mask.MountMaskError, "my-agent.*mask_mount_points"):
+                self.sandbox.build_bwrap_cmd(config, self.project, [], agent_config=agent,
+                                             mask_mount_points=(home / ".local",))
+            with patch.object(self.sandbox, "x11_bwrap_args",
+                              return_value=["--ro-bind", str(safe), str(home / ".claude")]):
+                with self.assertRaisesRegex(mask.MountMaskError, "my-agent.*mask_mount_points"):
+                    self.sandbox.build_learn_bwrap_cmd(config, self.project, agent,
+                                                       mask_mount_points=(home / ".local",))
+
+    def test_bound_directory_parent_symlink_to_remounted_project_is_allowed(self):
+        home = self.root / "home"
+        point = home / ".local"
+        point.mkdir(parents=True)
+        executable = self.project / "my-agent"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o755)
+        safe = self.root / "safe"
+        safe.mkdir()
+        (safe / "linkdir").symlink_to(self.project, target_is_directory=True)
+        command = home / ".claude/linkdir/my-agent"
+        agent = {**MIN_AGENT_CONFIG, "command": str(command)}
+        config = {**MIN_CONFIG, "claude": {"config_dir": str(safe)}}
+        with patch.object(self.sandbox.Path, "home", return_value=home):
+            self.sandbox.build_bwrap_cmd(config, self.project, [], agent_config=agent,
+                                         mask_mount_points=(point,))
+
     def test_landlock_python_runtime_hidden_by_mask_is_rejected(self):
         python = self.point / "python"
         python.write_text("#!/bin/sh\nexit 0\n")

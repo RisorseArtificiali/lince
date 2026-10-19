@@ -188,4 +188,36 @@ write_config "[\"$POINT\"]" "$HOME/home_probe.py" false
 ( cd "$HOME" && python3 "$SANDBOX" learn --agent mask-probe --duration 5 ) >"$WORK/home-learn.log" 2>&1
 test "$(<"$HOME/learn-home-ran")" = yes
 echo "PASS: learn from HOME loads the global legacy mask"
+
+# A generated Claude bind can contain a directory symlink. The link is
+# followed in the *sandbox* namespace, where .local is masked, even though
+# the host can resolve the executable in that directory.
+SAFE="$FIXTURE/safe"
+mkdir -p "$SAFE" "$HOME/.local/bin"
+printf '#!/bin/sh\nprintf ran > "%s"\n' "$PROJECT/alias-agent-ran" > "$HOME/.local/bin/my-agent"
+chmod +x "$HOME/.local/bin/my-agent"
+ln -s "$HOME/.local/bin" "$SAFE/linkdir"
+write_config "[\"$HOME/.local\"]" "$PROJECT/mount_mask_probe.py" false "$HOME/.claude/linkdir/my-agent"
+printf '\n[claude]\nconfig_dir = "%s"\n' "$SAFE" >> "$HOME/.agent-sandbox/config.toml"
+rm -f "$PROJECT/alias-agent-ran"
+if ( cd "$WORK" && python3 "$SANDBOX" run -p "$PROJECT" --agent mask-probe ) \
+    >"$WORK/hidden-bound-alias.log" 2>&1; then
+    echo "FAIL: bound parent symlink launched masked executable" >&2; exit 1
+fi
+test ! -e "$PROJECT/alias-agent-ran"
+if ! grep -q 'Error: .*my-agent.*mask_mount_points hides a required executable' \
+    "$WORK/hidden-bound-alias.log"; then
+    echo "FAIL: bound parent symlink was not refused before agent exec" >&2; exit 1
+fi
+echo "PASS: bound parent symlink into masked HOME refused before agent exec"
+
+# The same bound symlink is valid when it points to the project bind.
+printf '#!/bin/sh\nprintf ran > "%s"\n' "$PROJECT/alias-agent-ran" > "$PROJECT/my-agent"
+chmod +x "$PROJECT/my-agent"
+rm "$SAFE/linkdir"
+ln -s "$PROJECT" "$SAFE/linkdir"
+( cd "$WORK" && python3 "$SANDBOX" run -p "$PROJECT" --agent mask-probe ) \
+    >"$WORK/visible-bound-alias.log" 2>&1
+test "$(<"$PROJECT/alias-agent-ran")" = ran
+echo "PASS: bound parent symlink to remounted project executes"
 NAMESPACE

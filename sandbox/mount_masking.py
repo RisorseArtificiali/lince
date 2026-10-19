@@ -339,6 +339,9 @@ def check_required_executables(argv: list[str], paths: tuple[Path, ...], project
             i += 1
 
     def visible_executable(candidate: Path, visited: frozenset[Path] = frozenset()) -> Path | None:
+        # Normalize only lexical dot components; resolve links after mapping
+        # each component into the namespace, never through the host view.
+        candidate = Path(os.path.normpath(str(candidate)))
         if candidate in visited:
             return None
         covering = next(((source, dest) for _, source, dest in reversed(mounts)
@@ -346,13 +349,22 @@ def check_required_executables(argv: list[str], paths: tuple[Path, ...], project
         if covering is None or covering[0] is None:
             return None
         source, dest = covering
-        mapped = source / candidate.relative_to(dest)
+        # bwrap resolves the bind *source* on the host, but symlinks in
+        # children of that source are traversed inside the final namespace.
+        # Follow those components at their destination spelling, restarting
+        # mount lookup after each link (a target may be masked or remounted).
+        relative = candidate.relative_to(dest)
+        mapped = source.resolve()
+        namespace = dest
+        for index, part in enumerate(relative.parts):
+            mapped /= part
+            namespace /= part
+            if mapped.is_symlink():
+                link = mapped.readlink()
+                target = link if link.is_absolute() else Path(os.path.normpath(str(namespace.parent / link)))
+                return visible_executable(target.joinpath(*relative.parts[index + 1:]), visited | {candidate})
         if not mapped.is_file() or not os.access(mapped, os.X_OK):
             return None
-        if mapped.is_symlink():
-            link = mapped.readlink()
-            target = link if link.is_absolute() else Path(os.path.normpath(str(candidate.parent / link)))
-            return visible_executable(target, visited | {candidate})
         # A symlink in a parent component can likewise resolve into a mask,
         # unless a final bind replaced that parent with different content.
         resolved = candidate.resolve()

@@ -50,6 +50,8 @@ If a step does not produce its stated expected result — a test fails for a dif
 
 **Approved deviation (final review executable regression test, 2026-10-19):** The whole-branch review found that masking HOME could hide the agent executable without a pre-exec refusal. A new absolute-executable regression test was expected to fail on the missing guard, but its helper passed `agent_config` twice and raised `TypeError` before exercising the builder; the separate PATH-resolved test reached its expected failing assertion. The user approved changing only the erroneous test invocation to call `build_bwrap_cmd` directly with one `agent_config`, obtaining a valid RED, then continuing the consolidated two-finding fix wave and verification. The runtime fail-closed guarantee remains mandatory.
 
+**Approved additional final fix wave (2026-10-19):** The scoped re-review after final fix `ffca403` found a remaining load-bearing executable-visibility bypass: an agent command reached through a bound directory alias with a symlink in a parent component can resolve inside the sandbox into a masked HOME subtree even though the guard finds an executable on the host. The user explicitly approved one more narrowly scoped fix and re-review beyond the usual one-wave SDD final-review limit. Require a regression for that alias/symlink path, pre-agent-exec refusal, covering tests and a scoped re-review; do not claim release until both this finding and the separate Dati host gate are resolved.
+
 ---
 
 ## Verified baseline (worktree `feat/mount-masking`, clean at `d52f0d9`)
