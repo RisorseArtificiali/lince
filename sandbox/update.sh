@@ -26,6 +26,7 @@ if [ ! -f "$INSTALL_DST" ]; then
 fi
 
 cp "$SANDBOX_CMD" "$INSTALL_DST"
+cp "$SCRIPT_DIR/mount_masking.py" "$HOME/.local/bin/mount_masking.py"
 chmod +x "$INSTALL_DST"
 echo -e "${GREEN}  ✓ Command updated${NC}"
 

@@ -54,6 +54,7 @@ Key reference for `~/.config/lince/lince.toml` (and the project overlay `<projec
 | `ro_dirs` | list[string] | — | — |
 | `home_ro_dirs` | list[string] | — | — |
 | `home_rw_dirs` | list[string] | — | — |
+| `mask_mount_points` | list[string] | `[]` | Global-only mount-point directories to mask for direct agent-sandbox run/learn bwrap launches; [] or absent retains the previous filesystem view. Config v2 takes precedence over legacy even when empty. Runtime rejects project-local definitions and invalid paths; JSON Schema validates types only. |
 
 ## `[sandbox]`
 

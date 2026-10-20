@@ -25,7 +25,7 @@ confirm() {
 if [ -f "$INSTALL_DST" ]; then
     echo -e "${YELLOW}Found: $INSTALL_DST${NC}"
     if confirm "  Remove command?"; then
-        rm -f "$INSTALL_DST" "${INSTALL_DST}.bak."*
+        rm -f "$INSTALL_DST" "${INSTALL_DST}.bak."* "$HOME/.local/bin/mount_masking.py"
         rm -f "$HOME/.local/bin/agents-defaults.toml"
         echo -e "${GREEN}  ✓ Removed${NC}"
     fi

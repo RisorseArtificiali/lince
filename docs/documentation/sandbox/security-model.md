@@ -108,6 +108,55 @@ Environment variables are cleared (`--clearenv`) and only an explicit whitelist 
 
 ---
 
+## Opt-in mount-point visibility (direct bwrap launches)
+
+Without an opt-in list, the read-only root still exposes other mounted volumes.
+For **direct** `agent-sandbox run` and `learn` launches, set a global list of
+absolute directory mount paths in Config v2
+(`~/.config/lince/lince.toml`, `[filesystem].mask_mount_points`) or legacy
+(`~/.agent-sandbox/config.toml`, `[sandbox].mask_mount_points`). For example:
+
+```toml
+# In global Config v2 (version = "2.0" at the top of the file)
+[filesystem]
+mask_mount_points = ["/run/media/alessio/Dati"]
+```
+
+Configure the real mount path, not a symlink such as `/dati`. An empty or
+absent list retains the old view. If global v2 exists it selects its list,
+even `[]`, rather than the legacy list. Malformed v2 TOML, a missing or
+unsupported v2 version, or an invalid `[filesystem].mask_mount_points` list
+or path fails without legacy fallback. The mount-mask loader does not fully
+validate unrelated v2 settings; other runner settings still use legacy
+configuration. A project-local definition in either config format (even `[]`)
+fails: schema types do not grant local authorization. On direct bwrap launches
+at all levels, including `learn`, the listed path becomes an empty writable
+ephemeral view; only the working directory is re-exposed read/write with
+host-persistent writes and traversable ancestors. Symlinks to that path
+follow the same view. An unsupported backend refuses the launch.
+
+Nonexistent, non-directory, symlink-containing and essential mount paths
+(`/`, `/proc`, `/dev`, `/run`) are rejected before launch; valid descendants
+of `/run` are permitted. An existing but unmounted configured path produces
+a warning and is **still masked** (this says nothing about the volume's
+physical presence). Unsafe overlap with required automatic binds is refused
+before agent execution. The preflight catches directly identifiable hidden
+launch executables and their shebang interpreters, but does not inspect every
+agent argument or ELF dynamic loader. A script or other dependency under the
+mask may instead cause a later error from the launched tool; that failure does
+not expose the original file through the configured path. Changes take effect
+on **new** launches only: restart existing agents for a new view.
+Dashboard-started agents do not have a
+verified mount-masking guarantee in this direct-launch phase.
+
+The mask applies to configured paths, not unconfigured aliases to the same
+content. Explicit binds, experimental overrides that re-expose paths, and
+host mounts added after launch are limitations; it is not a guarantee about
+all routes to a volume. The working directory may itself span the whole
+mount, in which case the user has chosen to expose that breadth.
+
+---
+
 ## Git Push Blocking
 
 Git push is blocked at three independent layers:

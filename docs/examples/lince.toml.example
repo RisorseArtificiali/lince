@@ -14,6 +14,13 @@ version = "2.0"
 default = "deny"
 allowed_hosts = []
 
+# Global-only mount masking for direct agent-sandbox run/learn (bwrap).
+# Empty (or absent) keeps the previous filesystem view. To enable, replace
+# [] with absolute mount paths, e.g. ["/run/media/alessio/Dati"] when mounted.
+# Do not put this key in a project-local .lince/lince.toml.
+[filesystem]
+mask_mount_points = []
+
 # Paranoid claude with two extra allowed hosts (design §7.3): pypi reachable
 # ONLY through the proxy — direct connections die at the kernel.
 [agents.claude]

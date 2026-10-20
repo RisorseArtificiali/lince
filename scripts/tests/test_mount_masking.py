@@ -1,0 +1,815 @@
+"""Strict mount-mask policy intake, independent of the legacy config merge."""
+
+import io
+import importlib.machinery
+import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stderr
+from pathlib import Path
+from unittest.mock import patch
+
+from scripts.tests.test_sandbox_broker_bind import MIN_CONFIG, MIN_AGENT_CONFIG
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sandbox"))
+
+import mount_masking as mask  # noqa: E402
+
+
+class TestMountMaskIntake(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.home = self.root / "home"
+        self.home.mkdir()
+        self.invocation = self.root / "invocation"
+        self.project = self.root / "project"
+        self.invocation.mkdir()
+        self.project.mkdir()
+        home_patch = patch.object(mask.Path, "home", return_value=self.home)
+        home_patch.start()
+        self.addCleanup(home_patch.stop)
+
+    def write(self, path, text):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def legacy(self, text='[sandbox]\nmask_mount_points = ["/mount/old"]\n'):
+        return self.write(self.home / ".agent-sandbox/config.toml", text)
+
+    def v2(self, text='version = "2.0"\n[filesystem]\nmask_mount_points = ["/mount/new"]\n'):
+        return self.write(self.home / ".config/lince/lince.toml", text)
+
+    def test_global_source_switch(self):
+        for scenario, v2_text, expected in (
+            ("legacy alone", None, (Path("/mount/old"),)),
+            ("v2 nonempty", 'version = "2.0"\n[filesystem]\nmask_mount_points = ["/mount/new"]\n',
+             (Path("/mount/new"),)),
+            ("v2 empty", 'version = "2.0"\n[filesystem]\nmask_mount_points = []\n', ()),
+            ("v2 key absent", 'version = "2.0"\n[filesystem]\n', ()),
+        ):
+            with self.subTest(scenario=scenario):
+                self.legacy()
+                if v2_text is not None:
+                    self.v2(v2_text)
+                try:
+                    self.assertEqual(mask.load_mount_mask_points(self.invocation, self.project), expected)
+                finally:
+                    (self.home / ".config/lince/lince.toml").unlink(missing_ok=True)
+
+    def test_no_global_policy(self):
+        self.assertEqual(mask.load_mount_mask_points(self.invocation, self.project), ())
+
+    def test_dangling_global_v2_symlink_blocks_legacy_fallback(self):
+        self.legacy()
+        path = self.home / ".config/lince/lince.toml"
+        path.parent.mkdir(parents=True)
+        path.symlink_to(self.root / "missing-v2.toml")
+        with self.assertRaises(mask.MountMaskError) as raised:
+            mask.load_mount_mask_points(self.invocation, self.project)
+        self.assertIn(str(path), str(raised.exception))
+        self.assertIn("[filesystem].mask_mount_points", str(raised.exception))
+
+    def test_dangling_global_legacy_symlink_is_invalid(self):
+        path = self.home / ".agent-sandbox/config.toml"
+        path.parent.mkdir(parents=True)
+        path.symlink_to(self.root / "missing-legacy.toml")
+        with self.assertRaises(mask.MountMaskError) as raised:
+            mask.load_mount_mask_points(self.invocation, self.project)
+        self.assertIn(str(path), str(raised.exception))
+        self.assertIn("[sandbox].mask_mount_points", str(raised.exception))
+
+    def test_dangling_local_symlinks_are_invalid_before_global_selection(self):
+        self.legacy()
+        for root, label in ((self.invocation, "invocation"), (self.project, "project")):
+            for relative, key in ((".lince/lince.toml", "[filesystem].mask_mount_points"),
+                                  (".agent-sandbox/config.toml", "[sandbox].mask_mount_points")):
+                with self.subTest(root=label, format=relative):
+                    path = root / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.symlink_to(self.root / "missing-local.toml")
+                    try:
+                        with self.assertRaises(mask.MountMaskError) as raised:
+                            mask.load_mount_mask_points(self.invocation, self.project)
+                        self.assertIn(str(path), str(raised.exception))
+                        self.assertIn(key, str(raised.exception))
+                    finally:
+                        path.unlink()
+
+    def test_invalid_selected_v2_never_falls_back(self):
+        cases = (
+            ("malformed", 'version = "2.0"\n[filesystem]\nmask_mount_points = [', "mask_mount_points"),
+            ("missing version", '[filesystem]\nmask_mount_points = []\n', "version"),
+            ("newer minor", 'version = "2.1"\n[filesystem]\nmask_mount_points = []\n', "newer lince"),
+            ("different major", 'version = "1.0"\n[filesystem]\nmask_mount_points = []\n', "version"),
+            ("malformed version", 'version = "2"\n[filesystem]\nmask_mount_points = []\n', "version"),
+            ("malformed minor", 'version = "2.-1"\n[filesystem]\nmask_mount_points = []\n', "version"),
+            ("bad list type", 'version = "2.0"\n[filesystem]\nmask_mount_points = "bad"\n',
+             "mask_mount_points"),
+            ("bad list item", 'version = "2.0"\n[filesystem]\nmask_mount_points = [1]\n',
+             "mask_mount_points"),
+        )
+        self.legacy()
+        for scenario, text, hint in cases:
+            with self.subTest(scenario=scenario):
+                path = self.v2(text)
+                with self.assertRaises(mask.MountMaskError) as raised:
+                    mask.load_mount_mask_points(self.invocation, self.project)
+                self.assertIn(str(path), str(raised.exception))
+                self.assertIn("[filesystem].mask_mount_points", str(raised.exception))
+                self.assertIn(hint, str(raised.exception))
+                if scenario == "newer minor":
+                    self.assertIn("lince update", str(raised.exception))
+
+    def test_invalid_legacy_value(self):
+        for text in ('[sandbox]\nmask_mount_points = "bad"\n',
+                     '[sandbox]\nmask_mount_points = [false]\n',
+                     '[sandbox]\nmask_mount_points = [\n'):
+            with self.subTest(text=text):
+                path = self.legacy(text)
+                with self.assertRaises(mask.MountMaskError) as raised:
+                    mask.load_mount_mask_points(self.invocation, self.project)
+                self.assertIn(str(path), str(raised.exception))
+                self.assertIn("[sandbox].mask_mount_points", str(raised.exception))
+
+    def test_local_key_rejected_in_each_format_and_each_command_root(self):
+        self.legacy()
+        self.v2()
+        for command, invocation, project, root, label in (
+            ("run cwd", self.invocation, self.project, self.invocation, "invocation"),
+            ("run -p", self.invocation, self.project, self.project, "project"),
+            ("learn cwd", self.invocation, self.invocation, self.invocation, "invocation"),
+        ):
+            for relative, section in ((".lince/lince.toml", "filesystem"),
+                                      (".agent-sandbox/config.toml", "sandbox")):
+                for value in ("[]", '["/mount/local"]'):
+                    with self.subTest(command=command, format=section, value=value):
+                        path = self.write(root / relative, f"[{section}]\nmask_mount_points = {value}\n")
+                        try:
+                            with self.assertRaises(mask.MountMaskError) as raised:
+                                mask.load_mount_mask_points(invocation, project)
+                            self.assertIn(label, str(raised.exception))
+                            self.assertIn(str(path), str(raised.exception))
+                            self.assertIn(f"[{section}].mask_mount_points", str(raised.exception))
+                        finally:
+                            path.unlink()
+
+    def test_non_selected_local_format_is_still_rejected(self):
+        for global_format, local_format, section in (
+            ("v2", ".agent-sandbox/config.toml", "sandbox"),
+            ("legacy", ".lince/lince.toml", "filesystem"),
+        ):
+            with self.subTest(global_format=global_format):
+                if global_format == "v2":
+                    self.v2()
+                else:
+                    (self.home / ".config/lince/lince.toml").unlink(missing_ok=True)
+                    self.legacy()
+                path = self.write(self.project / local_format, f"[{section}]\nmask_mount_points = []\n")
+                try:
+                    with self.assertRaises(mask.MountMaskError):
+                        mask.load_mount_mask_points(self.invocation, self.project)
+                finally:
+                    path.unlink()
+
+    def test_home_as_invocation_or_learn_root_is_not_a_local_legacy_override(self):
+        for global_format, value, expected in (
+            ("legacy", '["/mount/old"]', (Path("/mount/old"),)),
+            ("legacy empty", '[]', ()),
+            ("v2", '["/mount/old"]', (Path("/mount/new"),)),
+            ("v2 empty", '[]', ()),
+        ):
+            with self.subTest(global_format=global_format):
+                self.legacy(f'[sandbox]\nmask_mount_points = {value}\n')
+                if global_format.startswith("v2"):
+                    self.v2('version = "2.0"\n[filesystem]\nmask_mount_points = '
+                            + ('[]' if global_format == "v2 empty" else '["/mount/new"]') + '\n')
+                for invocation, project in ((self.home, self.project), (self.home, self.home)):
+                    self.assertEqual(mask.load_mount_mask_points(invocation, project), expected)
+                (self.home / ".config/lince/lince.toml").unlink(missing_ok=True)
+
+    def test_home_alias_is_global_but_distinct_local_file_still_fails(self):
+        self.legacy()
+        alias = self.root / "home-alias"
+        alias.symlink_to(self.home, target_is_directory=True)
+        self.assertEqual(mask.load_mount_mask_points(alias, self.project), (Path("/mount/old"),))
+        path = self.write(self.project / ".agent-sandbox/config.toml", "[sandbox]\nmask_mount_points = []\n")
+        try:
+            with self.assertRaisesRegex(mask.MountMaskError, "global-only"):
+                mask.load_mount_mask_points(self.home, self.project)
+        finally:
+            path.unlink()
+
+    def test_home_local_v2_address_is_not_global_v2_address(self):
+        self.legacy()
+        self.v2()
+        path = self.write(self.home / ".lince/lince.toml", "[filesystem]\nmask_mount_points = []\n")
+        with self.assertRaisesRegex(mask.MountMaskError, "global-only"):
+            mask.load_mount_mask_points(self.home, self.project)
+        self.assertTrue(path.exists())
+
+    def test_local_symlink_to_global_legacy_is_still_a_local_definition(self):
+        global_file = self.legacy()
+        local = self.project / ".agent-sandbox/config.toml"
+        local.parent.mkdir()
+        local.symlink_to(global_file)
+        with self.assertRaisesRegex(mask.MountMaskError, "global-only"):
+            mask.load_mount_mask_points(self.home, self.project)
+
+    def test_malformed_local_is_fatal_even_when_other_local_has_key(self):
+        self.v2()
+        self.write(self.project / ".lince/lince.toml", "[")
+        path = self.write(self.project / ".agent-sandbox/config.toml", "[sandbox]\nmask_mount_points = []\n")
+        with self.assertRaises(mask.MountMaskError) as raised:
+            mask.load_mount_mask_points(self.invocation, self.project)
+        self.assertIn("mask_mount_points", str(raised.exception))
+        self.assertTrue(str(path) in str(raised.exception) or "lince.toml" in str(raised.exception))
+
+
+class TestMountMaskValidation(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.point = self.root / "mounted"
+        self.point.mkdir()
+
+    def mountinfo(self, *points):
+        def escape(path):
+            return str(path).replace("\\", r"\134").replace(" ", r"\040").replace("\t", r"\011")
+
+        data = "".join(f"36 25 0:31 / {escape(point)} rw - tmpfs tmpfs rw\n" for point in points)
+        return patch.object(mask.Path, "read_text", return_value=data)
+
+    def test_empty_list_does_not_inspect_mounts_or_warn(self):
+        output = io.StringIO()
+        with patch.object(mask.Path, "read_text", side_effect=AssertionError("mountinfo read")):
+            with redirect_stderr(output):
+                self.assertEqual(mask.validate_mount_mask_points(()), ())
+        self.assertEqual(output.getvalue(), "")
+
+    def test_invalid_spellings(self):
+        for value in (Path("relative"), Path("~/mounted"), self.root / "../mounted"):
+            with self.subTest(value=value):
+                with self.assertRaises(mask.MountMaskError):
+                    mask.validate_mount_mask_points((value,))
+
+    def test_final_and_intermediate_symlinks_are_rejected(self):
+        real = self.root / "real"
+        real.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(real, target_is_directory=True)
+        (real / "child").mkdir()
+        for point in (alias, alias / "child"):
+            with self.subTest(point=point):
+                with self.assertRaisesRegex(mask.MountMaskError, "symlink"):
+                    mask.validate_mount_mask_points((point,))
+
+    def test_file_and_missing_directory_are_rejected(self):
+        ordinary_file = self.root / "file"
+        ordinary_file.write_text("data", encoding="utf-8")
+        with self.assertRaisesRegex(mask.MountMaskError, "not a directory"):
+            mask.validate_mount_mask_points((ordinary_file,))
+        with self.assertRaisesRegex(mask.MountMaskError, "does not exist"):
+            mask.validate_mount_mask_points((self.root / "missing",))
+
+    def test_exact_essential_paths_but_not_run_descendant(self):
+        for point in (Path("/"), Path("/proc"), Path("/dev"), Path("/run")):
+            with self.subTest(point=point):
+                with self.assertRaises(mask.MountMaskError):
+                    mask.validate_mount_mask_points((point,))
+        run = self.root / "run"
+        child = run / "user"
+        child.mkdir(parents=True)
+        with patch.object(mask, "_ESSENTIAL_MOUNT_POINTS", frozenset({run})):
+            with self.mountinfo(child):
+                self.assertEqual(mask.validate_mount_mask_points((child,)), (child,))
+
+    def test_exact_mountpoint_warns_for_existing_unmounted_point(self):
+        unmounted = self.point / "unmounted"
+        unmounted.mkdir()
+        output = io.StringIO()
+        with self.mountinfo(self.point):
+            with redirect_stderr(output):
+                self.assertEqual(mask.validate_mount_mask_points((self.point, unmounted)),
+                                 (self.point, unmounted))
+        warning = output.getvalue()
+        self.assertEqual(warning.count("path is not mounted at launch; masking the path anyway"), 1)
+        self.assertIn(str(unmounted), warning)
+        self.assertNotIn("volume absent", warning)
+
+    def test_decodes_escaped_mountpoint_in_mountinfo(self):
+        for name in ("space dir", "tab\tdir", "back\\slash"):
+            with self.subTest(name=name):
+                point = self.root / name
+                point.mkdir()
+                output = io.StringIO()
+                with self.mountinfo(point):
+                    with redirect_stderr(output):
+                        self.assertEqual(mask.validate_mount_mask_points((point,)), (point,))
+                self.assertEqual(output.getvalue(), "")
+
+    def test_validation_never_resolves_symlinks(self):
+        with patch.object(mask.Path, "resolve", side_effect=AssertionError("resolve called")):
+            with self.mountinfo(self.point):
+                self.assertEqual(mask.validate_mount_mask_points((self.point,)), (self.point,))
+
+    def test_duplicate_paths_rejected_after_lexical_normalization(self):
+        with self.assertRaisesRegex(mask.MountMaskError, "duplicate"):
+            mask.validate_mount_mask_points((self.point, Path(str(self.point) + "/./")))
+
+    def test_nested_points_are_ancestor_first_in_either_input_order(self):
+        child = self.point / "child"
+        child.mkdir()
+        with self.mountinfo(self.point, child):
+            for paths in ((self.point, child), (child, self.point)):
+                with self.subTest(paths=paths):
+                    self.assertEqual(mask.validate_mount_mask_points(paths), (self.point, child))
+
+    def test_unavailable_mountinfo_is_an_explicit_error(self):
+        with patch.object(mask.Path, "read_text", side_effect=OSError("permission denied")):
+            with self.assertRaisesRegex(mask.MountMaskError, "mountinfo.*permission denied"):
+                mask.validate_mount_mask_points((self.point,))
+
+
+def load_sandbox():
+    path = Path(__file__).resolve().parents[2] / "sandbox/agent-sandbox"
+    loader = importlib.machinery.SourceFileLoader("sandbox_mask_test", str(path))
+    spec = importlib.util.spec_from_loader("sandbox_mask_test", loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+class TestMountMaskPlanning(unittest.TestCase):
+    def setUp(self):
+        host_env = patch.dict(os.environ)
+        host_env.start()
+        self.addCleanup(host_env.stop)
+        for name in list(os.environ):
+            if name.startswith("LINCE_MSG_") or name in ("DISPLAY", "WAYLAND_DISPLAY"):
+                os.environ.pop(name)
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.point = self.root / "volume"
+        self.project = self.point / "parent/deep/project"
+        self.project.mkdir(parents=True)
+        self.sandbox = load_sandbox()
+        self.runtime = self.root / "runtime"
+        self.runtime.mkdir()
+        self.sandbox.SANDBOX_DIR = self.runtime
+
+    def build(self, **kwargs):
+        return self.sandbox.build_bwrap_cmd(MIN_CONFIG, self.project, [], agent_config=MIN_AGENT_CONFIG, **kwargs)
+
+    def test_ordered_mask_deep_project_and_writable_outside(self):
+        argv = self.build(mask_mount_points=(self.point,))
+        root = argv.index("--ro-bind")
+        mask_at = next(
+            i for i in range(root + 1, len(argv) - 1) if argv[i:i + 2] == ["--tmpfs", str(self.point)])
+        bind_at = next(i for i in range(mask_at + 1, len(argv) - 2)
+                       if argv[i:i + 3] == ["--bind", str(self.project), str(self.project)])
+        self.assertEqual(argv[root:root + 3], ["--ro-bind", "/", "/"])
+        self.assertLess(root, mask_at)
+        self.assertEqual(argv[mask_at:bind_at + 3], [
+            "--tmpfs", str(self.point),
+            "--dir", str(self.point / "parent"),
+            "--dir", str(self.point / "parent/deep"),
+            "--dir", str(self.project),
+            "--bind", str(self.project), str(self.project),
+        ])
+        outside = self.point / "other"
+        outside.mkdir()
+        # Earlier config/CLI writable binds are hidden by the later tmpfs.
+        self.build(mask_mount_points=(self.point,), extra_rw_cli=[str(outside)])
+
+    def test_nested_masks_and_project_wide_mask(self):
+        nested = self.point / "parent"
+        self.assertEqual(mask.mask_mount_args((self.point, nested), self.project), [
+            "--tmpfs", str(self.point), "--dir", str(nested), "--tmpfs", str(nested),
+            "--dir", str(nested / "deep"), "--dir", str(self.project),
+            "--bind", str(self.project), str(self.project),
+        ])
+        argv = self.build(mask_mount_points=(self.project,))
+        at = next(
+            i for i in range(len(argv) - 1) if argv[i:i + 2] == ["--tmpfs", str(self.project)])
+        self.assertEqual(argv[at:at + 5], ["--tmpfs", str(self.project),
+                                               "--bind", str(self.project), str(self.project)])
+
+    def test_project_child_mask_survives_project_bind(self):
+        child = self.project / "private"
+        child.mkdir()
+        argv = self.build(mask_mount_points=(child,))
+        project_at = next(i for i in range(len(argv) - 2)
+                          if argv[i:i + 3] == ["--bind", str(self.project), str(self.project)])
+        self.assertIn(["--tmpfs", str(child)], [argv[i:i + 2] for i in range(project_at + 1, len(argv) - 1)])
+
+    def test_nested_project_children_recreate_directory_after_parent_tmpfs(self):
+        child = self.project / "private"
+        nested = child / "deeper"
+        nested.mkdir(parents=True)
+        argv = self.build(mask_mount_points=(child, nested))
+        self.assertIn(["--tmpfs", str(child), "--dir", str(nested), "--tmpfs", str(nested)],
+                      [argv[i:i + 6] for i in range(len(argv) - 5)])
+
+    def test_experimental_raw_mount_is_an_explicit_override(self):
+        sibling = self.point / "hidden"
+        sibling.mkdir()
+        argv = self.build(mask_mount_points=(self.point,),
+                          raw_bwrap_args=["--bind", str(sibling), str(sibling)])
+        self.assertIn(["--bind", str(sibling), str(sibling)],
+                      [argv[i:i + 3] for i in range(len(argv) - 2)])
+
+    def test_later_sibling_or_ancestor_bind_rejected_even_after_messaging(self):
+        sibling = self.point / "hidden"
+        sibling.mkdir()
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=["--bind", str(sibling), str(sibling)]):
+            with self.assertRaisesRegex(mask.MountMaskError, "hidden"):
+                self.build(mask_mount_points=(self.point,))
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=["--ro-bind", str(self.point), str(self.point)]):
+            with self.assertRaisesRegex(mask.MountMaskError, "volume"):
+                self.build(mask_mount_points=(self.point,))
+
+    def test_later_bind_through_symlinked_source_is_rejected(self):
+        sibling = self.point / "hidden"
+        sibling.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(self.point, target_is_directory=True)
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=["--bind", str(alias / "hidden"), str(self.root / "exposed")]):
+            with self.assertRaisesRegex(mask.MountMaskError, "hidden"):
+                self.build(mask_mount_points=(self.point,))
+
+    def test_generated_claude_bind_of_masked_ancestor_exposes_child_alias(self):
+        config_dir = self.runtime / "claude-config"
+        hidden = config_dir / "private"
+        hidden.mkdir(parents=True)
+        config = {**MIN_CONFIG, "claude": {"config_dir": str(config_dir)}}
+        with self.assertRaisesRegex(mask.MountMaskError, r"private.*\.claude/private"):
+            self.sandbox.build_bwrap_cmd(config, self.project, [], agent_config=MIN_AGENT_CONFIG,
+                                         mask_mount_points=(hidden,))
+
+    def test_late_ancestor_alias_requires_final_overlay_of_mapped_child(self):
+        alias = self.root / "alternate"
+        hidden_alias = alias / self.point.relative_to(self.root)
+        bind = ["--bind", str(self.root), str(alias)]
+        with patch.object(self.sandbox, "messaging_bwrap_args", return_value=bind):
+            with self.assertRaisesRegex(mask.MountMaskError, "alternate"):
+                self.build(mask_mount_points=(self.point,))
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=bind + ["--tmpfs", str(hidden_alias)]):
+            self.build(mask_mount_points=(self.point,))
+        safe = self.root / "safe"
+        safe.mkdir()
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=bind + ["--ro-bind", str(safe), str(hidden_alias)]):
+            self.build(mask_mount_points=(self.point,))
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=bind + ["--tmpfs", str(hidden_alias)] + bind):
+            with self.assertRaisesRegex(mask.MountMaskError, "alternate"):
+                self.build(mask_mount_points=(self.point,))
+
+    def test_mask_cannot_hide_required_status_runtime_bind(self):
+        with self.assertRaisesRegex(mask.MountMaskError, "lince-dashboard"):
+            self.build(mask_mount_points=(Path("/tmp"),))
+
+    def test_no_list_unchanged_argv_with_late_options(self):
+        old = self.build(landlock={"connect_ports": [], "bind_ports": []})
+        self.assertEqual(old, self.build(mask_mount_points=(), landlock={"connect_ports": [], "bind_ports": []}))
+
+    def test_run_empty_list_keeps_backend_selection_and_checks_local_policy(self):
+        args = type("Args", (), {"project": str(self.project), "agent": "claude", "backend": None,
+                                 "sandbox_level": None})()
+        with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+             patch.object(self.sandbox, "load_mount_mask_points", return_value=()) as load, \
+             patch.object(self.sandbox, "validate_mount_mask_points", return_value=()) as validate, \
+             patch.object(self.sandbox, "resolve_backend", side_effect=RuntimeError("backend selected")) as choose:
+            with self.assertRaisesRegex(RuntimeError, "backend selected"):
+                self.sandbox.cmd_run(args, [])
+        load.assert_called_once_with(Path.cwd(), self.project)
+        validate.assert_called_once_with(())
+        choose.assert_called_once()
+
+    def test_run_bad_local_policy_fails_before_backend_selection(self):
+        args = type("Args", (), {"project": str(self.project), "agent": "claude", "backend": None,
+                                 "sandbox_level": None})()
+        with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+             patch.object(self.sandbox, "load_mount_mask_points",
+                          side_effect=mask.MountMaskError("local global-only")), \
+             patch.object(self.sandbox, "resolve_backend", side_effect=AssertionError("backend selected")):
+            with redirect_stderr(io.StringIO()) as output, self.assertRaises(SystemExit):
+                self.sandbox.cmd_run(args, [])
+        self.assertIn("local global-only", output.getvalue())
+
+    def test_run_preflight_rejects_nono_and_seatbelt_before_helpers(self):
+        args = type("Args", (), {"project": str(self.project), "agent": "claude", "backend": None,
+                                 "sandbox_level": None})()
+        for backend in ("nono", "seatbelt"):
+            with self.subTest(backend=backend):
+                with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+                     patch.object(self.sandbox, "resolve_backend", return_value=backend), \
+                     patch.object(self.sandbox, "load_mount_mask_points", return_value=(self.point,)), \
+                     patch.object(self.sandbox, "validate_mount_mask_points",
+                                  return_value=(self.point,)) as validate, \
+                     patch.object(self.sandbox, "ensure_git_wrapper", side_effect=AssertionError("helper started")), \
+                     patch.object(self.sandbox.subprocess, "Popen", side_effect=AssertionError("agent started")):
+                    with self.assertRaisesRegex(SystemExit, "1"):
+                        with redirect_stderr(io.StringIO()) as output:
+                            self.sandbox.cmd_run(args, [])
+                    self.assertIn("mask_mount_points", output.getvalue())
+                    validate.assert_called_once_with((self.point,))
+
+    def test_learn_mask_after_writable_home_and_before_project(self):
+        with patch.object(self.sandbox.Path, "home", return_value=self.point):
+            argv = self.sandbox.build_learn_bwrap_cmd(
+                MIN_CONFIG, self.project, MIN_AGENT_CONFIG, mask_mount_points=(self.point,))
+        home_at = next(i for i in range(len(argv) - 2)
+                       if argv[i:i + 3] == ["--bind", str(self.point), str(self.point)])
+        mask_at = next(i for i in range(len(argv) - 1)
+                       if argv[i:i + 2] == ["--tmpfs", str(self.point)])
+        project_at = next(i for i in range(len(argv) - 2)
+                          if argv[i:i + 3] == ["--bind", str(self.project), str(self.project)])
+        self.assertEqual(argv[home_at:home_at + 3], ["--bind", str(self.point), str(self.point)])
+        self.assertLess(home_at, mask_at)
+        self.assertLess(mask_at, project_at)
+        self.assertIn(["--dir", str(self.project)],
+                      [argv[i:i + 2] for i in range(mask_at, project_at)])
+
+    def test_learn_home_overlap_does_not_reveal_sibling_via_late_bind(self):
+        with patch.object(self.sandbox.Path, "home", return_value=self.point), \
+             patch.object(self.sandbox, "x11_bwrap_args",
+                          return_value=["--ro-bind", str(self.point / "parent"), str(self.root / "alias")]):
+            with self.assertRaisesRegex(mask.MountMaskError, "expose"):
+                self.sandbox.build_learn_bwrap_cmd(
+                    MIN_CONFIG, self.project, MIN_AGENT_CONFIG, mask_mount_points=(self.point,))
+
+    def test_learn_local_policy_rejected_before_backend_and_strace(self):
+        args = type("Args", (), {"agent": "claude", "duration": None})()
+        with patch.object(self.sandbox, "load_config", return_value=(MIN_CONFIG, self.root)), \
+             patch.object(self.sandbox, "load_mount_mask_points",
+                          side_effect=mask.MountMaskError("local global-only")) as load, \
+             patch.object(self.sandbox, "resolve_backend", side_effect=AssertionError("backend selected")), \
+             patch.object(self.sandbox.subprocess, "Popen", side_effect=AssertionError("agent started")):
+            with redirect_stderr(io.StringIO()) as output, self.assertRaises(SystemExit):
+                self.sandbox.cmd_learn(args)
+        load.assert_called_once_with(Path.cwd(), Path.cwd().resolve())
+        self.assertIn("local global-only", output.getvalue())
+
+    def test_learn_rejected_home_overlap_never_starts_agent(self):
+        args = type("Args", (), {"agent": "mask-probe", "duration": None})()
+        config = {**MIN_CONFIG, "security": {"block_git_push": False}}
+        with patch.object(self.sandbox, "load_config", return_value=(config, self.root)), \
+             patch.object(self.sandbox.Path, "cwd", return_value=self.project), \
+             patch.object(self.sandbox.Path, "home", return_value=self.point), \
+             patch.object(self.sandbox, "load_mount_mask_points", return_value=(self.point,)), \
+             patch.object(self.sandbox, "validate_mount_mask_points", return_value=(self.point,)), \
+             patch.object(self.sandbox, "resolve_backend", return_value="agent-sandbox"), \
+             patch.object(self.sandbox, "resolve_agent_config", return_value=MIN_AGENT_CONFIG), \
+             patch.object(self.sandbox.shutil, "which", return_value="/usr/bin/strace"), \
+             patch.object(self.sandbox, "check_bwrap"), \
+             patch.object(self.sandbox, "x11_bwrap_args",
+                          return_value=["--ro-bind", str(self.point / "parent"), str(self.root / "alias")]), \
+             patch.object(self.sandbox.tempfile, "mkstemp", side_effect=AssertionError("trace started")), \
+             patch.object(self.sandbox.subprocess, "Popen", side_effect=AssertionError("agent started")):
+            with redirect_stderr(io.StringIO()) as output, self.assertRaises(SystemExit):
+                self.sandbox.cmd_learn(args)
+        self.assertIn("would expose content from masked", output.getvalue())
+
+    def test_learn_empty_list_preserves_argv(self):
+        original = self.sandbox.build_learn_bwrap_cmd(MIN_CONFIG, self.project, MIN_AGENT_CONFIG)
+        self.assertEqual(original, self.sandbox.build_learn_bwrap_cmd(
+            MIN_CONFIG, self.project, MIN_AGENT_CONFIG, mask_mount_points=()))
+
+    def test_landlock_targets_include_mask_and_project_even_with_late_policy_bind(self):
+        record = self.root / "record"
+        record.mkdir()
+        with patch.object(self.sandbox, "policy_record_path", return_value=record / "id.json"):
+            argv = self.build(mask_mount_points=(self.point,), agent_id="id",
+                              landlock={"connect_ports": [], "bind_ports": []})
+        targets = self.sandbox.bwrap_rw_targets(argv[:argv.index("--")])
+        self.assertIn(str(self.point), targets)
+        self.assertIn(str(self.project), targets)
+        self.assertIn(str(record), targets)
+        shim = argv[argv.index("--") + 1:]
+        self.assertIn(["--rw", str(self.point)], [shim[i:i + 2] for i in range(len(shim) - 1)])
+        self.assertIn(["--rw", str(self.project)], [shim[i:i + 2] for i in range(len(shim) - 1)])
+
+    def test_landlock_shim_binds_sibling_module_with_and_without_mask(self):
+        source = str(Path(self.sandbox.__file__).with_name("mount_masking.py"))
+        target = str(Path(self.sandbox.LANDLOCK_SHIM_MOUNT).with_name("mount_masking.py"))
+        for points in ((), (self.point,)):
+            with self.subTest(mask_mount_points=points):
+                argv = self.build(mask_mount_points=points,
+                                  landlock={"connect_ports": [], "bind_ports": []})
+                options = argv[:argv.index("--")]
+                self.assertIn(["--ro-bind", source, target],
+                              [options[i:i + 3] for i in range(len(options) - 2)])
+
+    def test_hidden_agent_executable_rejected_in_run_and_learn_builders(self):
+        exe = self.point / ".local/bin/my-agent"
+        exe.parent.mkdir(parents=True)
+        exe.write_text("#!/bin/sh\nexit 0\n")
+        exe.chmod(0o755)
+        agent = {**MIN_AGENT_CONFIG, "command": str(exe)}
+        for builder in (lambda: self.sandbox.build_bwrap_cmd(
+                            MIN_CONFIG, self.project, [], agent_config=agent, mask_mount_points=(self.point,)),
+                        lambda: self.sandbox.build_learn_bwrap_cmd(
+                            MIN_CONFIG, self.project, agent, mask_mount_points=(self.point,))):
+            with self.assertRaisesRegex(mask.MountMaskError, "my-agent.*mask_mount_points"):
+                builder()
+
+    def test_path_resolved_agent_rejected_when_masked(self):
+        exe = self.point / ".local/bin/my-agent"
+        exe.parent.mkdir(parents=True)
+        exe.write_text("#!/bin/sh\nexit 0\n")
+        exe.chmod(0o755)
+        agent = {**MIN_AGENT_CONFIG, "command": "my-agent"}
+        config = {**MIN_CONFIG, "sandbox": {**MIN_CONFIG.get("sandbox", {}), "auto_expose_path": True}}
+        with patch.dict(os.environ, {"PATH": str(exe.parent)}), \
+             patch.object(self.sandbox, "detect_home_path_dirs", return_value=[exe.parent]), \
+             patch.object(self.sandbox, "detect_home_path_entries", return_value=[exe.parent]):
+            for builder in (lambda: self.sandbox.build_bwrap_cmd(
+                                    config, self.project, [], agent_config=agent, mask_mount_points=(self.point,)),
+                            lambda: self.sandbox.build_learn_bwrap_cmd(
+                                    config, self.project, agent, mask_mount_points=(self.point,))):
+                with self.assertRaisesRegex(mask.MountMaskError, "my-agent.*mask_mount_points"):
+                    builder()
+
+    def test_late_safe_host_bind_restores_agent_at_masked_destination(self):
+        hidden = self.point / "my-agent"
+        hidden.write_text("#!/bin/sh\nexit 0\n")
+        hidden.chmod(0o755)
+        safe = self.root / "safe-agent"
+        safe.write_text("#!/bin/sh\nexit 0\n")
+        safe.chmod(0o755)
+        agent = {**MIN_AGENT_CONFIG, "command": str(hidden)}
+        bind = ["--ro-bind", str(safe), str(hidden)]
+        with patch.object(self.sandbox, "messaging_bwrap_args", return_value=bind):
+            self.sandbox.build_bwrap_cmd(MIN_CONFIG, self.project, [], agent_config=agent,
+                                         mask_mount_points=(self.point,))
+        with patch.object(self.sandbox, "x11_bwrap_args", return_value=bind):
+            self.sandbox.build_learn_bwrap_cmd(MIN_CONFIG, self.project, agent,
+                                               mask_mount_points=(self.point,))
+
+    def test_remounted_symlink_to_masked_executable_is_still_hidden(self):
+        hidden = self.point / "hidden-agent"
+        hidden.write_text("#!/bin/sh\nexit 0\n")
+        hidden.chmod(0o755)
+        source = self.root / "safe-dir"
+        source.mkdir()
+        (source / "my-agent").symlink_to(hidden)
+        destination = self.point / "other"
+        destination.mkdir()
+        agent = {**MIN_AGENT_CONFIG, "command": str(destination / "my-agent")}
+        with patch.object(self.sandbox, "messaging_bwrap_args",
+                          return_value=["--ro-bind", str(source), str(destination)]):
+            with self.assertRaisesRegex(mask.MountMaskError, "my-agent.*mask_mount_points"):
+                self.sandbox.build_bwrap_cmd(MIN_CONFIG, self.project, [], agent_config=agent,
+                                             mask_mount_points=(self.point,))
+
+    def test_bound_directory_parent_symlink_into_masked_home_is_rejected(self):
+        home = self.root / "home"
+        hidden_dir = home / ".local/bin"
+        hidden_dir.mkdir(parents=True)
+        hidden = hidden_dir / "my-agent"
+        hidden.write_text("#!/bin/sh\nexit 0\n")
+        hidden.chmod(0o755)
+        safe = self.root / "safe"
+        safe.mkdir()
+        (safe / "linkdir").symlink_to(hidden_dir, target_is_directory=True)
+        command = home / ".claude/linkdir/my-agent"
+        agent = {**MIN_AGENT_CONFIG, "command": str(command)}
+        config = {**MIN_CONFIG, "claude": {"config_dir": str(safe)}}
+        with patch.object(self.sandbox.Path, "home", return_value=home):
+            with self.assertRaisesRegex(mask.MountMaskError, "my-agent.*mask_mount_points"):
+                self.sandbox.build_bwrap_cmd(config, self.project, [], agent_config=agent,
+                                             mask_mount_points=(home / ".local",))
+            with patch.object(self.sandbox, "x11_bwrap_args",
+                              return_value=["--ro-bind", str(safe), str(home / ".claude")]):
+                with self.assertRaisesRegex(mask.MountMaskError, "my-agent.*mask_mount_points"):
+                    self.sandbox.build_learn_bwrap_cmd(config, self.project, agent,
+                                                       mask_mount_points=(home / ".local",))
+
+    def test_bound_directory_parent_symlink_to_remounted_project_is_allowed(self):
+        home = self.root / "home"
+        point = home / ".local"
+        point.mkdir(parents=True)
+        executable = self.project / "my-agent"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o755)
+        safe = self.root / "safe"
+        safe.mkdir()
+        (safe / "linkdir").symlink_to(self.project, target_is_directory=True)
+        command = home / ".claude/linkdir/my-agent"
+        agent = {**MIN_AGENT_CONFIG, "command": str(command)}
+        config = {**MIN_CONFIG, "claude": {"config_dir": str(safe)}}
+        with patch.object(self.sandbox.Path, "home", return_value=home):
+            self.sandbox.build_bwrap_cmd(config, self.project, [], agent_config=agent,
+                                         mask_mount_points=(point,))
+
+    def test_landlock_python_runtime_hidden_by_mask_is_rejected(self):
+        python = self.point / "python"
+        python.write_text("#!/bin/sh\nexit 0\n")
+        python.chmod(0o755)
+        with patch.object(self.sandbox.sys, "executable", str(python)):
+            with self.assertRaisesRegex(mask.MountMaskError, "python.*mask_mount_points"):
+                self.build(mask_mount_points=(self.point,), landlock={"connect_ports": [], "bind_ports": []})
+
+    def test_project_script_cannot_exec_hidden_shebang_interpreter(self):
+        interpreter = self.point / "bin/interpreter"
+        interpreter.parent.mkdir()
+        interpreter.write_text("#!/bin/sh\nexit 0\n")
+        interpreter.chmod(0o755)
+        script = self.project / "my-agent"
+        script.write_text(f"#!{interpreter}\n", encoding="utf-8")
+        script.chmod(0o755)
+        agent = {**MIN_AGENT_CONFIG, "command": str(script)}
+        for builder in (lambda: self.sandbox.build_bwrap_cmd(
+                            MIN_CONFIG, self.project, [], agent_config=agent, mask_mount_points=(self.point,)),
+                        lambda: self.sandbox.build_learn_bwrap_cmd(
+                            MIN_CONFIG, self.project, agent, mask_mount_points=(self.point,))):
+            with self.assertRaisesRegex(mask.MountMaskError, "interpreter.*mask_mount_points"):
+                builder()
+
+    def test_hidden_bare_command_uses_visible_system_fallback(self):
+        local = self.point / "bin/python3"
+        local.parent.mkdir()
+        local.write_text("#!/bin/sh\nexit 0\n")
+        local.chmod(0o755)
+        agent = {**MIN_AGENT_CONFIG, "command": "python3"}
+        with patch.object(self.sandbox, "detect_home_path_dirs", return_value=[local.parent]):
+            self.sandbox.build_bwrap_cmd(MIN_CONFIG, self.project, [], agent_config=agent,
+                                         mask_mount_points=(self.point,))
+            self.sandbox.build_learn_bwrap_cmd(MIN_CONFIG, self.project, agent,
+                                               mask_mount_points=(self.point,))
+
+    def test_remounted_agent_in_project_is_accepted(self):
+        exe = self.project / "my-agent"
+        exe.write_text("#!/bin/sh\nexit 0\n")
+        exe.chmod(0o755)
+        agent = {**MIN_AGENT_CONFIG, "command": str(exe)}
+        self.sandbox.build_bwrap_cmd(MIN_CONFIG, self.project, [], agent_config=agent,
+                                     mask_mount_points=(self.point,))
+        self.sandbox.build_learn_bwrap_cmd(MIN_CONFIG, self.project, agent, mask_mount_points=(self.point,))
+
+
+class TestMountMaskGateExitSemantics(unittest.TestCase):
+    """Exercise the gate's early exits without running or changing host mounts."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.bin = Path(self.temp.name) / "bin"
+        self.bin.mkdir()
+        self.script = Path(__file__).resolve().parents[2] / "sandbox/tests/test-mount-masking.sh"
+        for name in ("dirname", "mktemp", "rm", "mount", "bwrap", "python3"):
+            (self.bin / name).symlink_to(shutil.which(name))
+
+    def run_gate(self):
+        return subprocess.run(["/bin/bash", str(self.script)], capture_output=True,
+                              text=True, env={**os.environ, "PATH": str(self.bin)}, check=False)
+
+    def test_missing_required_tool_fails_not_skips(self):
+        (self.bin / "unshare").symlink_to(shutil.which("unshare"))
+        for name in ("unshare", "mount", "bwrap", "python3"):
+            with self.subTest(tool=name):
+                (self.bin / name).unlink()
+                try:
+                    result = self.run_gate()
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(f"FAIL: missing required test dependency: {name}", result.stderr)
+                    self.assertNotIn("SKIP:", result.stdout + result.stderr)
+                finally:
+                    (self.bin / name).symlink_to(shutil.which(name))
+
+    def test_only_known_capability_denials_skip(self):
+        for name, code, message, skip in (
+            ("userns EPERM", 1, "unshare: unshare failed: Operation not permitted", True),
+            ("mount permission", 32, "mount: /tmp/test: permission denied", True),
+            ("unexpected error", 1, "unshare: unknown option", False),
+            ("unexpected status", 7, "unshare: Operation not permitted", False),
+            ("misleading follow-up", 1, "unshare: unknown option\nOperation not permitted", False),
+        ):
+            with self.subTest(name=name):
+                fake = self.bin / "unshare"
+                fake.write_text(f"#!/bin/sh\nprintf '%s\\n' '{message}' >&2\nexit {code}\n",
+                                encoding="utf-8")
+                fake.chmod(0o755)
+                result = self.run_gate()
+                self.assertEqual(result.returncode, 0 if skip else 1, result.stderr)
+                self.assertIn(message, result.stdout + result.stderr)
+                self.assertIn(f"exit {code}", result.stdout + result.stderr)
+                self.assertIn("SKIP:" if skip else "FAIL:", result.stdout + result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

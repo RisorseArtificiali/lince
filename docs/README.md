@@ -21,6 +21,13 @@ The homepage links to the [Views and Themes guide](documentation/dashboard/views
 Its palette previews in `assets/dashboard-theme-*.svg` come from the dashboard
 renderer; they are not screenshots of the compact or statusline layouts.
 
+## Planning records
+
+Feature requirements and implementation plans are tracked in GitHub issues;
+[Product requirements](prd/README.md) indexes the mount-masking issue and its
+related design and review records. These are separate from the published user
+documentation in `docs/documentation/`.
+
 ## Custom domain
 
 The `CNAME` file points to `lince.sh`. DNS must have:

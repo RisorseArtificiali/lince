@@ -67,6 +67,14 @@
           "description": "Real home subdirectories to mount read-write (relative to $HOME); shadows any isolated toolchain cache in the same subtree (#286)",
           "default": []
         },
+        "mask_mount_points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Global-only mount-point directories to mask for direct agent-sandbox run/learn bwrap launches when no global Config v2 file exists; [] or absent retains the previous filesystem view. Runtime rejects project-local definitions and invalid paths; JSON Schema validates types only.",
+          "default": []
+        },
         "default_provider": {
           "type": "string",
           "description": "Provider used when -P / --provider is not given; empty = none",

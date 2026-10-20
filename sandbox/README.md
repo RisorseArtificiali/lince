@@ -178,6 +178,63 @@ block_git_push = false   # allow git push in this project only
 
 Lists (e.g. `extra_rw`, `allow_domains`) are **appended**, not replaced, so project-specific paths or domains accumulate on top of the global ones. See [Project-local config overrides](https://lince.sh/documentation/#/sandbox/sandbox-levels#project-local-config-overrides) in the sandbox-levels docs for more examples.
 
+## Opt-in mount-point masking (direct launches)
+
+By default, bwrap's read-only root still shows other mounted volumes. For
+**direct** `agent-sandbox run` and `agent-sandbox learn` launches, you can mask
+specific mount-point directories with a global list. Put the real mount path,
+not a symlink to it (for example, configure `/run/media/alessio/Dati`, not
+`/dati`):
+
+```toml
+# ~/.config/lince/lince.toml (Config v2)
+version = "2.0"
+[filesystem]
+mask_mount_points = ["/run/media/alessio/Dati"]
+```
+
+Or use the legacy global `~/.agent-sandbox/config.toml`:
+
+```toml
+[sandbox]
+mask_mount_points = ["/run/media/alessio/Dati"]
+```
+
+The list is **global-only**; a definition in either project-local config format
+is an error, even if empty. When a global Config v2 file exists, its list takes
+precedence over legacy, including `[]`. Malformed v2 TOML, a missing or
+unsupported v2 version, or an invalid `[filesystem].mask_mount_points` list
+or path fails without falling back to legacy. The mount-mask loader does not
+fully validate unrelated v2 settings; other runner settings still use the
+legacy configuration. With `[]` or no list, the previous view is unchanged.
+With a non-empty list, the configured path is an empty, writable, ephemeral
+view except for the re-exposed writable working directory (whose writes persist)
+and its traversable path components. Symlinks to the configured mount path
+follow that view. The rule applies at every bwrap level and in direct `learn`;
+unsupported backends fail before agent launch.
+
+Missing, non-directory, symlink-containing, or essential mount paths (such as
+`/`, `/proc`, `/dev`, `/run`) fail before launch; descendants of `/run` are
+allowed when valid. A path that exists but is **not mounted at launch** warns
+and is still masked; the warning does not mean the physical volume is absent.
+Unsafe overlaps with required automatic binds fail before agent execution.
+The preflight also catches directly identifiable hidden launch executables and
+their shebang interpreters. It cannot infer every dependency from an agent's
+arguments: for example, `python3` may start and then fail when a script in
+`default_args` is hidden, or an ELF binary may fail if its dynamic loader is
+hidden. Such errors can appear later in the launched tool rather than as an
+early LINCE refusal; they do not make the original files readable through the
+masked path.
+
+Configuration changes affect **new launches**; restart running agents to get
+the new view. Dashboard-started agents are not covered by this direct-launch
+feature until dashboard integration is implemented and verified.
+
+This masks the configured path, not unconfigured aliases to its contents.
+Explicit binds, experimental bwrap overrides (which can re-expose paths), and
+mounts added by the host after launch are outside this guarantee. See the
+[Security Model](../docs/documentation/sandbox/security-model.md) for details.
+
 ## Documentation
 
 | Document | Description |

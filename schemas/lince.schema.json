@@ -299,6 +299,14 @@
           "items": {
             "type": "string"
           }
+        },
+        "mask_mount_points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Global-only mount-point directories to mask for direct agent-sandbox run/learn bwrap launches; [] or absent retains the previous filesystem view. Config v2 takes precedence over legacy even when empty. Runtime rejects project-local definitions and invalid paths; JSON Schema validates types only.",
+          "default": []
         }
       },
       "additionalProperties": false
