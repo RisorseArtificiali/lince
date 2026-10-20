@@ -1,6 +1,6 @@
 # Walkthrough del PRD — masking opt-in dei mount LINCE
 
-- **Fonte:** [PRD](../prd/2026-10-19-masking-opt-in-mount-lince.md) (19 ottobre 2026; versione v1 nel titolo; revisionato durante il walkthrough). L'originale era fuori da Git al momento della revisione; questa è la copia versionabile del dossier.
+- **Fonte:** [PRD nell'issue #400](https://github.com/RisorseArtificiali/lince/issues/400) (19 ottobre 2026; versione v1 nel titolo; revisionato durante il walkthrough). L'originale era fuori da Git al momento della revisione; questa è la copia versionabile del dossier.
 - **Modalità:** EDIT; ogni modifica al PRD richiede approvazione del testo prima/dopo.
 - **Data / base codice:** 19 ottobre 2026; `/home/alessio/workspaces/lince` su `main`, commit `d52f0d9` (repository aggiornato dall'utente prima della verifica del codice).
 - **Scopo dichiarato:** configurare globalmente, in modo opt-in, i punti di mount da mascherare nelle sandbox bwrap; mantenere accesso e scrittura nella workdir, comportamento senza opt-in invariato, errore esplicito sui backend incompatibili.

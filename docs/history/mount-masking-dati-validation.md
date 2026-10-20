@@ -11,6 +11,6 @@ project writes and ephemeral outside-project writes at available bwrap levels.
 
 The configured path is masked in the namespace. Hidden scripts or runtime
 dependencies may fail only when used; that diagnostic timing does not make the
-original data visible through the masked path. See the [PRD](../prd/2026-10-19-masking-opt-in-mount-lince.md)
+original data visible through the masked path. See the [PRD](https://github.com/RisorseArtificiali/lince/issues/400)
 and [security model](../documentation/sandbox/security-model.md) for the
 per-path scope and limitations.

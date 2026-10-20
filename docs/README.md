@@ -23,10 +23,10 @@ renderer; they are not screenshots of the compact or statusline layouts.
 
 ## Planning records
 
-Feature requirements and their related design, review, and implementation-plan
-documents are indexed in [Product requirements](prd/README.md). These are
-repository planning records, separate from the published user documentation in
-`docs/documentation/`.
+Feature requirements and implementation plans are tracked in GitHub issues;
+[Product requirements](prd/README.md) indexes the mount-masking issue and its
+related design and review records. These are separate from the published user
+documentation in `docs/documentation/`.
 
 ## Custom domain
 

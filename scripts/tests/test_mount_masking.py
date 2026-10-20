@@ -349,6 +349,12 @@ def load_sandbox():
 
 class TestMountMaskPlanning(unittest.TestCase):
     def setUp(self):
+        host_env = patch.dict(os.environ)
+        host_env.start()
+        self.addCleanup(host_env.stop)
+        for name in list(os.environ):
+            if name.startswith("LINCE_MSG_") or name in ("DISPLAY", "WAYLAND_DISPLAY"):
+                os.environ.pop(name)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
